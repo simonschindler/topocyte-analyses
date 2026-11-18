@@ -1,0 +1,30 @@
+{
+  "status": "post-hoc sensitivity analysis, not pre-registered",
+  "suffixes": [
+    "0",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "all"
+  ],
+  "arms": {
+    "P": "the protocol arm refitted (features as they come); gate: per-seed accuracy and confusion matrix equal slice_<k>.npz's / combined.npz's",
+    "Z": "the same features with a StandardScaler fitted on the outer training fold",
+    "families": "first 4 fPCA scores of the slice (0-9) or the 40 scores of all ten slices (all)",
+    "control": "kept fraction of the slice (0-9) or the ten kept fractions (all)"
+  },
+  "intervals": "paired bootstrap over slides of seed-averaged per-slide values, shared indices default_rng(12345).integers(0, 123, (4000, 123)); scaling: Z - P (accuracy), P - Z (log-loss)",
+  "estimator": "LogisticRegressionCV(Cs=10, inner_cv=5, scoring=accuracy, max_iter=1000)",
+  "cv": "StratifiedKFold(5, shuffle=True, random_state=seed)",
+  "seeds": 20,
+  "topocyte": "0.1.0.post651.dev0+7db4d26",
+  "sklearn": "1.9.0",
+  "n_jobs": 10,
+  "runtime_seconds": 82.3
+}

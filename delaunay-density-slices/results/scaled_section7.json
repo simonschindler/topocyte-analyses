@@ -1,0 +1,36 @@
+{
+  "status": "post-hoc sensitivity analysis, not pre-registered",
+  "suffixes": [
+    "0",
+    "1",
+    "2",
+    "3",
+    "4",
+    "5",
+    "6",
+    "7",
+    "8",
+    "9",
+    "all"
+  ],
+  "models": [
+    "h0_none",
+    "h1_none",
+    "h0_cosine",
+    "h1_cosine"
+  ],
+  "arms": {
+    "P": "section 7's nested arm refitted (density arm + scores, unscaled); gate: equals density_adds.npz's B arm for every seed",
+    "Z_density": "density arm with a StandardScaler fitted on the outer training fold",
+    "Z": "nested arm with a StandardScaler fitted on the outer training fold; gate: the H1 arms and density arms at slices 0 and 6-9 equal scaled_nested.npz's"
+  },
+  "weight_share": "sum over the score columns of |coef_j| * SD_j over the sum over all columns, SD_j the training-fold SD (ddof=0) of the column the classifier sees",
+  "intervals": "paired bootstrap over slides of seed-averaged per-slide values, shared indices default_rng(12345).integers(0, 123, (4000, 123)); nested: Z - Z_density (accuracy), Z_density - Z (log-loss); scaling_density: Z_density - A",
+  "estimator": "LogisticRegressionCV(Cs=10, inner_cv=5, scoring=accuracy, max_iter=1000)",
+  "cv": "StratifiedKFold(5, shuffle=True, random_state=seed)",
+  "seeds": 20,
+  "topocyte": "0.1.0.post651.dev0+7db4d26",
+  "sklearn": "1.9.0",
+  "n_jobs": 10,
+  "runtime_seconds": 166.4
+}

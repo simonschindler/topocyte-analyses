@@ -1,0 +1,28 @@
+{
+  "status": "post-hoc sensitivity analysis, not pre-registered",
+  "slices": [
+    0,
+    6,
+    7,
+    8,
+    9
+  ],
+  "sources": {
+    "ratio": "first 4 death/birth-ratio fPCA scores (ratio_slices.npz)",
+    "betti": "first 4 H1 Betti-curve fPCA scores (slice_<k>.npz, as section 7)"
+  },
+  "arms": {
+    "P": "protocol nested arm refitted (density arm + 4 scores, unscaled); gate: equals the saved arm for every seed",
+    "Z_density": "density arm with a StandardScaler fitted on the outer training fold",
+    "Z": "nested arm with a StandardScaler fitted on the outer training fold"
+  },
+  "weight_share": "sum over the 4 score columns of |coef_j| * SD_j over the sum over all columns, SD_j the training-fold SD (ddof=0) of the column the classifier sees",
+  "intervals": "paired bootstrap over slides of seed-averaged per-slide values, shared indices default_rng(12345).integers(0, 123, (4000, 123)); nested: Z - Z_density (accuracy), Z_density - Z (log-loss); scaling_density: Z_density - A",
+  "estimator": "LogisticRegressionCV(Cs=10, inner_cv=5, scoring=accuracy, max_iter=1000)",
+  "cv": "StratifiedKFold(5, shuffle=True, random_state=seed)",
+  "seeds": 20,
+  "topocyte": "0.1.0.post651.dev0+7db4d26",
+  "sklearn": "1.9.0",
+  "n_jobs": 10,
+  "runtime_seconds": 121.1
+}

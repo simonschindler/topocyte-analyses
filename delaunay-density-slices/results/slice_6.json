@@ -1,0 +1,24 @@
+{
+  "slice": 6,
+  "threshold_cells_per_mm2": 2840.1671642240135,
+  "kept_total": 12334475,
+  "n_cells_total": 30836186,
+  "runtime_seconds": 154.5,
+  "pixel_um": 0.4942,
+  "n_jobs": -1,
+  "seeds": 20,
+  "n_components": 4,
+  "scoring": "accuracy",
+  "classes": [
+    "healthy",
+    "cirrhosis"
+  ],
+  "models": [
+    "h0_none",
+    "h1_none",
+    "h0_cosine",
+    "h1_cosine"
+  ],
+  "sklearn": "1.9.0",
+  "topocyte": "0.1.0.post651.dev0+7db4d26"
+}

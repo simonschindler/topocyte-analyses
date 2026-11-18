@@ -1,0 +1,39 @@
+# topocyte analyses
+
+Studies and benchmarks run with [topocyte](https://github.com/rendeirolab/topocyte)
+that do not belong in the package repository: the code that produced a result,
+the ledger of how it was decided, and the builder of its report. The repository
+is private until the topocyte paper is published; then it becomes public and the
+large outputs are deposited on Zenodo.
+
+## Layout
+
+One folder per study. Each holds
+
+- its scripts, run in the order its README gives;
+- `progress.md`, the ledger: every ruling, with what it costs if wrong, and
+  every result, in the order they were made;
+- `verify_results.py`, which checks the saved results, and `build_report.py`,
+  which writes `report.html` from them;
+- `results/*.json`, the small metadata of each run (runtime, library versions).
+
+Generated outputs stay out of git: `*.npz`, `*.html`, `logs/`, `figures/` and
+`superseded/`. The scripts regenerate them; each study's README says where the
+copy its report was built from is kept.
+
+## topocyte version
+
+The scripts import topocyte from the source checkout named first on
+`PYTHONPATH`, not from whatever the interpreter has installed, so a study's
+README states the topocyte commits its results were made with. A checkout of a
+given commit:
+
+```bash
+git -C /path/to/topocyte worktree add ../topocyte-bd1d5c0 bd1d5c0
+```
+
+## Studies
+
+| study | question | verdict |
+|---|---|---|
+| [delaunay-density-slices](delaunay-density-slices/README.md) | Is the function-Delaunay bifiltration, sliced at density deciles, worth adopting in topocyte, and does persistent homology add to the GTEx liver classification beyond density? | No; the H1 death/birth ratio adds nothing beyond density either (pre-registered), and post-hoc refits with standardized features change no conclusion |

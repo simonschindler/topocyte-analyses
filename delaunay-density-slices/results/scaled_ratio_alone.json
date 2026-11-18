@@ -1,0 +1,23 @@
+{
+  "status": "post-hoc sensitivity analysis, not pre-registered",
+  "slices": [
+    0,
+    6,
+    7,
+    8,
+    9
+  ],
+  "arms": {
+    "P_Q": "section 8's ratio-alone arm refitted (first 4 ratio scores, unscaled) to record each fold's C; gate: equals ratio_slices.npz's Q arm for every seed",
+    "Z_Q": "the same scores with a StandardScaler fitted on the outer training fold"
+  },
+  "indicator": "share of fitted folds whose chosen C is the grid's top (1e4)",
+  "intervals": "paired bootstrap over slides of seed-averaged per-slide values, shared indices default_rng(12345).integers(0, 123, (4000, 123)); scaling: Z_Q - P_Q (accuracy), scaling_ll: P_Q - Z_Q (log-loss); alone_chance: Z_Q - chance; alone_ll: prevalence - Z_Q (log-loss)",
+  "estimator": "LogisticRegressionCV(Cs=10, inner_cv=5, scoring=accuracy, max_iter=1000)",
+  "cv": "StratifiedKFold(5, shuffle=True, random_state=seed)",
+  "seeds": 20,
+  "topocyte": "0.1.0.post651.dev0+7db4d26",
+  "sklearn": "1.9.0",
+  "n_jobs": 10,
+  "runtime_seconds": 16.0
+}

@@ -1,0 +1,35 @@
+{
+  "curve": "survival function of log pi over each slide's finite H1 bars, pi = sqrt(death / birth) of the alpha filtration (squared radii); the Betti curve of the bars [0, log pi), fitted by topocyte.ph.FPCA(dim=1)",
+  "families": [
+    "none",
+    "cosine"
+  ],
+  "slices": [
+    0,
+    6,
+    7,
+    8,
+    9
+  ],
+  "arms": {
+    "A": "density arm of the slice: 10 density features + log10 cells (as density_adds.py), recomputed",
+    "Q": "first 4 ratio fPCA scores alone",
+    "N": "A + first 4 ratio fPCA scores"
+  },
+  "intervals": "paired bootstrap over slides of seed-averaged per-slide values, shared indices default_rng(12345).integers(0, 123, (4000, 123))",
+  "gate": "H1 Betti-curve fPCA of the recomputed diagrams reproduces the saved first 4 scores within 1e-06 (relative, up to sign)",
+  "quantile_levels": [
+    0.5,
+    0.9,
+    0.99,
+    0.999
+  ],
+  "estimator": "LogisticRegressionCV(Cs=10, inner_cv=5, scoring=accuracy, max_iter=1000)",
+  "cv": "StratifiedKFold(5, shuffle=True, random_state=seed)",
+  "seeds": 20,
+  "topocyte": "0.1.0.post651.dev0+7db4d26",
+  "gudhi": "3.13.0",
+  "sklearn": "1.9.0",
+  "n_jobs": 10,
+  "runtime_seconds": 707.6
+}

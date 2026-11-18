@@ -1,0 +1,27 @@
+{
+  "arms": {
+    "A": "10 density features per slice (log10 rho quantiles 0.05/0.10/0.25/0.50/0.75/0.90/0.95 among kept cells, mean, sd, kept fraction) + log10 cells per slide",
+    "S": "log10 cells per slide alone",
+    "B": "A + first 4 fPCA scores of the slice",
+    "R": "first 4 fPCA scores residualised on A inside each outer training fold; per slice only (combined would be p >= n)",
+    "P1": "first fPCA score only",
+    "P24": "fPCA scores 2-4 only"
+  },
+  "chance": "training-fold majority class (accuracy) and prevalence (log-loss)",
+  "models": [
+    "h0_none",
+    "h1_none",
+    "h0_cosine",
+    "h1_cosine"
+  ],
+  "seeds": 20,
+  "bootstrap_resamples": 4000,
+  "bootstrap_seed": 12345,
+  "estimator": "LogisticRegressionCV(Cs=10, inner_cv=5, scoring=accuracy, max_iter=1000)",
+  "cv": "StratifiedKFold(5, shuffle=True, random_state=seed)",
+  "topocyte": "0.1.0.post651.dev0+7db4d26",
+  "sklearn": "1.9.0",
+  "n_jobs": 10,
+  "supersedes": "superseded/density_adds_2026-11-16.npz",
+  "runtime_seconds": 280.7
+}
