@@ -1,0 +1,19 @@
+{
+  "slice": 3,
+  "threshold_cells_per_mm2": 1665.2869164736455,
+  "n_cells_kept": 88353387,
+  "n_components": 9,
+  "pixel_um": 0.4942,
+  "topocyte": "0.1.0.post651.dev0+7db4d26",
+  "runtime_seconds": 412.3,
+  "ph_seconds": 203.4,
+  "ph_workers": 5,
+  "h1_none_seconds": 68.9,
+  "h1_none_solver": "arpack",
+  "h1_cosine_seconds": 68.4,
+  "h1_cosine_solver": "arpack",
+  "h0_none_seconds": 33.6,
+  "h0_none_solver": "arpack",
+  "h0_cosine_seconds": 33.4,
+  "h0_cosine_solver": "arpack"
+}

@@ -1,0 +1,595 @@
+slide_id,group,label,label_reason,categories,notes,quality_flag,n_cells
+GTEX-111FC-1226,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, congestion",,175777
+GTEX-111VG-0826,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, inflammation",2 pieces; chronic inflammation and fibrosis,,317274
+GTEX-113JC-0426,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; mild macrovesicular steatosis,,212387
+GTEX-117XS-0926,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, inflammation, steatosis","2 pieces, mild steatosis, widening of sinusoids with bridging fibrosis, chronic inflammation",,289662
+GTEX-117YW-0626,fibrosis,other,curated non-cirrhotic pathology,"congestion, fibrosis, inflammation, steatosis","2 pieces, passive congestion, bridging fibrosis, some chronic inflammation, mild-moderate steatosis",,226074
+GTEX-1192W-0726,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, prominent hepatic congestion/'nutmeg' liver",,131665
+GTEX-1192X-1026,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, steatosis","2 pieces diffuse established cirrhosis, and macrovesicular steatosis",,390933
+GTEX-11DXY-0526,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, congestion",,110748
+GTEX-11DXZ-0126,necrosis,other,curated non-cirrhotic pathology,necrosis,"2 pieces, foci of hepatocyte necrosis and ballooning degeneration",,247768
+GTEX-11DYG-1726,fibrosis,other,curated non-cirrhotic pathology,"congestion, fibrosis, hyperplasia, inflammation, steatosis","2 pieces; portal fibrosis, chronic inflammation and duct hyperplasia; mild macrovesicular steatosis; moderate  central passive congestion; capsule on one surface",,132538
+GTEX-11DZ1-1326,necrosis,other,curated non-cirrhotic pathology,necrosis,2 pieces; acute necrosis centrally with polymorphs,,247732
+GTEX-11EI6-0926,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, moderate passive congestion; ~15-20% macrovesicular steatosis",,116079
+GTEX-11EMC-0326,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, moderate congestions; micro and macrovesicular steatosis in ~70% of parenchyma",,130703
+GTEX-11EQ8-0626,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, mild steatosis",,222416
+GTEX-11EQ9-0526,steatosis,other,curated non-cirrhotic pathology,"nodularity, steatosis","2 pieces, diffuse macro and microvesucular steatosis, nodular regenerative changes",,153255
+GTEX-11GS4-0926,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, some congestion, diffuse macro and microvesicular steatosis",,269398
+GTEX-11GSO-0826,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, predominantly macrovesicular steatosis, includes capsule (target is 1 cm below capsule)",,252892
+GTEX-11GSP-0626,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; central vascular congestion,,329911
+GTEX-11ILO-0926,healthy,healthy,"uncategorized, note reports no finding",,2 pieces; capsule [not target] on both pieces [annotated],,265703
+GTEX-11NUK-1226,unclassified,other,"uncategorized, finding in note",,"2 pieces, includes capsule (target is 1 cm below capsule), few collections of lymphocytes, often in portal tracts",,179929
+GTEX-11NV4-1326,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, includes capsule (target is 1 cm below capsule), micro and macrovesicular steatosis",,71586
+GTEX-11O72-0926,unclassified,other,"uncategorized, finding in note",,2 pieces; <10% macrovesicular fat,,167746
+GTEX-11OF3-0726,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis",2 pieces; moderate central vascular congestion; mild macrovesicular steatosis; thin capsule present,,95787
+GTEX-11ONC-0326,congestion,other,curated non-cirrhotic pathology,"congestion, hemorrhage","2 pieces; moderate central passive congestion; 3.5x1mm  focus of hemorrhage and fragmentation, (traumatic resuscitation, injury?) [annotated]",,277761
+GTEX-11PRG-1626,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderate-marked chronic passive congestion ('nutmeg' changes)",,195494
+GTEX-11TT1-1726,healthy,healthy,"uncategorized, note reports no finding",,2 pieces,,725038
+GTEX-11TTK-1426,congestion,other,curated non-cirrhotic pathology,"atrophy, congestion",2 pieces; severe central vascular congestion with liver cell atrophy [c/w heart failure]; only thin rim of periportal liver cells remain intact;,,186975
+GTEX-11TUW-1726,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, severe micro and macrovesicular steatosis",,267311
+GTEX-11UD2-1626,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, diffuse macrovesicular steatosis involves ~80% of parenchyma",,237758
+GTEX-11WQC-0726,inflammation/hepatitis,other,curated non-cirrhotic pathology,"congestion, inflammation","2 pieces, congested, includes capsule (target is 1 cm below capsule), chronic inflammation",,181986
+GTEX-11WQK-1126,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, diffuse mild micro/macrovesicular steatosis, moderate congestion",,92525
+GTEX-11ZTS-1426,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, moderate congestion, minimal steatosis",,255442
+GTEX-11ZU8-0926,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, pathcy macrovesicular steatosis",,213230
+GTEX-11ZUS-2526,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, mild to moderate steatosis",,141570
+GTEX-11ZVC-0726,healthy,healthy,"uncategorized, note reports no finding",,2 pieces; capsule present on one piece,,184893
+GTEX-1212Z-0226,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, mild steatosis",,315051
+GTEX-12584-1526,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; severe macrovesicular steatosis,,158868
+GTEX-12696-0826,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderate congestion; no significant steatosis",,174778
+GTEX-1269C-0626,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, mild macrovesicular steatosis, passive congestion",,131493
+GTEX-12KS4-1326,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces moderate passive congestion,,166267
+GTEX-12WS9-2126,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces moderate congestion, ~10% microvesicular steatosis",,228098
+GTEX-12WSA-2026,necrosis,other,curated non-cirrhotic pathology,"congestion, infarction",2 pieces severe acute congestion/hemorrhagic infarction,,236797
+GTEX-12WSB-1526,unclassified,other,"uncategorized, finding in note",,2 pieces; moderately congested; 30% fibrovascular focus in 1 piece; 1 mm von Meyenberg complex in 2nd piece,,155629
+GTEX-12WSC-1626,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, moderate steatosis, passive congestion",,159106
+GTEX-12WSD-1426,healthy,healthy,curated no_abnormalities,no_abnormalities,"2 pieces, no major abnormalities",,211387
+GTEX-12WSE-2226,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; acute vascular congestion,,166364
+GTEX-12WSF-1326,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, mild congestion, minimal fat",,184623
+GTEX-12WSH-0526,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; moderate passive congestion,,267303
+GTEX-12WSI-0226,fibrosis,other,curated non-cirrhotic pathology,"congestion, fibrosis, steatosis","2 pieces moderate macro and microvesicular steatosis, moderate congestion, early bridging fibrosis",,312487
+GTEX-12WSL-0226,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; 20% macrovesicular steatosis,,260510
+GTEX-12WSM-0726,unclassified,other,"uncategorized, finding in note",,"2 pieces, ~ 5% macrovesicular fat.",,61672
+GTEX-12ZZW-1426,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, marked passive congestion, laking noted",,214488
+GTEX-12ZZX-1526,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, moderate-marked diffuse macrovesicular steatosis",,147628
+GTEX-12ZZY-2026,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, minimal congestion/steatosis",,135461
+GTEX-12ZZZ-1326,steatosis,other,curated non-cirrhotic pathology,steatosis,3 pieces; moderate macrovesicular steatosis,,321087
+GTEX-13113-1326,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, steatosis","2 pieces, diffuse microvesicular steatosis, mild-moderate  fibrosis",,212652
+GTEX-1313W-1726,healthy,healthy,"uncategorized, note reports no finding",,2 pieces,,133487
+GTEX-1314G-0526,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, steatosis","2 pieces; early cirrhosis, bile duct proliferation and extensive macrovesicular steatosis",,302433
+GTEX-131XE-0326,unclassified,other,"uncategorized, finding in note",,2 pieces; mild central degeneration,,206771
+GTEX-131XH-0626,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, mild macro and microvesicular steatosis",,277447
+GTEX-131XW-0926,fibrosis,other,curated non-cirrhotic pathology,"congestion, fibrosis, steatosis","2 pieces, mild macrovesicular steatosis, mild congestion and fibrosis",,134835
+GTEX-131YS-1626,fibrosis,other,curated non-cirrhotic pathology,"congestion, fibrosis",3 pieces; accentuation of portal tracts with fibrosis and  congestion,,203703
+GTEX-132AR-0426,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, steatosis","2 pieces; many Mallory alcoholic hyalin bodies, bridging fibrosis, >90% macro and microsteatosis",,152608
+GTEX-132NY-0926,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, minimal steatosis",,148762
+GTEX-132Q8-1626,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, inflammation","2 pieces; cirrhosis, residual chronic inflammation",,260835
+GTEX-1399Q-1426,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; mild steatosis,,156029
+GTEX-1399R-1226,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; 50% macrosteatosis,,390561
+GTEX-1399T-0826,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis",2 pieces; some congestion and steatosis,,180045
+GTEX-139D8-2026,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; severe central congestion; no underlying disease,,170821
+GTEX-139TS-1426,inflammation/hepatitis,other,curated non-cirrhotic pathology,"congestion, inflammation",2 pieces; some congestion and portal chronic inflammation,,107738
+GTEX-139TT-1226,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis",2 pieces; moderate central congestion; 5% macrovesicular steatosis,,203185
+GTEX-139TU-0826,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, hepatitis, inflammation, steatosis","2 pieces; steatosis, bridging fibrosis, and chronic inflammation (?Nonalcoholic steatohepatitis)",,163855
+GTEX-139UC-1426,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderte congestion",,188575
+GTEX-139UW-1026,healthy,healthy,"uncategorized, note reports no finding",,2 pieces; not congested; no fat,,140767
+GTEX-139YR-0226,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, inflammation, steatosis","2 pieces; macrovesicular steatosis, Mallory hyaline, pericellular and perivenular fibrosis, and rare acute inflammation c/w alcohol use",,375546
+GTEX-13CF2-0626,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, mild congestion",,118628
+GTEX-13CIG-1426,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; severe macrovesicular steatosis; no cirrhosis,,237026
+GTEX-13CZV-1426,congestion,other,curated non-cirrhotic pathology,"atrophy, congestion","2 pieces; moderate central congestion with cord cell atrophy; no fat, no fobrosis",,316725
+GTEX-13FHO-1126,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, steatosis","2 pieces; includes capsule (target is 1cm below capsule), cirrhosis with severe microvesicular and macrovesicuar steatosis, Mallory hylaine",,209665
+GTEX-13FHP-1426,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; moderate vascular congestion,,139175
+GTEX-13FLV-0326,inflammation/hepatitis,other,curated non-cirrhotic pathology,"congestion, inflammation, steatosis","2 pieces; includes portion of capsule (target is 1 cm below capsule), mild steatosis, passive congestion, focal portal chronic inflammation",,182448
+GTEX-13FLW-0626,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; chronic passive congestion,,181441
+GTEX-13FTW-1126,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, steatosis","2 pieces; severe microvescicular and macrovesicular (predominant) steatosis, mild fibrosis",,438164
+GTEX-13FTY-0826,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces; moderate steatosis, congestion",,57372
+GTEX-13FTZ-0726,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, steatosis",2 pieces; moderate macrovesicular steatosis with some fibrosis,,190078
+GTEX-13FXS-1426,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces; severe steatosis, congestion",,212218
+GTEX-13G51-0626,steatosis,other,curated non-cirrhotic pathology,steatosis,3 pieces; mild steatosis,,254744
+GTEX-13IVO-1526,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis",2 pieces;10% macrovesicular steatosis; central congestion and degeneration,,181873
+GTEX-13JUV-0726,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; congestion,,352372
+GTEX-13JVG-1526,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; severe steatosis,,284997
+GTEX-13N11-0926,inflammation/hepatitis,other,curated non-cirrhotic pathology,"inflammation, steatosis","2 pieces; includes capsule (target is 1cm below capsule), mild steatosis and some portal chronic inflammation",,268510
+GTEX-13N1W-1326,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; congestion and mild fatty change,,118461
+GTEX-13N2G-0926,fibrosis,other,curated non-cirrhotic pathology,"congestion, fibrosis",2 pieces; congestion  and accentuation of portal triads with fibrosis and mild lymphocytic infiltrate,,233903
+GTEX-13NYB-1026,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, diffuse macrovesicular steatosis involves >80% parenchyma",,177169
+GTEX-13NYC-0526,fibrosis,other,curated non-cirrhotic pathology,"congestion, fibrosis","2 pieces; portal fibrosis, congestion",,175401
+GTEX-13NYS-1226,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, nodularity, steatosis","2 pieces; nodular cirrhosis, alcoholic hyalin (Mallory bodies) with 50% macrosteatosis",,447694
+GTEX-13NZ8-1826,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; 10% macrovesicular steatosis,,268526
+GTEX-13NZ9-1326,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, micro (mainly) and macrovesicular steatosis involves ~70% parenchyma",,105976
+GTEX-13NZA-1626,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, inflammation","2 pieces, multiple von Meyenberg complexes up to 2.4mm; portal tracts expanded with fibrosis, bile duct proliferation, and chronic inflammation",,308522
+GTEX-13NZB-0626,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; congestion,,177870
+GTEX-13O1R-2026,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; <5% macrovesicular steatosis,,194225
+GTEX-13O3O-1826,healthy,healthy,"uncategorized, note reports no finding",,2 fragmented pieces; 20% of each consists of large vessels & nerves [outlined],,131530
+GTEX-13O3P-1726,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, nodularity",2 pieces; nodular cirrhosis,,275925
+GTEX-13O3Q-1026,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; <5% macrovesicular steatosis; no active or chronic lesions,,190753
+GTEX-13OVH-0926,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, ~5% macrovesicular steatosis",,207541
+GTEX-13OVJ-1026,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, steatosis","2 pieces; cirrhosis, steatosis, Mallory hyaline c/w alcoholic cirrhosis",,251876
+GTEX-13OVL-0726,steatosis,other,curated non-cirrhotic pathology,steatosis,2 fragmented pieces; 5% macrovesicular steatosis,,255263
+GTEX-13OW5-1226,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, hepatitis, steatosis","2 pieces, chronic steatohepatitis, macrovesicular steatosis is ~30% parenchyma; patchy early bridging fibrosis",,244416
+GTEX-13OW7-1326,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, diffuse mixed macro/micro vesicular steatosis",,196407
+GTEX-13OW8-0726,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces; congestion, mild steatosis",,252705
+GTEX-13PDP-1826,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; congested,,204601
+GTEX-13PL6-1226,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, mild congestion, minimal steatosis",,167187
+GTEX-13PLJ-1026,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, fibrosis","2 pieces; severe fibrosis without nodule formation consistent with cardiac cirrhosis, possible venous outflow obstruction",,239435
+GTEX-13PVQ-1526,unclassified,other,"uncategorized, finding in note",,2 pieces; thick fibrous trabeculae,,175070
+GTEX-13PVR-0126,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, minimal steatosis, mulitple bile duct hamartomata (Meyenberg Complex) noted.",,227471
+GTEX-13QJ3-2026,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces mild macrovesicular steatosis (10-20%),,180443
+GTEX-13QJC-0726,healthy,healthy,"uncategorized, note reports no finding",,2 pieces,,198809
+GTEX-13RTJ-1226,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, severe difffuse passive congestion, mild macrovesicular steatosis",,227378
+GTEX-13S7M-1126,congestion,other,curated non-cirrhotic pathology,"congestion, hemorrhage","2 pieces; congested with focal hemorrhages; large vessels comprise 10%; no fat, no cirrhosis",,176036
+GTEX-13SLW-1426,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, hepatitis","2 pieces, established cirrhosis, diffuse steatohepatitis, mixed pattern",,270810
+GTEX-13SLX-1226,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, inflammation",2 pieces; periportal fibrosis with chronic inflammation and early bridging fibrosis,,182190
+GTEX-13VXU-0926,healthy,healthy,"uncategorized, note reports no finding",,2 pieces,,145604
+GTEX-13W46-1026,necrosis,other,curated non-cirrhotic pathology,"congestion, necrosis","2 pieces; congestion, agonal necrosis",,227847
+GTEX-13X6I-1626,cirrhosis,cirrhosis,curated cirrhosis,cirrhosis,"2 pieces; cirrhosis, cholestatic features",,338271
+GTEX-13X6J-1826,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis",2 pieces; marked steatosis and congestion,,86172
+GTEX-13X6K-1126,healthy,healthy,"uncategorized, note reports no finding",,"2 pieces, no significant steatosis/congestion",,140303
+GTEX-13YAN-1626,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, congestion","2 pieces, marked centrilobular congestion/cardiac 'cirrhosis'",,190171
+GTEX-1445S-0926,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, steatosis","2 pieces, moderate steatosis, bridging fibrosis",,181540
+GTEX-144FL-1326,unclassified,other,"uncategorized, finding in note",,"2 pieces, diffuse infiltrative process suggestive of amyloid",,205556
+GTEX-144GL-1426,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; 20% macrovesicular steatosis,,113388
+GTEX-144GM-1326,healthy,healthy,curated no_abnormalities,no_abnormalities,"2 pieces, no abnormalities",,255657
+GTEX-144GO-1126,unclassified,other,"uncategorized, finding in note",,2 pieces; 10-20% of each is large vessels/nerve/fibrous tissue,,201587
+GTEX-145LS-0926,unclassified,other,"uncategorized, finding in note",,2 pieces; minimal fat,,108736
+GTEX-145LU-1326,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; 10% macrovesicular steatosis,,151244
+GTEX-145MF-0826,inflammation/hepatitis,other,curated non-cirrhotic pathology,"congestion, hepatitis","2 pieces, mild congestion, mild chronic hepatitis.  No significant steatosis.",,224292
+GTEX-145MG-1326,unclassified,other,"uncategorized, finding in note",,2 pieces; <5% fat,,212680
+GTEX-145MH-2126,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; mild steatosis,,159394
+GTEX-145MI-1226,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; 50% macrovesiculer steatosis,,207726
+GTEX-145MO-2326,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces moderate congestion; no significant steatosis or hepatitis noted,,126372
+GTEX-146FH-1526,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, hepatitis, inflammation, steatosis","2 pieces; 80% macrovesicular steatosis, portal inflammation and bridging fibrosis  consistent with nonalcoholic steatohepatitis",,219511
+GTEX-14753-1626,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; moderate centrilobular congestion,,241469
+GTEX-1477Z-0526,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderate congestion, no steatosis/hepatitis noted",,176208
+GTEX-147F4-1426,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderate passive congestion",,312723
+GTEX-147GR-1326,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces: moderate central congestion,,371737
+GTEX-147JS-1126,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, mild congestion; ~10% macrovesicular parenchymal fat",,133068
+GTEX-148VI-0626,healthy,healthy,"uncategorized, note reports no finding",,"2 pieces; one piece includes capsule (target is 1cm below capsule), one includes larger vessel/duct (to be avoided)",,270812
+GTEX-148VJ-0926,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, congestion, fibrosis","2 pieces, severe chronic congestive damage/fibrosis, 'cardiac cirrhosis'",,321390
+GTEX-1497J-0726,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderate-severe subacute chronic congestion",,222056
+GTEX-14A5H-1326,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, moderate centrilobular/cardiac congestion, minimal steatosis",,238862
+GTEX-14A5I-1726,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, minimal steatosis",,172255
+GTEX-14A6H-0726,healthy,healthy,"uncategorized, note reports no finding",,2 pieces,,146171
+GTEX-14ABY-0826,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; diffuse and marked steatosis (micro and macrovesicular fat),,114297
+GTEX-14AS3-0126,healthy,healthy,"uncategorized, note reports no finding",,2 pieces,,349884
+GTEX-14ASI-1626,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces; 10% macrovesicular steatosis, moderate congestion",,133961
+GTEX-14BIL-1326,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; central congestion,,182026
+GTEX-14BIM-1726,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, mild congestion, no significant steatosis",,311924
+GTEX-14BIN-0326,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; moderate macrovesicular steatosis,,216954
+GTEX-14BMV-2126,healthy,healthy,"uncategorized, note reports no finding",,2 pieces,,127084
+GTEX-14C38-1526,congestion,other,curated non-cirrhotic pathology,congestion,"6 pieces, minimal congestion, no steatosis",,99135
+GTEX-14C39-0426,necrosis,other,curated non-cirrhotic pathology,"necrosis, steatosis","2 pieces  massive central hemorrhagic necrosis/submassive hepatic necrosis, ~30% mascrovesicular steatosis",,227020
+GTEX-14C5O-1026,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces; mild steatosis, passive congestion",,215153
+GTEX-14DAQ-1726,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, no steatosis, minimal congestion",,150454
+GTEX-14E1K-0326,healthy,healthy,"uncategorized, note reports no finding",,"2 pieces, no steatosis",,310639
+GTEX-14E6C-1826,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, nodularity",2 pieces; severe nodular cirrhosis with Mallory bodies; too little residual hepatic parenchyma for usual analysis,,437088
+GTEX-14E6D-1426,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; congestion and marked fatty change,,135364
+GTEX-14E7W-1526,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; congestion; distended sinusoids and fine droplets of bile in cytoplasm of the liver cells;,,161340
+GTEX-14JFF-1026,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, no steatosis, moderate congestion",,183050
+GTEX-14JG1-1626,congestion,other,curated non-cirrhotic pathology,"congestion, hemorrhage",2 pieces; 1 mm focal hemorrhage in 1 piece [marked]; venous congestion,,129771
+GTEX-14JIY-1626,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, moderate congestion, macrovesicular steatosis (rep delineated)involves 20-30 % of parenchyma",,170002
+GTEX-14LLW-1726,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; moderate macrovesicular steatosis,,121413
+GTEX-14LZ3-0826,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces; mild congestion, includes focus of larger vessels/duct/nerve",,184469
+GTEX-14PHW-1726,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, marked subacute central cardiac congestion",,151157
+GTEX-14PHX-0526,healthy,healthy,"uncategorized, note reports no finding",,2 pieces,,286960
+GTEX-14PII-1926,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, marked mascrovesicular steatosis in ~50% parenchyma, centrilobular distribution; moderate passive congestion",,129931
+GTEX-14PJ2-1326,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, inflammation",2 pieces; periportal and peribiliary chronic inflammation and fibrosis encroaching on liver parenchyma,,108620
+GTEX-14PJM-1926,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; slight congestion,,117514
+GTEX-14PJO-1726,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; severe central congestion & degeneration,,147192
+GTEX-14PN4-1126,cirrhosis,cirrhosis,curated cirrhosis,cirrhosis,2 pieces; cirrhosis,,290643
+GTEX-14PQA-1326,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; congestion and mild fatty change,,124065
+GTEX-14XAO-0226,healthy,healthy,"uncategorized, note reports no finding",,"2 pieces, no significant steatosis or hepatitis",,372854
+GTEX-15CHQ-0926,congestion,other,curated non-cirrhotic pathology,"congestion, hemorrhage","2 pieces; moderate central congestion, hemorrhage and cellular degeneration consistent with heart failure",,186785
+GTEX-15CHS-1426,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, ~10% macrovesicular steatosis",,177314
+GTEX-15D1Q-1426,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces marked macrovesicular steatosis involves >90% of parenchyma,,96266
+GTEX-15D79-2326,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, steatosis",2 pieces; moderate (40%) macrovesicular steatosis; bridging fibrosis,,125189
+GTEX-15DCD-0826,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; grade 1 to 2 autolysis; passive congestion,preservation,174297
+GTEX-15DCZ-1526,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, moderate congestions; macrovesicular steatosis in ~20% of parenchyma",,134727
+GTEX-15DDE-1726,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, mild - moderate congestion",,229853
+GTEX-15DYW-1326,congestion,other,curated non-cirrhotic pathology,"atrophy, congestion",2 pieces; moderate congestion; severe central atrophy,,171323
+GTEX-15EO6-1626,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, hepatitis","2 pieces, advanced cirrhosis/chronic hepatitis",,138960
+GTEX-15EOM-1126,fibrosis,other,curated non-cirrhotic pathology,"congestion, fibrosis, sclerotic","2 pieces; includes capsule (target is 1cm below capsule), bridging fibrosis with expanded portal tracks and lymphocytic infiltrate, history of sclerosis cholangitis, congestion",,683123
+GTEX-15ER7-1826,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces; congestion, mild fatty change",,195092
+GTEX-15G19-1226,healthy,healthy,"uncategorized, note reports no finding",,2 pieces,,135856
+GTEX-15RJ7-2026,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; mild steatosis,,220463
+GTEX-15RJE-1126,congestion,other,curated non-cirrhotic pathology,hemorrhage,2 pieces; several focal hemorrhages [outlined]; capsule sampled,,294129
+GTEX-15SHU-1826,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; moderate central passive congestion,,157867
+GTEX-15SHW-0826,fibrosis,other,curated non-cirrhotic pathology,"congestion, fibrosis, inflammation","2 pieces; congestion, mild fibrosis and inflammation",,215434
+GTEX-15SKB-2126,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderate congestion",,152184
+GTEX-15SZO-1226,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, diffuse macrovesicular steatosis, ~90% parenchymal involvement",,126445
+GTEX-15TU5-2126,congestion,other,curated non-cirrhotic pathology,"atrophy, congestion",2 pieces; mild central congestion and atrophy,,106944
+GTEX-15UF6-1326,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; severe central passive congestion with liver cell degeneration,,297661
+GTEX-15UF7-0426,inflammation/hepatitis,other,curated non-cirrhotic pathology,"congestion, inflammation, steatosis","2 pieces; includes portion of capsule (target is 1 cm below capsule), portal chronic inflammation, mild steatosis, centrally congested and mildly autolyzed",preservation,481716
+GTEX-15UKP-1026,healthy,healthy,"uncategorized, note reports no finding",,2 pieces; 1 piece includes capsule (target is 1 cm below capsule),,520919
+GTEX-16GPK-1926,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis",2 pieces; congestion and steatosis,,200939
+GTEX-16MT8-2126,fibrosis,other,curated non-cirrhotic pathology,"congestion, fibrosis","2 pieces, liver, moderate chronic passive congnestion, early fibrosis noted",,123682
+GTEX-16MT9-2126,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis",2 pieces; severe congestion; mild steatosis,,92077
+GTEX-16NPV-1726,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, nodularity",2 pieces; nodular cirrhosis,,340279
+GTEX-16NPX-1326,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, mild passive congestion",,156345
+GTEX-16XZZ-1526,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, fibrosis, scarring",2 pieces; cirrhosis: fibrous scar makes up about 40% of area,,206474
+GTEX-16YQH-1126,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, ~5-10% steatosis, macro and microvesicular",,179005
+GTEX-16Z82-1426,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; moderate sinusoidal congestion,,155880
+GTEX-17EVP-1026,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis",2 pieces; moderate congestion and mild macrovesicular steatosis,,128013
+GTEX-17EVQ-0926,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderate chronic congestion",,201132
+GTEX-17F96-1226,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; moderate central vein congestion,,202483
+GTEX-17F97-2226,congestion,other,curated non-cirrhotic pathology,"atrophy, congestion",2 pieces; severe central congestion & atrophy,,173552
+GTEX-17F9Y-0626,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderate passive congestion",,147504
+GTEX-17HG3-0526,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; congestion,,176582
+GTEX-17HGU-1826,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis",2 pieces; mild congestion; <5% macrovesicular steatosis,,195760
+GTEX-17HHE-0126,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, mild microvesicular steatosis",,291003
+GTEX-17HHY-2026,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; prominent central macrovesicular steatosis: 20%,,145641
+GTEX-17HII-1026,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces mild-moderate passive congestion,,195091
+GTEX-17JCI-1926,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; severe central macrovesicular steatosis,,131798
+GTEX-17MF6-1126,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; moderate central congestion,,202429
+GTEX-183WM-1226,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis",2 pieces diffuse moderate macrovesicular steatosis and moderate passive congestion,,227380
+GTEX-18464-2026,unclassified,other,"uncategorized, finding in note",,2 pieces; atypical lymphoid infiltrates,,266741
+GTEX-18465-1626,fibrosis,other,curated non-cirrhotic pathology,fibrosis,2 pieces; large [4 mm] vein in 1 piece; 4 x 0.7 mm fibrous area in other piece,,190916
+GTEX-18A66-2026,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, mild passive congestion",,178018
+GTEX-18A6Q-2026,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, mild congestion",,130700
+GTEX-18A7A-1526,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; <5% macrovesicular steatosis; no obvious iron accumulation [thalassemia history],,191457
+GTEX-18A7B-1126,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; central congestion,,163633
+GTEX-18D9B-1526,congestion,other,curated non-cirrhotic pathology,"atrophy, congestion",2 pieces; severe central vascular congestion and atrophy,,407503
+GTEX-19HZE-1926,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; focal macrovesicular steatosis <5%,,211008
+GTEX-1A32A-0826,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; moderate [40%] macrovesicular steatosis mainly in central zones,,191717
+GTEX-1A3MW-1826,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, steatosis",2 pieces; severe macrovesicular steatosis (80%) & fibrosis,,188674
+GTEX-1A3MX-0926,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderate passive congestion",,290012
+GTEX-1A8FM-1226,congestion,other,curated non-cirrhotic pathology,"atrophy, congestion",2 pieces; mild central congestion & atrophy,,303964
+GTEX-1A8G6-0926,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, mild passive congestion",,164991
+GTEX-1A8G7-1126,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; congestion,,188072
+GTEX-1AMFI-0826,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, diffuse moderate-severe macro and microvesicular steatosis",,193788
+GTEX-1AX8Y-0726,healthy,healthy,"uncategorized, note reports no finding",,3 pieces,,232694
+GTEX-1AX8Z-1026,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; mild microvesicular steatosis,,161382
+GTEX-1AX9I-1626,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; moderate macrovesicular steatosis,,124750
+GTEX-1AYD5-1126,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; marked congestion; one piece includes capsule (outlined),,198888
+GTEX-1B8L1-0726,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, prominent chronic passive congestion; 5x2mm hilar vessel/connective tissue, delineated",,190664
+GTEX-1B8SF-1626,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces; congestion, moderate steatosis",,154764
+GTEX-1B8SG-1326,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces; congested, includes portion of capsule (not target region)",,234999
+GTEX-1B932-1426,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis",2 pieces; mild steatosis and congestion,,111338
+GTEX-1B933-1226,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, diffuse macrovesicular steatosis involves ~70% of parenchyma",,220792
+GTEX-1B98T-1126,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderate passive congestion",,177520
+GTEX-1B996-1426,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; marked congestion,,297253
+GTEX-1BAJH-1526,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces;  congestion,,318333
+GTEX-1C64N-1426,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces; congestion and mild steatosis, includes portion of capsule (not target)",,133854
+GTEX-1C6VQ-1626,fibrosis,other,curated non-cirrhotic pathology,"congestion, fibrosis, steatosis","2 pieces; severe macrovesicular steatosis, centrilobular congestion, fibrosis",,157099
+GTEX-1C6VR-1026,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, trace macrovesicular steatosis (~10% of parenchyma)",,60223
+GTEX-1C6VS-1726,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, steatosis",2 pieces; advanced portal cirrhosis and steatosis,,530977
+GTEX-1C6WA-1226,unclassified,other,"uncategorized, finding in note",,2 pieces; periportal fragmentation of cord cells greater than central,,268635
+GTEX-1CAMQ-1426,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; marked congestion,,232912
+GTEX-1CAV2-0926,healthy,healthy,"uncategorized, note reports no finding",,2 pieces; no fat or significant lesions,,212566
+GTEX-1CB4F-1726,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; congested,,143005
+GTEX-1CB4G-1626,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderate chronic passsive congestion",,143192
+GTEX-1CB4H-1326,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; mild mainly periportal macrosteatosis,,246179
+GTEX-1CB4J-0726,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderate chronic passive congestion",,355700
+GTEX-1E1VI-1926,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; diffuse macrovesicular and steatosis (80% fat),,115016
+GTEX-1E2YA-1226,necrosis,other,curated non-cirrhotic pathology,"congestion, hemorrhage, infarction, steatosis","2 pieces, marked passive congestion, approaching hemorrhagic infarcts, rep delineated; macrovesicular steatosis involves ~20% of parenchyma",,228855
+GTEX-1EH9U-1126,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; 5% macrosteatosis,,115858
+GTEX-1EKGG-1226,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces; congestion, mild steatosis",,191902
+GTEX-1EMGI-1326,fibrosis,other,curated non-cirrhotic pathology,fibrosis,"2 pieces, 10-20% hilar fibrous connective elements, rep delineated",,140962
+GTEX-1EN7A-2026,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; severe centrilobular macrovesicular steatosis; 1 mm bile duct hamartoma (von Meyenberg complex) [labeled],,169794
+GTEX-1EU9M-0826,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, patchy macrovesicular steatosis involves ~20% of parenchyma",,146580
+GTEX-1EWIQ-0726,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; mild to moderate steatosis,,111551
+GTEX-1EX96-0326,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, fibrosis","2 pieces, moderate fibrosis/cardiac cirrhosis pattern",,376833
+GTEX-1F48J-1726,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; severe macrovesicular steatosis,,191889
+GTEX-1F52S-1926,congestion,other,curated non-cirrhotic pathology,"atrophy, congestion",2 pieces; severe central congestion and atrophy,,178840
+GTEX-1F5PL-0626,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, steatosis",2 pieces established cirrhosis with diffuse marked macrovesicular steatosis,,352020
+GTEX-1F6I4-1226,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces; congestion, mild to moderate steatosis",,159038
+GTEX-1F6IF-1926,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderate passive congestion",,273133
+GTEX-1F6RS-1326,unclassified,other,"uncategorized, preservation warning",,2 pieces; focally moderate autolysis,preservation,163859
+GTEX-1F75B-1326,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; congestion,,260048
+GTEX-1F75W-1426,fibrosis,other,curated non-cirrhotic pathology,fibrosis,2 pieces; bridging periportal fibrosis,,165867
+GTEX-1F7RK-0726,healthy,healthy,"uncategorized, note reports no finding",,2 pieces,,250919
+GTEX-1F88E-1526,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderate diffuse passive congestion",,252142
+GTEX-1F88F-0626,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; 5% macrovesicular steatosis,,164946
+GTEX-1GF9V-1226,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, ~50% macrovesicular steatosis; moderate passive congestion",,257444
+GTEX-1GF9W-0826,necrosis,other,curated non-cirrhotic pathology,"hemorrhage, necrosis",2 pieces; extensive hemorrhagic central necrosis,,184865
+GTEX-1GF9X-0426,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; severe (>75%) macrovesicular steatosis,,107342
+GTEX-1GMR3-1026,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderate passive congestion",,155342
+GTEX-1GMR8-1526,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, nodularity",2 pieces; nodular cirrhosis; transplant 2011; hemochromatosis per history,,275184
+GTEX-1GMRU-0926,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, diffuse macrovesicular steatosis involves ~80% of parenchyma",,114761
+GTEX-1GN1U-0926,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderate/focally marked passive congestion, cardiac features",,191075
+GTEX-1GN1V-1226,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; moderate steatosis,,123482
+GTEX-1GN2E-0926,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, centrilobular macrovesicular steatosis involves ~20-30% of parenchyma",,199203
+GTEX-1GN73-1126,steatosis,other,curated non-cirrhotic pathology,"hemorrhage, steatosis",2 pieces; <5% macrovesicular steatosis; focal hemorrhages,,157231
+GTEX-1GPI6-1326,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderately advanced passive congestion",,162033
+GTEX-1GTWX-1126,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, diffuse macrovesicular steatosis involves ~60% of parenchyma; moderate passive congestion",,77402
+GTEX-1GZ2Q-1326,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, fibrosis, inflammation","2 pieces; fatty degeneration, fibrosis consistent with cirrhosis, and inflammation",,253818
+GTEX-1GZ4I-1526,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis",2 pieces; minimal central congestion; 10% macrovesicular steatosis,,260954
+GTEX-1GZHY-1126,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderate passive congestion",,140840
+GTEX-1H11D-0826,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; some congestion,,373048
+GTEX-1H1CY-1026,healthy,healthy,"uncategorized, note reports no finding",,2 pieces; no sign of chronic passive congestion,,205189
+GTEX-1H1DE-0526,healthy,healthy,curated no_abnormalities,no_abnormalities,"2 pieces, no abnormalities",,315594
+GTEX-1H1DF-1326,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis",2 pieces; central congestion and moderate macrovesicular steatosis,,161003
+GTEX-1H1DG-1726,necrosis,other,curated non-cirrhotic pathology,"necrosis, steatosis","2 pieces; centrilobular necrosis, mild macrovesicular steatosis",,153984
+GTEX-1H1ZS-2126,cirrhosis,cirrhosis,curated cirrhosis,cirrhosis,"2 pieces, advanced cirrhosis",,291701
+GTEX-1H23P-1826,healthy,healthy,"uncategorized, note reports no finding",,2 pieces: 10% vascular content in 1; not congested,,204156
+GTEX-1H2FU-2126,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, congestion","2 pieces; cirrhosis, congestion",,271097
+GTEX-1H3NZ-1726,fibrosis,other,curated non-cirrhotic pathology,"congestion, fibrosis, steatosis",2 pieces; bridging fibrosis; moderate venous & centrolobular congestion; 10% macrovesicular steatosis,,249079
+GTEX-1H3O1-1226,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, advanced passive congestion",,191388
+GTEX-1H3VE-1526,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, fibrosis, hyalinization, steatosis","2 pieces; consistent with advanced alcoholic cirrhosis: steatosis, Mallory's hyaline, extensive fibrosis, marked cholestasis (rep outlined)",,457534
+GTEX-1H4P4-1326,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces; steatosis, moderate autolysis",preservation,184806
+GTEX-1HB9E-0626,fibrosis,other,curated non-cirrhotic pathology,"congestion, fibrosis, hepatitis","2 pieces, moderate fibrosis, cardiac congestion and chronic hepatitis",,230676
+GTEX-1HBPH-2626,healthy,healthy,"uncategorized, note reports no finding",,2 pieces; no active or chronic lesions,,148161
+GTEX-1HBPI-1026,healthy,healthy,"uncategorized, note reports no finding",,2 pieces; no active or chronic lesions,,274842
+GTEX-1HBPM-1626,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, hyalinization, inflammation, necrosis, pigment","2 pieces; cirrhosis, chronic inflammation, Mallory's hyaline, bile pigment and hepatocyte degeneration/necrosis",,239033
+GTEX-1HBPN-2426,inflammation/hepatitis,other,curated non-cirrhotic pathology,inflammation,"2 pieces, polymorphonuclear cells in sinuosoids and mild portal and lobular chronic  inflammation.  Reviewed by NIH consult panel.",,238262
+GTEX-1HCU6-2026,healthy,healthy,"uncategorized, note reports no finding",,2 pieces; no active or chronic lesions,,225583
+GTEX-1HCU7-1726,healthy,healthy,"uncategorized, note reports no finding",,2 pieces; no active or chronic lesions,,150352
+GTEX-1HCU8-1026,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderate passive congestion",,192190
+GTEX-1HCVE-1526,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, marked passive congestion; moderate macrovesicular steatosis ( 40-50% of parenchyma)",,181284
+GTEX-1HFI6-1826,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderate passive congestion",,101283
+GTEX-1HGF4-1026,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; moderate centrilobular congestion,,119157
+GTEX-1HR98-1626,fibrosis,other,curated non-cirrhotic pathology,fibrosis,"2 pieces; moderate increase in periportal fibrous tissue, but little bridging and no nodules",,147207
+GTEX-1HR9M-1526,congestion,other,curated non-cirrhotic pathology,"atrophy, congestion",2 pieces; severe central congestion and cord cell atrophy,,263046
+GTEX-1HSKV-1426,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; congested,,138448
+GTEX-1HSMO-1626,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; moderate central congestion and cord cell degeneration,,273182
+GTEX-1HT8W-0826,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, steatosis","2 pieces, moderate macrovesicular steatosis involving ~80% of parenchyma; severe bridging fibrosis",,240788
+GTEX-1HUB1-1326,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, hepatitis, necrosis","2 pieces; expanded portal spaces with lymphocytic increase, fibrous bridging and piecemeal necrosis consistent with  low grade chronic hepatitis",,314171
+GTEX-1I19N-1226,congestion,other,curated non-cirrhotic pathology,"congestion, hemorrhage",2 pieces; central congestion and hemorrhage,,196471
+GTEX-1I1CD-1626,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; central congestion,,213601
+GTEX-1I1GP-1526,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, macrovesicular steatosis in ~25% of parenchyma, mild/moderate passive congestion",,201105
+GTEX-1I1GQ-0926,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; marked congestion,,223237
+GTEX-1I1GR-1526,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, mild macrovesicular steatosis; moderate passive congestion",,213328
+GTEX-1I1GS-0826,cirrhosis,cirrhosis,curated cirrhosis,cirrhosis,"2 pieces, established cirrhosis",,294921
+GTEX-1I1GV-1026,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, macrovesicular steatosis involves ~60-70% of parenchyma; moderate passive congestion",,167043
+GTEX-1ICG6-1026,fibrosis,other,curated non-cirrhotic pathology,sclerotic,"2 pieces; most small portal space arteries have prominent mural sclerosis, otherwise no significant changes; could represent localized amyloid or effect of hypertension",,236719
+GTEX-1ICLY-1526,healthy,healthy,"uncategorized, note reports no finding",,"2 pieces, no  abnormalities",,173204
+GTEX-1ICLZ-1526,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, fibrosis, steatosis",2 pieces; severe (50%) perilobular fibrosis consistent with cardiac cirrhosis; moderate macrovesicular steatosis,,248095
+GTEX-1IDFM-1026,fibrosis,other,curated non-cirrhotic pathology,"congestion, fibrosis","2 pieces; central congestion, some fibrosis",,304489
+GTEX-1IDJH-1526,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, mild macrovesicular steatosis, passive chronic congestion",,157546
+GTEX-1IDJV-1626,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, macrovesicular steatosis invoves ~40% of parenchyma; moderate passive congestion.",,387015
+GTEX-1IE54-1026,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; central congestion,,106498
+GTEX-1IGQW-1126,fibrosis,other,curated non-cirrhotic pathology,"congestion, fibrosis, hepatitis","2 pieces, mild chronic steatohepatitis, mild early bridging fibrosis, moderate passive congestion",,259506
+GTEX-1IKJJ-1526,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, macro and microvesicular steatosis involves ~50% of parenchyma. Mild passive congestion",,156841
+GTEX-1IKK5-0326,unclassified,other,"uncategorized, finding in note",,"2 pieces; slight to moderate increase of portal lymphocytes, but no necrosis",,207708
+GTEX-1IKOH-1426,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderate passive congestion",,136414
+GTEX-1IL2U-2026,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, congestion, fibrosis","2 pieces; expanded portal areas with bile duct proliferation, lymphocytic infiltration and fibrosis with bridging consistent with cirrhosis; congestion; one piece contains large  and thick walled vessels (outlined)",,316834
+GTEX-1IL2V-0926,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, minimal macrovesicular steatosis (~10% of parenchyma), moderate passive congestion",,157037
+GTEX-1IOXB-1726,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; moderate macrovesicular steatosis; large blood vessel occupies 10% of 1 piece,,154543
+GTEX-1IY9M-1426,fibrosis,other,curated non-cirrhotic pathology,fibrosis,"2 pieces; marked central fatty degeneration, perivenular and periportal fibrosis",,141948
+GTEX-1J1OQ-0826,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, steatosis","2 pieces, advanced cirrhosis and steatosis",,241742
+GTEX-1J8EW-1626,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; mild vascular congestion,,139640
+GTEX-1J8JJ-1226,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderate-marked passive congestion",,225444
+GTEX-1J8Q2-1426,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces; includes portion of capsule (not target), central congestion",,386883
+GTEX-1JJ6O-0826,healthy,healthy,"uncategorized, note reports no finding",,"1 pieces; liver, not skin",,28530
+GTEX-1JJE9-2726,fibrosis,other,curated non-cirrhotic pathology,"atrophy, fibrosis",2 pieces; severe central atrophy and bridging fibrosis; cord cells largely dissociated; barely acceptable,,159779
+GTEX-1JJEA-1526,inflammation/hepatitis,other,curated non-cirrhotic pathology,"hepatitis, steatosis","2 pieces, ~60-70% micro (predominately)/macrovesicular steatosis, mild chronic hepatitis",,138921
+GTEX-1JMLX-1326,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; minimal congestion; no inflammation,,247179
+GTEX-1JMOU-0726,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, diffuse macrovesicular steatosis",,190504
+GTEX-1JMPZ-0826,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, congestion, fibrosis",2 pieces; severe vascular congestion and fibrosis consistent with cardiac cirrhosis,,279602
+GTEX-1JMQI-0126,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces; includes capsule (target is 1cm below capsule), mild steatosis and congestion",,143011
+GTEX-1JMQJ-1626,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces; mild steatosis, congestion",,286676
+GTEX-1JMQK-1026,healthy,healthy,"uncategorized, note reports no finding",,2 pieces; no active or chronic lesions,,180148
+GTEX-1JMQL-1226,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, congestion","2 pieces, advanced chronic congestion/'cardiac' cirrhosis",,159772
+GTEX-1JN1M-1226,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, marked cardiac congestion",,213413
+GTEX-1JN6P-1226,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; congested; large vein on 1 edge [arrowed],,153905
+GTEX-1JN76-0726,necrosis,other,curated non-cirrhotic pathology,necrosis,2 pieces; extensive central necrosis consistent with chemical/medication injury or prolonged hypotension,,168352
+GTEX-1K2DU-0626,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderate cardiac congestion",,360403
+GTEX-1K9T9-0726,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, minimal congestion",,247140
+GTEX-1KAFJ-0726,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis",2 pieces; moderate centrilobular congestion with mild centrilobular macrovesicular steatosis,,167873
+GTEX-1KANB-2226,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, mild congestion",,259625
+GTEX-1KD4Q-1526,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; slight degree of congestion,,300596
+GTEX-1KD5A-1226,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; mild to moderate steatosis,,156720
+GTEX-1KWVE-0326,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; central vein congestion,,226600
+GTEX-1LB8K-1926,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, hepatitis, inflammation, steatosis","2 pieces; moderate macrovesicular steatosis, cord cell damage, chronic inflammation and bridging fibrosis consistent with steatohepatitis",,238444
+GTEX-1LC47-1326,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, steatosis","2 pieces, establishc cirrhosis and diffuse macrovesicular steatosis",,211056
+GTEX-1LG7Y-0726,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, mild passive congestion",,239548
+GTEX-1LGRB-0626,inflammation/hepatitis,other,curated non-cirrhotic pathology,"hyalinization, inflammation, steatosis","2 pieces; severe steatosis with mild chronic inflammation, Mallory's hyaline, consistent with history of alcohol abuse",,172037
+GTEX-1LH75-0926,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderate passive congestion",,372042
+GTEX-1LKK1-1026,cirrhosis,cirrhosis,curated cirrhosis,cirrhosis,"2 pieces, advanced cirrhosis, advanced autolysis",preservation,560576
+GTEX-1LSNL-2026,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, steatosis","2 pieces, moderate macrovesicular steatosis, ~30% of parenchyma; early bridging fibrosis",,190847
+GTEX-1LSVX-0926,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; extensive centrilobular sinusoidal congestion with cord cell loss,,209320
+GTEX-1LVA9-1826,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces; include capsule (target is 1cm below capsule), central congestion",,180867
+GTEX-1LVAO-1126,unclassified,other,"uncategorized, finding in note",,2 pieces; several bile duct hamartomas occupy 5%,,285314
+GTEX-1M4P7-0926,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, macrovesicular steatosis in ~10% of parenchyma.  Focal areas approach autolysis score 2",preservation,261662
+GTEX-1MA7X-0526,unclassified,other,"uncategorized, preservation warning",,2 pieces; occasional portal lymphoid collections; no cirrhosis; poorly preserved and fragmented parenchyma,preservation,270439
+GTEX-1MCQQ-0526,unclassified,other,"uncategorized, finding in note",,"2 pieces; no fibrosis, inflammation or fat",,164710
+GTEX-1MJIX-0726,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces; 1 piece includes portion of capsule (target region is 1cm below), steatosis",,239480
+GTEX-1MJK2-0626,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis",2 pieces; mild microvesicular steatosis; marked congestion,,135982
+GTEX-1N2DW-1326,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, congestion, sclerotic","2 pieces; congestion and cardiac sclerosis (""cirrhosis"")",,333060
+GTEX-1N2EE-1426,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, approaching score '2': diffuse severe macrovesicular steatosis",,262028
+GTEX-1N2EF-1026,necrosis,other,curated non-cirrhotic pathology,"congestion, necrosis",2 pieces; severe central lobular vascular congestion and liver cell necrosis,,204308
+GTEX-1N5O9-1626,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis",2 pieces; congestion; mild steatosis,,329510
+GTEX-1N7R6-0826,inflammation/hepatitis,other,curated non-cirrhotic pathology,"congestion, inflammation",2 pieces; congestion; focal predominantly portal chronic inflammation,,222206
+GTEX-1NV5F-0826,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, fibrosis, necrosis, nodularity",2 pieces; nodular cirrhosis; centers of nodules are necrotic; 30% fibrous content; no normal tissue,,286424
+GTEX-1NV8Z-1626,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, mild passive congestion",,251604
+GTEX-1O97I-1326,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; 20% macrovesicular steatosis,,164055
+GTEX-1O9I2-2326,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, steatosis","2 pieces, advanced autolysis.  Established cirrhosis with diffuse macrovesicular steatosis",preservation,307480
+GTEX-1OJC4-1126,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; congested,,114797
+GTEX-1OZHM-1126,necrosis,other,curated non-cirrhotic pathology,"necrosis, steatosis","2 pieces, pronounced centrilobular necrosis, 40% of parenchyma, moderate macrovesciluar steatosis",,216554
+GTEX-1P4AB-1326,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, fibrosis",2 pieces; extensive cirrhosis with >50% fibrous content,,528108
+GTEX-1PBJI-1026,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, macrovesciular steatosis, moderate/marked, involved up to ~80% of parenchyma",,285676
+GTEX-1PBJJ-0626,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; congestion,,260304
+GTEX-1PIIG-1326,unclassified,other,"uncategorized, preservation warning",,2 pieces; mild to moderate autolysis and marked central fatty degeneration,preservation,228133
+GTEX-1POEN-1526,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, diffuse microvesicular steatosis, granulomas noted, ensquared",,196791
+GTEX-1PPGY-2226,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis",2 pieces; marked congestion; mild steatosis,,180896
+GTEX-1PPH6-1326,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; mild macrovesicular steatosis no inflammation or fibrosis,,118105
+GTEX-1PPH7-0626,unclassified,other,"uncategorized, finding in note",,2 pieces; <2% macrovesicular fat; no fibrosis or inflammation,,83158
+GTEX-1PWST-1326,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, hepatitis, steatosis","2 pieces, advanced cirrhosis/steatosis, chronic hepatitis",,436177
+GTEX-1QAET-1026,unclassified,other,"uncategorized, finding in note",,2 pieces; moderate increase in portal tract lymphocytes,,401673
+GTEX-1QCLZ-1226,fibrosis,other,curated non-cirrhotic pathology,fibrosis,2 pieces; diffuse fatty degeneration (large and small  fat droplets);one with bile ducts surrounded by dense fibrous tissue (outlined) and other covered by capsule at two sides (arrows),,167701
+GTEX-1QEPI-1326,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; moderate to severe centrilobular macrovesicular steatosis,,148906
+GTEX-1QMI2-1426,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, fibrosis, steatosis","2 pieces, moderate macrovesicular steatosis and bridging fibrosis approaching early cirrhosis",,204670
+GTEX-1QP66-0226,healthy,healthy,"uncategorized, note reports no finding",,2 pieces; capsule included (Arrows),,100744
+GTEX-1QP6S-1326,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; marked congestion; mild to moderate fatty degeneration,,291663
+GTEX-1QPFJ-1126,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, steatosis",2 pieces; extensive panlobular macrovesicular steatosis; fibrous tissue on edge of 1 piece occupies 20% [outlined],,143227
+GTEX-1R9JW-0826,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, diffuse macrovesicular steatosis, severe, >90% of parenchyma",,259325
+GTEX-1R9K4-1626,cirrhosis,cirrhosis,curated cirrhosis,cirrhosis,3 pieces; capsule included (arrows); advanced cirrhosis,,290146
+GTEX-1R9PM-0526,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, macrovesicular steatosis, moderate, ~30-40% of parenchyma",,220653
+GTEX-1R9PO-0826,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; mild to moderate autolysis; marked congestion and fatty degeneration,preservation,127487
+GTEX-1RAZS-1126,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces; marked congestion,,198425
+GTEX-1RB15-0626,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, mild microvesicular steatosis",,229044
+GTEX-1RDX4-1426,necrosis,other,curated non-cirrhotic pathology,"congestion, necrosis",2 pieces; severe centrilobular vascular congestion with central cord cell necrosis c/w heart failure,,459383
+GTEX-1RNSC-1426,necrosis,other,curated non-cirrhotic pathology,necrosis,"2 pieces, autolysis/cellular necrosis",preservation,273795
+GTEX-1RQED-0726,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, mild congestion",,131020
+GTEX-1S3DN-1126,healthy,healthy,curated no_abnormalities,no_abnormalities,"2 pieces, no abnormalities",,236767
+GTEX-1S5VW-1826,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, macrovesicular steatosis, moderate",,168686
+GTEX-1S5ZU-1126,unclassified,other,"uncategorized, finding in note",,"2 pieces; no infiltrates, fibrosis, congestion or fat",,206656
+GTEX-N7MS-1825,steatosis,other,curated non-cirrhotic pathology,steatosis,30-40% steatotic (macrovesicular),,119363
+GTEX-N7MT-0426,healthy,healthy,"uncategorized, note reports no finding",,9x9 mm,,152001
+GTEX-NL3G-0426,steatosis,other,curated non-cirrhotic pathology,steatosis,"Mico/macrovesicular steatosis, 30—40%, confirmed by glass slide review",,133051
+GTEX-NL3H-0526,necrosis,other,curated non-cirrhotic pathology,"congestion, necrosis",9x8 mm. Severe acute passive congestion with central necrosis,,107634
+GTEX-NL4W-1926,congestion,other,curated non-cirrhotic pathology,congestion,Mild congestion,,112727
+GTEX-NPJ7-2026,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis",40-50% macrovesicular steatosis; mild chronic passive congestion,,209526
+GTEX-NPJ8-0726,cirrhosis,cirrhosis,curated cirrhosis,cirrhosis,"Established cirrhosis, diffuse.",,203167
+GTEX-O5YT-0826,unclassified,other,"uncategorized, finding in note",,Mild central hypoxia,,253738
+GTEX-O5YU-0326,congestion,other,curated non-cirrhotic pathology,congestion,mild congestion,,167566
+GTEX-O5YV-0726,healthy,healthy,"uncategorized, note reports no finding",,12x7 mm; apsule present; should be 1 cm deeper,,129055
+GTEX-O5YW-0826,steatosis,other,curated non-cirrhotic pathology,steatosis,"10x7 mm; Mod.  macrovesicular steatosis; Central chatter, probably poor fixation ; refix-recut",preservation,130806
+GTEX-OHPM-0826,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, fibrosis, hepatitis, steatosis",Macovesicular steatosis (50%). Mild chronic hepatitis with severe bridging fibrosis/early cirrhosis,,130118
+GTEX-OHPN-0726,healthy,healthy,"uncategorized, note reports no finding",,Subcapsular aliquot (9 .5 x 7.5mm aqliquot),,183012
+GTEX-OIZF-0826,steatosis,other,curated non-cirrhotic pathology,steatosis,50-60% macrovesicular steatosis,,165014
+GTEX-OOBJ-0826,steatosis,other,curated non-cirrhotic pathology,steatosis,11.2x 8.3mm.  About 10% macrovesicular steatosis.,,182075
+GTEX-OXRK-1226,steatosis,other,curated non-cirrhotic pathology,steatosis,Mild macrovesicluarsteatosis. Aliquot contains liver capsule,,147417
+GTEX-OXRN-0626,necrosis,other,curated non-cirrhotic pathology,"congestion, ischemic_changes",Centrilobular ischemia and congestion 9x8.3mm. Capsule present in aliquot,,118385
+GTEX-OXRO-2226,healthy,healthy,"uncategorized, note reports no finding",,"11.4x7.8. Central round hole, 1.3mm, corresponds to cassette’s central ‘domes’ on the base and lid.",,142507
+GTEX-OXRP-0826,steatosis,other,curated non-cirrhotic pathology,steatosis,"9.7x6.7mm.  Patchy macrovesicular steatosis, 3-40%.  Focal central areas appear under-fixed with tears/holes.",,74568
+GTEX-P44G-1126,unclassified,other,"uncategorized, preservation warning",,"11 x 6.8mm.  Focal area poor fixation, hole/tears",preservation,130950
+GTEX-P44H-1226,cirrhosis,cirrhosis,curated cirrhosis,cirrhosis,"~10x8mm. Appears cirrhotic, request trichrome",,37785
+GTEX-P4QR-0926,congestion,other,curated non-cirrhotic pathology,congestion,2  ~8x7.5mm pieces.  Pronounced centrilobular chronic passive congestion,,257793
+GTEX-P78B-1326,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces ~8x7mm; mild steatosis,,221207
+GTEX-PLZ4-0426,healthy,healthy,"uncategorized, note reports no finding",,2   ~9x8mm pieces,,208460
+GTEX-POYW-1926,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, hepatitis, nodularity, steatosis",2 pieces ~7.5x7.5mm. Established micronodular cirrhosis with micro and macrovesicular steatosis and chronic hepatitis,,256359
+GTEX-PVOW-0926,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces,~7.5x5.5mm;6.5 mm sq. slightly congested",,126822
+GTEX-PWO3-1826,fibrosis,other,curated non-cirrhotic pathology,fibrosis,"2   ~ 8x8mm aliquots, ? fibrosis; request Masson",,279524
+GTEX-PWOO-0826,steatosis,other,curated non-cirrhotic pathology,steatosis,"2   ~9X8mm aliquots, extensive patterned microvesicular steatosis ? drug/toxic effect",,441554
+GTEX-PX3G-0826,unclassified,other,"uncategorized, finding in note",,"2 pieces,~ 6x8 mm; central sinusoidal dilatation; focal fragmentation",,208782
+GTEX-Q2AG-1126,steatosis,other,curated non-cirrhotic pathology,steatosis,"2   ~9x7.5mm aliquots, patchy mixed micro-and macro-vesicular steatosis,  ~25%",,198933
+GTEX-Q734-0326,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, fibrosis, hepatitis",2  ~7.5x7.5mm aliquots.  Severe bridging fibrosis/early cirrhosis with steatotis and chronic hepatitis.,,273344
+GTEX-QDT8-1126,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, hepatitis","2  ~9x7mm aliquots.  Established cirrhosis with steatohepatitis, diffuse",,370140
+GTEX-QDVN-0826,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, fibrosis, hepatitis, inflammation","2   ~9.5x8mm aliquots.  Macrovesicular steatohepatitis (~20% fat), bridging fibrosis focally approaching early cirrhosis; moderate chronic inflammation",,590498
+GTEX-QEG4-1826,steatosis,other,curated non-cirrhotic pathology,steatosis,2 ~8x7mm aliquots. Focal macrovesicular steatosis involves !0% of parenchyma,,197039
+GTEX-QEG5-1526,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, 9x8 & 10x6mm; severe vascular congestion mainly centrolobular",,223911
+GTEX-QEL4-1226,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, hepatitis, steatosis","2    ~7.5x7.5mm aliquots, diffuse macrovesicular steatosis and chronic hepatitis with bridging fibrosis",,200975
+GTEX-QESD-2026,unclassified,other,"uncategorized, finding in note",,2 pieces ~9x8mm; central pallor; no fibrosis or inflammation,,354815
+GTEX-QMR6-0426,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, steatosis",2   ~9x7mm aliquots.  End-stage cirrhosis with marked bile stasis + steatosis.,,398611
+GTEX-QV44-0326,healthy,healthy,curated clean_specimens,clean_specimens,"2 pieces 10x7&8x6.7 mm;   good preservation, no lesions",,256815
+GTEX-QVJO-0826,congestion,other,curated non-cirrhotic pathology,congestion,"2   ~9x8mm aliquots, areas of chronic passive congestion",,265879
+GTEX-QVUS-0526,healthy,healthy,"uncategorized, note reports no finding",,2  ~ 9x7mm aliquots,,212518
+GTEX-QXCU-1826,congestion,other,curated non-cirrhotic pathology,congestion,"2  ~8x8mm aliquots, prominent congestion",,239949
+GTEX-R3RS-1226,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces 9x8 & 8x7 mm; centrally congested and moderately autolyzed centrally,preservation,145307
+GTEX-R45C-1426,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, steatosis","2 pieces, 10x8 & 9x7 mm; cirrhosis, microsteatosis; capsule present",,252780
+GTEX-R53T-0326,congestion,other,curated non-cirrhotic pathology,congestion,"2 aliquots,   ~8x7mm.  Moderate congestion",,287712
+GTEX-R55E-1726,healthy,healthy,curated clean_specimens,clean_specimens,2 pieces ~9.5x7 mm; 1 broken apart; good morphology,,242908
+GTEX-R55F-2026,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, 9x8 & 8x8 mm; severe central passive congestion",,221627
+GTEX-REY6-1226,healthy,healthy,"uncategorized, note reports no finding",,"2 pieces, 8x7 & 7x6 mm; no congestion",,175217
+GTEX-RM2N-1926,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 aliquots,  ~9x9mm, diffuse macrovesicular steatosis involves 80+% of parenchyma",,246310
+GTEX-RN5K-0426,unclassified,other,"uncategorized, preservation warning",,"2 alquots,   ~8x7mm, badly autolyzed",preservation,261949
+GTEX-RN64-1826,congestion,other,curated non-cirrhotic pathology,congestion,"2 aliquots,  ~8x6mm, moderate congestion",,163537
+GTEX-RNOR-1426,healthy,healthy,"uncategorized, note reports no finding",,"2 pieces, 9x7 & 7x7 mm;",,181371
+GTEX-RTLS-1326,healthy,healthy,"uncategorized, note reports no finding",,"2 pieces, 7x6 & 7x6 mm; no lesions",,120013
+GTEX-RU72-1426,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 aliquots,  ~7x6mm.  Moderate congestion, focal microvesicular steatosis involves  ~10-15% of parenchyma",,164159
+GTEX-RVPU-0826,healthy,healthy,"uncategorized, note reports no finding",,"2 aliquots,  ~7x7mm.",,160996
+GTEX-RVPV-1926,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, 8x7 & 8x7 mm;  focal macrosteatosis",,167857
+GTEX-RWSA-1426,unclassified,other,"uncategorized, finding in note",,"2 aliquots,  ~7x6mm.  Fairly well preserved, minimal fat",,196959
+GTEX-S32W-1926,congestion,other,curated non-cirrhotic pathology,hemorrhage,2 pieces 10x7 & 8x7 mm; large area of hemorrhage in each: 10 and 25% of specimen,,240215
+GTEX-S33H-1626,healthy,healthy,"uncategorized, note reports no finding",,2 pieces 8x5 & 7x7 mm; not congested,,166826
+GTEX-S3LF-1326,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 aliquots, ~8x7.5mm.  Diffuse macrovesicular steatosis, ~50% of parenchyma",,218179
+GTEX-S4Z8-0526,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces 11x8 & 10x8 mm; moderate macrovesicular steatosis; mild microvesicular steatosis,,312028
+GTEX-S7SE-1326,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 aliquots,  ~8x6mm.  Diffuse macrovesicular steatosis involves  ~70% of specimen",,114500
+GTEX-SIU8-1226,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces  ~8x7mm, diffuse macro and micro vesicular steatosis",,135656
+GTEX-SJXC-1226,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces  ~10x8mm.  Moderate congestion, moderately autolyzed",preservation,233974
+GTEX-SN8G-1026,healthy,healthy,"uncategorized, note reports no finding",,"2 pieces,  ~7x7mm",,179651
+GTEX-T2IS-1226,healthy,healthy,"uncategorized, note reports no finding",,"2 pieces ~6x6mm, no steatosis",,201803
+GTEX-T2YK-1926,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces 8x7 & 8x6 mm; moderate central congestion,,196210
+GTEX-T5JC-0926,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces 7x6 & 6x6 mm; centrally congested,,167203
+GTEX-T6MN-1226,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces 8x7 & 8x7 mm; large vessel runs through one piece; central congestion,,160575
+GTEX-TKQ2-1726,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces   ~8x7mm.  Minimal steatosis,,200098
+GTEX-TSE9-1126,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces 8x7 & 7x7 mm; moderate sinusoidal congestion; fibrovascular area 4.7x1.8 mm at center of one piece,,186716
+GTEX-U3ZN-0226,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, 9x7 & 8x7 mm;  moderate macrovesicular steatosis; no fibrosis",,380454
+GTEX-U412-1426,healthy,healthy,"uncategorized, note reports no finding",,"2 pieces,  ~8x6mm",,181532
+GTEX-U8T8-0826,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, 5.5x8 & 6x8mm; mild macrovesicular steatosis",,159740
+GTEX-U8XE-1526,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, steatosis","2 pieces  ~7x6mm.  Diffuse macrovesicular steatosis involves 50-60% of parenchyma,  with focal early bridging fibrosis",,156224
+GTEX-UPIC-0926,healthy,healthy,"uncategorized, note reports no finding",,"2 pieces, 8x8 & 8x7mm; no steatosis, no fibrosis",,409730
+GTEX-UPJH-1626,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces  ~7x6mm.  Diffuse macrovesicular steatosis involves  ~30% of parenchyma,,151559
+GTEX-UPK5-1426,unclassified,other,"uncategorized, finding in note",,"2 pieces, 8x7 & 6x6mm; no fat, fibrosis  or excess congestion",,184730
+GTEX-UTHO-2426,fibrosis,other,curated non-cirrhotic pathology,"congestion, fibrosis","2 pieces, 8x7.5 & 7x7mm; moderate congestion; some portal fibrosis",,193056
+GTEX-VJWN-1526,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, 8x8 & 9x7mm; moderately congested centrally associated with macrovesicular steatosis;",,129392
+GTEX-VUSG-0126,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces   ~9x8mm.  10% macrovesicular steatosis,,291739
+GTEX-W5X1-0126,congestion,other,curated non-cirrhotic pathology,"atrophy, congestion","2 pieces, 10x7 & 9x7mm. Central vein congestion and central lobular atrophy.",,241583
+GTEX-WFON-1726,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces,  ~9x9mm. Diffuse macrovesicular steatosis involves 90+ % of specimens, which are well - preserved",,240118
+GTEX-WHSE-1826,unclassified,other,"uncategorized, preservation warning",,"2 pieces  ~7x5mm.  No steatosis, moderately autolyzed",preservation,226016
+GTEX-WI4N-1626,healthy,healthy,"uncategorized, note reports no finding",,"2 pieces~8x7mm.  Reasonably well- preserved, no steatosis noted",,164557
+GTEX-WK11-1326,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, 7x7 & 8x8mm; 60% macrovesicular steatosis",,142518
+GTEX-WL46-1726,healthy,healthy,"uncategorized, note reports no finding",,pieces,,169945
+GTEX-WOFL-1526,cirrhosis,cirrhosis,curated cirrhosis,"atrophy, cirrhosis, fibrosis","2 pieces, 9x6.5 & 10x8mm; cardiac cirrhosis:central atrophy and fibrosis with early bridging; large vessels on 2 edges of 1 piece (~20% of piece)",,225180
+GTEX-WQUQ-1926,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces  ~7x7mm, 30% macrovesicular steatosis, moderate passive congestion",,198282
+GTEX-WRHU-0126,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces  ~7x7mm.  Minimal steatosis.,,177545
+GTEX-WVJS-1426,healthy,healthy,"uncategorized, note reports no finding",,"2 pieces, 8x8 & 7x7mm; no lesions",,180639
+GTEX-WVLH-2126,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces ~  ~8x8mm.  Chronic passive congestion, mild-moderate, minimal (<10%) macrovesicular steatosis",,163584
+GTEX-WWTW-1426,unclassified,other,"uncategorized, preservation warning",,2 pieces badly autolyzed.  ? cirrhosis but so necrotic impossible for definitive assessment,preservation,177814
+GTEX-WWYW-1026,unclassified,other,"uncategorized, preservation warning",,"2 pieces ~7x7mm, moderately-badly autolyzed, prominent fibrous areas delineated",preservation,263195
+GTEX-WY7C-0726,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces  ~9x7mm, 90% macrovesicular steatosis but reasonably well preserved",,175589
+GTEX-WYBS-0726,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, 8x6 & 9x7.5mm; congested and autolyzed",preservation,121615
+GTEX-WYVS-1926,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, 9x8 & 10x9mm; minimal fat/congestion",,308234
+GTEX-WZTO-0626,healthy,healthy,"uncategorized, note reports no finding",,"2 pieces, 8x7 & 7.5x7mm; no significant fat",,189353
+GTEX-X261-1726,healthy,healthy,"uncategorized, note reports no finding",,"2 pieces, 6.5x6 & 6x6mm; no lesions",,114429
+GTEX-X3Y1-2726,unclassified,other,"uncategorized, finding in note",,"2 pieces, 11x9 & 12x9mm; giant cell granulomas (history of sarcoid); capsule present up to 0.4mm thick, specimen should be sampled below capsule",,412992
+GTEX-X4EO-1126,healthy,healthy,"uncategorized, note reports no finding",,"2 pieces, 7x7 & 8x8mm; no lesions",,142179
+GTEX-X4EP-1026,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, steatosis","2 pieces, 9x8 & 8.5x8mm; diffuse macrovesicular steatosis with early cirrohsis; rep steatotic areas delineated",,227388
+GTEX-X4XX-1926,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, 8x7 & 8x7mm;  30% macrovesicular steatosis. Moderate congestion.",,190802
+GTEX-X4XY-1626,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, 8x7 & 8x8mm; 20% macrovesicular steatosis",,178621
+GTEX-X585-1726,healthy,healthy,"uncategorized, note reports no finding",,"2 pieces, up to 8x7 & 7x7mm; No fat.",,177094
+GTEX-X62O-1326,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, 9x8 & 8x7mm;  ~20% macrovesciular steatosis",,165973
+GTEX-X8HC-1726,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, 8x6 & 8x7mm; Moderate to severe central congestion.",,171543
+GTEX-XBEC-1526,fibrosis,other,curated non-cirrhotic pathology,"fibrosis, steatosis","2 pieces, 9x7 & 8x8mm; 70-80% macrovesicular steatosis with patchy bridging fibrosis",,129838
+GTEX-XK95-1626,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces. 8x7 & 8x8mm; Moderate central congestion. No cirrhosis, no fat.",,110349
+GTEX-XLM4-0826,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, 9x7 & 9x6mm; mimimal steatosis",,222027
+GTEX-XMD1-1826,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces 8x6 & 7x7mm; minimal steatosis,,187695
+GTEX-XMD2-1626,congestion,other,curated non-cirrhotic pathology,"atrophy, congestion","2 pieces, 8x7 & 7.5x7mm; moderate central congestion and atrophy; no fibrosis or fat",,149032
+GTEX-XMD3-1626,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces. 8x8 & 8x7mm; moderate central congestion,,176424
+GTEX-XOT4-0926,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces. 8x7 & 7x7mm; <5% macrovesicular steatosis,,123424
+GTEX-XOTO-0826,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces. 9x8 & 10x8mm; minimal steatosis,,244728
+GTEX-XPVG-1126,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, 12.5x8 & 13x5mm; severe macrovesicular steatosis",,149682
+GTEX-XQ3S-2126,healthy,healthy,"uncategorized, note reports no finding",,"2 pieces, 9x7 & 9x9mm; no steatosis",,247680
+GTEX-XV7Q-1926,necrosis,other,curated non-cirrhotic pathology,necrosis,"2 pieces, 9x8 & 17.5x8mm;  Marked midzonal necrosis, rep. areas delineated",,328380
+GTEX-XXEK-1126,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, 8x8 & 8x7mm; mild mixed micro/macrovesicular steatosis, diffuse",,238383
+GTEX-XYKS-0326,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, steatosis","2 pieces, 8x7.5 & 9.5x9mm; cirrhosis with severe macrovesicular steatosis",,296733
+GTEX-Y111-0726,healthy,healthy,"uncategorized, note reports no finding",,"2 pieces, 9x8 & 10x8mm; 1 piece contains capsule",,261613
+GTEX-Y3IK-0326,inflammation/hepatitis,other,curated non-cirrhotic pathology,hepatitis,"2 pieces, 11x10 & 10x9mm. Moderate portal lymphoid infiltrates consistent with chronic hepatitis or chronic biliary tract disease. No steatosis.",,307839
+GTEX-Y5LM-0426,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces. 13x9 & 13x10mm; 70% small droplet variant of macrovesicular steatosis.,,470837
+GTEX-Y5V5-0926,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, 10x10 & 11x10mm; mild-moderate macrovesicular steatosis involving ~30-40% of parenchyma",,269521
+GTEX-YB5E-0326,necrosis,other,curated non-cirrhotic pathology,necrosis,"2 pieces, 12x10 & 11x11mm; marked central and mid-zonal  coagulative necrosis necrosis, shock vs toxic damage by drugs",,367404
+GTEX-YEC4-0826,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, 12x5 and 10x8mm; diffuse macrovesciular steatosis involves ~80% of parenchyma",,194941
+GTEX-YECK-1926,healthy,healthy,"uncategorized, note reports no finding",,"2 pieces, 8x8 and 8x7mm;",,160400
+GTEX-YFC4-1526,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, minimal steatosis, moderate autolysis",preservation,219215
+GTEX-YJ89-1426,healthy,healthy,"uncategorized, note reports no finding",,2 pieces,,220475
+GTEX-YJ8O-1726,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, minimal steatosis, reasonably well-preserved",,200350
+GTEX-Z93S-0726,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, diffuse macrovesicular steatosis involving ~60% of parenchyma",,144971
+GTEX-Z9EW-0426,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, diffuse macrovesicular steatosis involves ~ 50% of parenchyma",,214584
+GTEX-ZAB4-0826,congestion,other,curated non-cirrhotic pathology,"congestion, hemorrhage",2 pieces. Extensive central passive  congestion and hemorrhage. Large vessels and stroma occupy 10% and 20%.,,237909
+GTEX-ZAB5-0426,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces; diffuse macrovesicular steatosis involving about %60 of the liver parenchyma, few collections of chronic inflammatory cells",,193432
+GTEX-ZAJG-1726,unclassified,other,"uncategorized, preservation warning",,"2 pieces, badlyautolyzed",preservation,146429
+GTEX-ZAK1-1726,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, some foci more autolyzed, approach score 2; minimal steatosis",preservation,170232
+GTEX-ZC5H-0726,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, well preserved, moderate congestion, minimal steatosis",,172595
+GTEX-ZDTS-1726,healthy,healthy,"uncategorized, note reports no finding",,2 pieces; no fat or inflammation,,139299
+GTEX-ZDXO-2226,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, minimal steatosis",,272263
+GTEX-ZE7O-1226,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; 50% macrovesicular steatosis,,113547
+GTEX-ZE9C-1626,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces,  moderate congestion; minimal steatosis",,147603
+GTEX-ZEX8-0826,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces. 10% macrovesicular steatosis.,,208421
+GTEX-ZF28-1726,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces. Central congestion and degeneration.,,223714
+GTEX-ZF29-2026,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; diffuse severe microvesicular and macrovesicular steatosis (~80%).,,219998
+GTEX-ZF2S-3026,healthy,healthy,"uncategorized, note reports no finding",,2 pieces.,,261727
+GTEX-ZF3C-1826,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, centrilobular congestion",,227600
+GTEX-ZPU1-0826,inflammation/hepatitis,other,curated non-cirrhotic pathology,"inflammation, steatosis","2 pieces, mild steatosis and focal mild portal chronic inflammation",,377777
+GTEX-ZTPG-1426,necrosis,other,curated non-cirrhotic pathology,"congestion, necrosis","2 pieces, extensive congestion, necrosis, 25% of parenchyma preserved",,676609
+GTEX-ZTTD-1526,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, hepatitis","2 pieces, established cirrhosis, chronic steatohepatitis, macro- and microvesicular",,260538
+GTEX-ZU9S-0926,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis",2 pieces. moderate vascular congestion.. 10% macrovesicular steatosis.,,145801
+GTEX-ZUA1-1626,congestion,other,curated non-cirrhotic pathology,congestion,2 pieces. central congestion.,,187743
+GTEX-ZV68-1526,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, moderately autolyzed; no discernable steatosis, moderate-marked passive congestion",preservation,190138
+GTEX-ZVE1-1826,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, congested",,159528
+GTEX-ZVE2-1926,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, inflammation, steatosis","2 pieces; severe cirrhosis, some residual chronic inflammation and steatosis",,273116
+GTEX-ZVP2-0626,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, fibrosis, hepatitis","2 pieces, steatohepatitis with bridging fibrosis and incomplete cirrhosis",,191422
+GTEX-ZVT3-1626,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, mild macrovesicular steatosis (~10-20%)",,157698
+GTEX-ZVT4-0626,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, moderate congestion, minimal steatosis",,207044
+GTEX-ZVZQ-2026,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces. Diffuse macrovesicular steatosis, moderately autolyzed",preservation,101131
+GTEX-ZWKS-1726,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces diffuse mild macrovesciular steatosis involves ~20% of parenchyma,,323801
+GTEX-ZXG5-1126,steatosis,other,curated non-cirrhotic pathology,steatosis,2 pieces; 30% macrovesicular steatosis. CAPSULE present on both pieces (Sample should be below capsule).,,192779
+GTEX-ZYFC-1526,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, steatosis, congestion",,141186
+GTEX-ZYFD-1126,healthy,healthy,"uncategorized, note reports no finding",,2 pieces,,222491
+GTEX-ZYT6-0626,congestion,other,curated non-cirrhotic pathology,congestion,"2 pieces, mild congestion, moderate autolysis.  No significant steatosis",preservation,171785
+GTEX-ZYVF-1226,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, minimal steatosis",,175020
+GTEX-ZYW4-1926,fibrosis,other,curated non-cirrhotic pathology,fibrosis,"2 pieces; moderate fibrosis, but no nodular cirrhosis; each has focal 5 and 8 sqmm large vessels [annotated]",,250372
+GTEX-ZYWO-1226,unclassified,other,"uncategorized, finding in note",,"2 pieces, few collections of lymphocytes",,305279
+GTEX-ZYY3-0626,steatosis,other,curated non-cirrhotic pathology,"congestion, steatosis","2 pieces, severe passive congestion, mild steatosis (~10%)",,152556
+GTEX-ZZPT-1726,cirrhosis,cirrhosis,curated cirrhosis,"cirrhosis, nodularity","2 pieces, established macronodular cirrhosis",,239163
+GTEX-ZZPU-0426,steatosis,other,curated non-cirrhotic pathology,steatosis,"2 pieces, steatosis, sections include capsule (should be 1cm below capsule)",,153676
