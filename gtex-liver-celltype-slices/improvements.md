@@ -1,0 +1,60 @@
+# Improvement phase: what was tried, and what held on the holdout
+
+Exploratory. Claude ran it overnight on 2026-11-19 while Simon was away, under the rules in `design.md`
+("Rulings made after the builder check") and the rulings in `progress.md`.
+
+- **Development slides.** Every idea is compared on the 476 development slides:
+  - 20 × stratified 5-fold (seed 1);
+  - the main experiment's logistic regression on the idea's four-dimensional view;
+  - 4000 bootstrap draws (seed 54321) for the intervals.
+  - Purity is out of fold: each test slide against its 15 nearest training-fold slides in that fold's view.
+- **Fitting.** Unsupervised steps saw all slides, without labels. Supervised projections and block selections were fitted inside each training fold.
+- **Roles.**
+  - `idea`: a candidate for the holdout.
+  - `baseline`: the main experiment's spaces.
+  - `control`: the same method without topology, never chosen.
+  - `diagnostic`: built to remove signal.
+- **Rounds.**
+  - Round 1 was conceived before any readout existed.
+  - Round 2 came after the main readouts and round 1's results. It is post hoc, and the holdout is a weaker check for it.
+- **The holdout is not pristine.**
+  - The main experiment's readouts used all 594 slides' labels, the holdout's included, as Simon ruled.
+  - `improve.py` never reads the holdout labels.
+  - `improve_holdout.py` scored the holdout once.
+
+## Every entry, in the order tried
+
+| # | entry | role | round | mechanism | inputs; what | dev macro AUC [95%] | vs `everything`@4 | out-of-fold purity ×chance (vs `everything`) | dev AUC k=20 |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | `baseline:everything` | baseline | 1 | baseline | MFA of all 200 blocks; the main experiment's everything space, for reference | k=4: 0.696 [0.656, 0.736] | 0.000 [0.000, 0.000] | 1.92 (0.00 [0.00, 0.00]) | 0.749 |
+| 2 | `baseline:all-cell` | baseline | 1 | baseline | MFA of the 40 all-cell blocks; the main experiment's all-cell space | k=4: 0.616 [0.575, 0.659] | −0.081 [−0.118, −0.043] | 1.61 (−0.31 [−0.52, −0.10]) | 0.724 |
+| 3 | `baseline:D+C-features` | baseline | 1 | baseline | 51 features; density summaries and cells per group and slice, no topology | k=51: 0.764 [0.727, 0.800] | — | 1.96 | — |
+| 4 | `zscore-columns` | idea | 1 | block weighting | PCA of 1800 z-scored block columns; every fPCA component weighs the same, instead of each block's first | k=4: 0.673 [0.630, 0.714] | −0.024 [−0.049, 0.002] | 1.90 (−0.02 [−0.15, 0.12]) | 0.747 |
+| 5 | `residual-density` | diagnostic | 1 | density removed | MFA of 200 residual blocks; every score regressed on the 11 density summaries first | k=4: 0.630 [0.586, 0.675] | −0.066 [−0.121, −0.012] | 1.59 (−0.33 [−0.59, −0.06]) | 0.661 |
+| 6 | `residual-density-composition` | diagnostic | 1 | density and composition removed | MFA of 200 residual blocks; every score regressed on the 51 density and composition features first | k=4: 0.546 [0.499, 0.594] | −0.150 [−0.199, −0.099] | 0.94 (−0.98 [−1.23, −0.74]) | 0.551 |
+| 7 | `cosine-everything` | idea | 1 | shape only | MFA of the 100 cosine blocks; curve shape only, no magnitude, so no raw cell counts | k=4: 0.711 [0.670, 0.751] | +0.015 [−0.020, 0.049] | 2.01 (+0.09 [−0.11, 0.29]) | 0.753 |
+| 8 | `select20-kruskal` | idea | 1 | block selection | MFA of 20 of 200 blocks; each training fold keeps the 20 blocks whose first four scores differ most across groups (Kruskal-Wallis) | k=4: 0.713 [0.673, 0.753] | +0.017 [−0.020, 0.049] | 2.08 (+0.16 [−0.03, 0.37]) | — |
+| 9 | `select40-kruskal` | idea | 1 | block selection | MFA of 40 of 200 blocks; the same with 40 blocks | k=4: 0.713 [0.673, 0.753] | +0.017 [−0.019, 0.048] | 2.08 (+0.16 [−0.06, 0.39]) | — |
+| 10 | `lda4-everything20` | idea | 1 | supervised projection (topology) | 20 MFA components, z-scored; shrinkage LDA to four discriminants, fitted in each training fold | k=4: 0.732 [0.688, 0.775] | +0.035 [−0.015, 0.079] | 2.01 (+0.09 [−0.13, 0.31]) | — |
+| 11 | `pls4-everything50` | idea | 1 | supervised projection (topology) | 50 MFA components of all 200 blocks, z-scored (whitened); class-balanced PLS-DA to four components, fitted in each training fold | k=4: 0.771 [0.729, 0.808] | +0.075 [0.031, 0.117] | 2.15 (+0.23 [−0.07, 0.53]) | — |
+| 12 | `lda4-allcell20` | control | 1 | supervised projection (all-cell topology) | 20 all-cell MFA components, z-scored; the same LDA on all-cell topology: what supervision alone buys | k=4: 0.721 [0.683, 0.760] | +0.025 [−0.012, 0.063] | 1.82 (−0.10 [−0.28, 0.09]) | — |
+| 13 | `lda4-DC` | control | 1 | supervised projection (composition) | 51 density and composition features, z-scored; the same LDA without topology: the yardstick for the supervised ideas | k=4: 0.750 [0.704, 0.792] | +0.054 [0.012, 0.094] | 2.21 (+0.29 [0.05, 0.56]) | — |
+| 14 | `lda4-DC+everything20` | idea | 1 | supervised projection (composition + topology) | 51 density and composition features + 20 MFA components, z-scored; shrinkage LDA to four discriminants, fitted in each training fold | k=4: 0.774 [0.736, 0.812] | +0.078 [0.044, 0.113] | 2.42 (+0.50 [0.24, 0.77]) | — |
+| 15 | `h0cosine-everything` | idea | 2 | shape only | MFA of the 50 H0 cosine blocks; the H0 cosine blocks alone (the main heatmaps' strongest model) | k=4: 0.720 [0.680, 0.759] | +0.023 [−0.007, 0.052] | 2.01 (+0.09 [−0.12, 0.32]) | 0.761 |
+| 16 | `pls4-allcolumns` | idea | 2 | supervised projection (topology) | 1800 block columns, z-scored (MFA weights do not survive); class-balanced PLS-DA to four components, fitted in each training fold | k=4: 0.769 [0.736, 0.801] | +0.072 [0.044, 0.100] | 2.23 (+0.31 [0.10, 0.51]) | — |
+| 17 | `pls4-DC` | control | 2 | supervised projection (composition) | 51 density and composition features, z-scored; the same PLS-DA without topology | k=4: 0.736 [0.698, 0.773] | +0.040 [0.009, 0.070] | 2.00 (+0.08 [−0.12, 0.30]) | — |
+| 18 | `pls4-DC+everything50` | idea | 2 | supervised projection (composition + topology) | 51 features + 50 MFA components, z-scored; class-balanced PLS-DA to four components, fitted in each training fold | k=4: 0.739 [0.700, 0.777] | +0.043 [0.013, 0.072] | 2.14 (+0.22 [0.02, 0.43]) | — |
+| 19 | `pls4-residual-density-composition` | diagnostic | 2 | supervised projection (topology beyond composition) | 50 MFA components of 200 residual blocks, z-scored; PLS-DA after regressing every score on density and composition: is any signal left? | k=4: 0.539 [0.488, 0.590] | −0.158 [−0.222, −0.091] | 1.03 (−0.89 [−1.13, −0.64]) | — |
+
+On the 476 development slides, the main experiment's `everything` space reaches a macro AUC of 0.696 [0.656, 0.736] on four components and 0.749 on twenty. The `D+C` features alone reach 0.764 [0.727, 0.800] (51 features).
+
+- **Best idea:** `lda4-DC+everything20` (supervised projection (composition + topology), 51 density and composition features + 20 MFA components, z-scored) at 0.774, +0.078 [0.044, 0.113] against `everything`.
+- **Beyond `everything`:** 4 ideas beat `everything` with an interval above 0: `pls4-everything50`, `lda4-DC+everything20`, `pls4-allcolumns`, `pls4-DC+everything50`.
+- **Supervised four-component views:**
+  - They use more input than `everything`'s four components: 20 to 1800 dimensions, listed under "what" in the table.
+  - On equal inputs, `everything` on 20 components reaches 0.749.
+- **Diagnostics,** built to remove signal: `residual-density` 0.630 [0.586, 0.675]; `residual-density-composition` 0.546 [0.499, 0.594]; `pls4-residual-density-composition` 0.539 [0.488, 0.590].
+
+## Holdout
+
+Not scored yet.

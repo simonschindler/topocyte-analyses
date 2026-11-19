@@ -64,3 +64,30 @@ Ruling: the summary leads with a "Reading" paragraph and states the composition 
   - A first, mistaken run of the old dense script at slice 9 (7 min) was moved to the Trash.
 - 22:50, round 2 (post hoc, after round 1 and the main readouts): h0cosine-everything +0.023; **pls4-allcolumns +0.072 [0.044, 0.100]**; pls4-DC +0.040; pls4-DC+everything50 +0.043.
 - 22:50, diagnostic: **pls4-residual-density-composition 0.539 [0.488, 0.590]**. With density and composition regressed out (linearly), even a supervised projection finds no separation: the topology per group carries nothing linear beyond composition.
+- 23:12: a whole-study review (fresh reviewer, model opus), before the holdout ran. Verdict: with fixes. The main study's numbers, verdicts and verification hold. The fix pass, before the single holdout run:
+  - **Ruling: how ideas reach the holdout** (my reading of design.md's ruling 2, fixed before the run).
+    - Only entries whose role is `idea` compete. Baselines, controls (the same method without topology, or on all-cell topology) and diagnostics never go.
+    - Mechanisms are canonical, and ideas sharing one compete for a single place:
+      - block weighting;
+      - shape only;
+      - block selection;
+      - supervised projection (topology);
+      - supervised projection (composition + topology);
+      - per-cell curves.
+    - An idea goes only if its paired development AUC interval against `everything` lies above 0; up to three, best development AUC first. If none does, the best candidate goes as a check.
+    - Purity guard: every four-dimensional view, supervised ones included, must not lose out-of-fold purity against `everything`, i.e. the upper end of the paired interval must not be below 0. Out-of-fold purity is each test slide against its 15 nearest training-fold slides in that fold's view.
+    - Why: the reviewer showed that the first implementation would have sent three LDA/PLS variants, one of them a no-topology yardstick, and never read the interval.
+    - Cost if wrong: another reading would choose other ideas. This one is recorded before the run.
+  - **Ruling: what the holdout compares** (`improve_holdout.py`).
+    - The holdout also scores the best supervised control without topology.
+    - It compares every entry against both `everything@4` and the `D+C` features. The latter is the anti-goal check: a gain carried by cell counts.
+    - It saves its probabilities, purities and draws in `improve_holdout.npz`.
+    - Why: without these, the single run could not answer whether a gain is topology.
+  - Also fixed:
+    - the holdout-honesty wording (the main readouts read every label);
+    - idea descriptions (z-scoring, input sizes);
+    - the report's reading softened to "nothing detectable", with the composition PCA stated by its paired intervals;
+    - README run steps for `percell_fpca.py`;
+    - the small-group caveat;
+    - the report's improvement section.
+  - Round 1 and 2 rerun under the fixed code: the same AUCs, now with out-of-fold purity.

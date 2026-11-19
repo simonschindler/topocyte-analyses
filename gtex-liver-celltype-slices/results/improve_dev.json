@@ -2,9 +2,12 @@
  "ideas": [
   {
    "name": "baseline:everything",
+   "role": "baseline",
    "mechanism": "baseline",
+   "round": 1,
    "kind": "space",
-   "what": "the main experiment's everything space (MFA of all 200 blocks), for reference on the development slides",
+   "inputs": "MFA of all 200 blocks",
+   "what": "the main experiment's everything space, for reference",
    "readouts": [
     {
      "k": 4,
@@ -22,6 +25,16 @@
       0.6564044285275707,
       0.7364291900815295
      ],
+     "purity_oof_macro": 1.9203355721723625,
+     "purity_oof_per_condition": [
+      1.3387251788239058,
+      1.2198074345606604,
+      1.2248706133085978,
+      1.3805952380952384,
+      1.2849999999999997,
+      1.5629505208333332,
+      5.430400019584803
+     ],
      "n_convergence_warnings": 0,
      "vs_everything4": {
       "difference": 0.0,
@@ -30,14 +43,14 @@
        0.0
       ]
      },
-     "purity_macro": 1.971944250868115,
-     "purity_vs_everything4": {
+     "purity_oof_vs_everything4": {
       "difference": 0.0,
       "interval": [
        0.0,
        0.0
       ]
-     }
+     },
+     "purity_in_sample_macro": 1.971944250868115
     },
     {
      "k": 20,
@@ -55,17 +68,30 @@
       0.706483364649185,
       0.7891543803123519
      ],
+     "purity_oof_macro": 1.9395249420631377,
+     "purity_oof_per_condition": [
+      1.4555235866468859,
+      1.4697496388617357,
+      1.267984876481862,
+      1.8531493506493508,
+      0.6187499999999998,
+      1.6382838541666669,
+      5.273233287635462
+     ],
      "n_convergence_warnings": 0,
-     "purity_macro": 1.9546462698882479
+     "purity_in_sample_macro": 1.9546462698882479
     }
    ],
-   "tried_at": "2026-11-19 22:36"
+   "tried_at": "2026-11-19 23:12"
   },
   {
    "name": "baseline:all-cell",
+   "role": "baseline",
    "mechanism": "baseline",
+   "round": 1,
    "kind": "space",
-   "what": "the main experiment's all-cell space (MFA of the 40 all-cell blocks)",
+   "inputs": "MFA of the 40 all-cell blocks",
+   "what": "the main experiment's all-cell space",
    "readouts": [
     {
      "k": 4,
@@ -83,6 +109,16 @@
       0.5754546645068996,
       0.6591047911760644
      ],
+     "purity_oof_macro": 1.61087436615111,
+     "purity_oof_per_condition": [
+      1.2928043488859635,
+      1.209150065167807,
+      1.1852699693995992,
+      1.1964610389610393,
+      1.2531666666666663,
+      1.1136432291666665,
+      4.025625244810029
+     ],
      "n_convergence_warnings": 0,
      "vs_everything4": {
       "difference": -0.08060464815701118,
@@ -91,14 +127,14 @@
        -0.04327205197618981
       ]
      },
-     "purity_macro": 1.695001680102253,
-     "purity_vs_everything4": {
-      "difference": -0.27694257076586215,
+     "purity_oof_vs_everything4": {
+      "difference": -0.3094612060212525,
       "interval": [
-       -0.5610253804637962,
-       -0.00010022647990367532
+       -0.5183358449402957,
+       -0.09938423711055083
       ]
-     }
+     },
+     "purity_in_sample_macro": 1.695001680102253
     },
     {
      "k": 20,
@@ -116,17 +152,30 @@
       0.6797693134822398,
       0.7672305503824256
      ],
+     "purity_oof_macro": 1.7531070456805808,
+     "purity_oof_per_condition": [
+      1.3374897441790818,
+      1.3348633539698054,
+      1.181460743390976,
+      1.3490043290043292,
+      1.4277916666666663,
+      1.2673906249999998,
+      4.373748857553207
+     ],
      "n_convergence_warnings": 0,
-     "purity_macro": 1.8799531776612732
+     "purity_in_sample_macro": 1.8799531776612732
     }
    ],
-   "tried_at": "2026-11-19 22:36"
+   "tried_at": "2026-11-19 23:12"
   },
   {
    "name": "baseline:D+C-features",
+   "role": "baseline",
    "mechanism": "baseline",
+   "round": 1,
    "kind": "features",
-   "what": "density summaries and cell counts per group and slice (51 features), no topology",
+   "inputs": "51 features",
+   "what": "density summaries and cells per group and slice, no topology",
    "readouts": [
     {
      "k": 51,
@@ -144,16 +193,29 @@
       0.7268498539858167,
       0.8000536723339237
      ],
+     "purity_oof_macro": 1.9621832306537723,
+     "purity_oof_per_condition": [
+      1.4344997806055286,
+      1.2910701531443467,
+      1.1185602155524637,
+      1.7892803030303028,
+      0.8409999999999996,
+      1.894171875,
+      5.3667002872437655
+     ],
      "n_convergence_warnings": 0
     }
    ],
-   "tried_at": "2026-11-19 22:36"
+   "tried_at": "2026-11-19 23:12"
   },
   {
    "name": "zscore-columns",
+   "role": "idea",
    "mechanism": "block weighting",
+   "round": 1,
    "kind": "space",
-   "what": "PCA of all 1800 block columns, each z-scored (every fPCA component weighs the same, not each block's first)",
+   "inputs": "PCA of 1800 z-scored block columns",
+   "what": "every fPCA component weighs the same, instead of each block's first",
    "readouts": [
     {
      "k": 4,
@@ -171,6 +233,16 @@
       0.6299509881513113,
       0.7142839906684697
      ],
+     "purity_oof_macro": 1.8998811375779863,
+     "purity_oof_per_condition": [
+      1.5063668972049842,
+      1.1957252796785054,
+      1.1504249958896815,
+      1.4225378787878793,
+      1.0151666666666663,
+      1.5450338541666666,
+      5.463912390651521
+     ],
      "n_convergence_warnings": 0,
      "vs_everything4": {
       "difference": -0.023750581609072174,
@@ -179,14 +251,14 @@
        0.0017579974027500595
       ]
      },
-     "purity_macro": 1.9852988838757675,
-     "purity_vs_everything4": {
-      "difference": 0.013354633007652383,
+     "purity_oof_vs_everything4": {
+      "difference": -0.020454434594376236,
       "interval": [
-       -0.15610763997454827,
-       0.1668063127669142
+       -0.15481150272423408,
+       0.11508799152628969
       ]
-     }
+     },
+     "purity_in_sample_macro": 1.9852988838757675
     },
     {
      "k": 20,
@@ -204,17 +276,30 @@
       0.709794618382702,
       0.7831107646537969
      ],
+     "purity_oof_macro": 1.9884029524394704,
+     "purity_oof_per_condition": [
+      1.4003394345891051,
+      1.4123854621483656,
+      1.216668778266108,
+      2.0847889610389614,
+      1.5864999999999996,
+      1.5500390624999998,
+      4.668098968533752
+     ],
      "n_convergence_warnings": 0,
-     "purity_macro": 2.0373677406044415
+     "purity_in_sample_macro": 2.0373677406044415
     }
    ],
-   "tried_at": "2026-11-19 22:36"
+   "tried_at": "2026-11-19 23:12"
   },
   {
    "name": "residual-density",
-   "mechanism": "density removal",
+   "role": "diagnostic",
+   "mechanism": "density removed",
+   "round": 1,
    "kind": "space",
-   "what": "MFA of all 200 blocks after regressing every score on the 11 density summaries (topology beyond density)",
+   "inputs": "MFA of 200 residual blocks",
+   "what": "every score regressed on the 11 density summaries first",
    "readouts": [
     {
      "k": 4,
@@ -232,6 +317,16 @@
       0.5858519614936215,
       0.6751808264470531
      ],
+     "purity_oof_macro": 1.5941925628332405,
+     "purity_oof_per_condition": [
+      1.4077471322008401,
+      1.3579520256326707,
+      1.1729014517399532,
+      2.02577380952381,
+      0.9360416666666664,
+      1.7067109375,
+      2.5522209165687424
+     ],
      "n_convergence_warnings": 0,
      "vs_everything4": {
       "difference": -0.0659899040632771,
@@ -240,14 +335,14 @@
        -0.011730945319974219
       ]
      },
-     "purity_macro": 1.7290149802044354,
-     "purity_vs_everything4": {
-      "difference": -0.24292927066367964,
+     "purity_oof_vs_everything4": {
+      "difference": -0.326143009339122,
       "interval": [
-       -0.5351103883599888,
-       0.0628106409468532
+       -0.585387980149166,
+       -0.061378165666720164
       ]
-     }
+     },
+     "purity_in_sample_macro": 1.7290149802044354
     },
     {
      "k": 20,
@@ -265,17 +360,30 @@
       0.6182333142303202,
       0.701859437474093
      ],
+     "purity_oof_macro": 1.4950863164306634,
+     "purity_oof_per_condition": [
+      1.4129807699004715,
+      1.6444467443249702,
+      1.1028456974167569,
+      1.488598484848485,
+      0.9519999999999997,
+      1.427078125,
+      2.4376543935239594
+     ],
      "n_convergence_warnings": 0,
-     "purity_macro": 1.5694719858533226
+     "purity_in_sample_macro": 1.5694719858533226
     }
    ],
-   "tried_at": "2026-11-19 22:36"
+   "tried_at": "2026-11-19 23:12"
   },
   {
    "name": "residual-density-composition",
-   "mechanism": "composition removal",
+   "role": "diagnostic",
+   "mechanism": "density and composition removed",
+   "round": 1,
    "kind": "space",
-   "what": "MFA of all 200 blocks after regressing every score on density summaries and composition (51 features)",
+   "inputs": "MFA of 200 residual blocks",
+   "what": "every score regressed on the 51 density and composition features first",
    "readouts": [
     {
      "k": 4,
@@ -293,6 +401,16 @@
       0.4985040727129227,
       0.5944812689526046
      ],
+     "purity_oof_macro": 0.9364878040158527,
+     "purity_oof_per_condition": [
+      1.240392402682881,
+      1.2177127756055177,
+      1.127563605645001,
+      0.22051406926406925,
+      0.26983333333333326,
+      0.9758255208333331,
+      1.5035729207468338
+     ],
      "n_convergence_warnings": 0,
      "vs_everything4": {
       "difference": -0.15012959750255328,
@@ -301,14 +419,14 @@
        -0.09909135381568555
       ]
      },
-     "purity_macro": 0.9614347772807378,
-     "purity_vs_everything4": {
-      "difference": -1.0105094735873772,
+     "purity_oof_vs_everything4": {
+      "difference": -0.9838477681565098,
       "interval": [
-       -1.2903590677354004,
-       -0.7251685392879929
+       -1.2262250729340785,
+       -0.7352587731305316
       ]
-     }
+     },
+     "purity_in_sample_macro": 0.9614347772807378
     },
     {
      "k": 20,
@@ -326,17 +444,30 @@
       0.503201080051999,
       0.5995436150026027
      ],
+     "purity_oof_macro": 0.9830269353729394,
+     "purity_oof_per_condition": [
+      1.2887457949393009,
+      1.5200659552514393,
+      1.0139955571751438,
+      0.13053030303030305,
+      0.6347083333333332,
+      0.9044427083333332,
+      1.388699895547722
+     ],
      "n_convergence_warnings": 0,
-     "purity_macro": 1.0170619666744738
+     "purity_in_sample_macro": 1.0170619666744738
     }
    ],
-   "tried_at": "2026-11-19 22:36"
+   "tried_at": "2026-11-19 23:12"
   },
   {
    "name": "cosine-everything",
+   "role": "idea",
    "mechanism": "shape only",
+   "round": 1,
    "kind": "space",
-   "what": "MFA of the cosine blocks of all five point sets (curve shape, no magnitude, so no raw cell counts)",
+   "inputs": "MFA of the 100 cosine blocks",
+   "what": "curve shape only, no magnitude, so no raw cell counts",
    "readouts": [
     {
      "k": 4,
@@ -354,6 +485,16 @@
       0.6700885166107301,
       0.7513379608822455
      ],
+     "purity_oof_macro": 2.0054892532010022,
+     "purity_oof_per_condition": [
+      1.4837592720282498,
+      1.2092237509503638,
+      1.1809753307272688,
+      1.560541125541126,
+      0.8568749999999998,
+      2.004252604166666,
+      5.742797688993341
+     ],
      "n_convergence_warnings": 0,
      "vs_everything4": {
       "difference": 0.014835766049591914,
@@ -362,14 +503,14 @@
        0.048980619256084296
       ]
      },
-     "purity_macro": 2.0343251839830003,
-     "purity_vs_everything4": {
-      "difference": 0.06238093311488524,
+     "purity_oof_vs_everything4": {
+      "difference": 0.08515368102863974,
       "interval": [
-       -0.19006717218051428,
-       0.3284460927132719
+       -0.11453941578607761,
+       0.2947545014865455
       ]
-     }
+     },
+     "purity_in_sample_macro": 2.0343251839830003
     },
     {
      "k": 20,
@@ -387,17 +528,30 @@
       0.7126966904119217,
       0.7908209869772923
      ],
+     "purity_oof_macro": 1.9218887783056353,
+     "purity_oof_per_condition": [
+      1.4972649519073389,
+      1.4998046269143044,
+      1.2885413142221926,
+      1.4465909090909095,
+      0.5712499999999998,
+      1.66115625,
+      5.4886133960047
+     ],
      "n_convergence_warnings": 0,
-     "purity_macro": 1.9972130623102005
+     "purity_in_sample_macro": 1.9972130623102005
     }
    ],
-   "tried_at": "2026-11-19 22:36"
+   "tried_at": "2026-11-19 23:12"
   },
   {
    "name": "select20-kruskal",
+   "role": "idea",
    "mechanism": "block selection",
+   "round": 1,
    "kind": "selection",
-   "what": "in each training fold, the 20 of 200 blocks whose first four scores differ most across groups (Kruskal-Wallis), then MFA of those",
+   "inputs": "MFA of 20 of 200 blocks",
+   "what": "each training fold keeps the 20 blocks whose first four scores differ most across groups (Kruskal-Wallis)",
    "readouts": [
     {
      "k": 4,
@@ -415,6 +569,16 @@
       0.6728331610789038,
       0.7527856742636666
      ],
+     "purity_oof_macro": 2.0829123797994056,
+     "purity_oof_per_condition": [
+      1.4296260891368393,
+      1.2715875610948195,
+      1.182177196443777,
+      1.8635660173160176,
+      1.0473333333333332,
+      1.9893906249999997,
+      5.7967058362710535
+     ],
      "n_convergence_warnings": 0,
      "vs_everything4": {
       "difference": 0.016520822372825372,
@@ -422,15 +586,25 @@
        -0.019905276873755418,
        0.04855762913024005
       ]
+     },
+     "purity_oof_vs_everything4": {
+      "difference": 0.16257680762704307,
+      "interval": [
+       -0.03462334127817974,
+       0.3654723535101851
+      ]
      }
     }
    ],
-   "tried_at": "2026-11-19 22:36"
+   "tried_at": "2026-11-19 23:12"
   },
   {
    "name": "select40-kruskal",
-   "mechanism": "block selection (40)",
+   "role": "idea",
+   "mechanism": "block selection",
+   "round": 1,
    "kind": "selection",
+   "inputs": "MFA of 40 of 200 blocks",
    "what": "the same with 40 blocks",
    "readouts": [
     {
@@ -449,6 +623,16 @@
       0.6727938916206813,
       0.7532397884342292
      ],
+     "purity_oof_macro": 2.07782253609127,
+     "purity_oof_per_condition": [
+      1.3769755253278728,
+      1.2349671961550994,
+      1.1729488529143999,
+      1.948869047619048,
+      0.8409583333333333,
+      2.1301953124999997,
+      5.839843484789137
+     ],
      "n_convergence_warnings": 0,
      "vs_everything4": {
       "difference": 0.016692720511323977,
@@ -456,16 +640,26 @@
        -0.019424926102138536,
        0.04814807222962733
       ]
+     },
+     "purity_oof_vs_everything4": {
+      "difference": 0.15748696391890737,
+      "interval": [
+       -0.0644589511537968,
+       0.39301312258612076
+      ]
      }
     }
    ],
-   "tried_at": "2026-11-19 22:36"
+   "tried_at": "2026-11-19 23:12"
   },
   {
    "name": "lda4-everything20",
-   "mechanism": "supervised projection",
+   "role": "idea",
+   "mechanism": "supervised projection (topology)",
+   "round": 1,
    "kind": "supervised",
-   "what": "shrinkage LDA to four discriminants of the everything space's first 20 components, fitted in each training fold",
+   "inputs": "20 MFA components, z-scored",
+   "what": "shrinkage LDA to four discriminants, fitted in each training fold",
    "readouts": [
     {
      "k": 4,
@@ -483,6 +677,16 @@
       0.6876975895224692,
       0.7746972693184939
      ],
+     "purity_oof_macro": 2.0104415558030406,
+     "purity_oof_per_condition": [
+      1.2377351177416993,
+      1.3377970728793311,
+      1.173292654676806,
+      1.797077922077922,
+      1.919833333333333,
+      1.7424244791666665,
+      4.864930310745528
+     ],
      "n_convergence_warnings": 0,
      "vs_everything4": {
       "difference": 0.035487437551321666,
@@ -490,16 +694,26 @@
        -0.014611033467375455,
        0.07887871338036939
       ]
+     },
+     "purity_oof_vs_everything4": {
+      "difference": 0.09010598363067812,
+      "interval": [
+       -0.12554890921102754,
+       0.3108285628863971
+      ]
      }
     }
    ],
-   "tried_at": "2026-11-19 22:36"
+   "tried_at": "2026-11-19 23:12"
   },
   {
    "name": "pls4-everything50",
-   "mechanism": "supervised projection",
+   "role": "idea",
+   "mechanism": "supervised projection (topology)",
+   "round": 1,
    "kind": "supervised",
-   "what": "class-balanced PLS-DA to four components of the first 50 components of the everything MFA, fitted in each training fold",
+   "inputs": "50 MFA components of all 200 blocks, z-scored (whitened)",
+   "what": "class-balanced PLS-DA to four components, fitted in each training fold",
    "readouts": [
     {
      "k": 4,
@@ -517,6 +731,16 @@
       0.7285030752715241,
       0.8081039019301868
      ],
+     "purity_oof_macro": 2.146492185111197,
+     "purity_oof_per_condition": [
+      1.345014487000007,
+      1.6161119745845556,
+      1.3791900905742422,
+      2.9495779220779226,
+      1.5389999999999997,
+      1.8256432291666667,
+      4.3709075923749845
+     ],
      "n_convergence_warnings": 0,
      "vs_everything4": {
       "difference": 0.07458707816263599,
@@ -524,16 +748,26 @@
        0.031235380791981567,
        0.11703736082168043
       ]
+     },
+     "purity_oof_vs_everything4": {
+      "difference": 0.22615661293883438,
+      "interval": [
+       -0.06557415458522237,
+       0.5318186775347772
+      ]
      }
     }
    ],
-   "tried_at": "2026-11-19 22:36"
+   "tried_at": "2026-11-19 23:12"
   },
   {
    "name": "lda4-allcell20",
-   "mechanism": "supervised projection (all-cell)",
+   "role": "control",
+   "mechanism": "supervised projection (all-cell topology)",
+   "round": 1,
    "kind": "supervised",
-   "what": "the same shrinkage LDA on the all-cell space's first 20 components: what supervision alone buys",
+   "inputs": "20 all-cell MFA components, z-scored",
+   "what": "the same LDA on all-cell topology: what supervision alone buys",
    "readouts": [
     {
      "k": 4,
@@ -551,6 +785,16 @@
       0.682579854663293,
       0.7599729875472141
      ],
+     "purity_oof_macro": 1.8242115637591634,
+     "purity_oof_per_condition": [
+      1.3078305020999186,
+      1.284025420875421,
+      1.1659052442756146,
+      1.7553463203463207,
+      0.9835416666666665,
+      1.6175026041666665,
+      4.655329187883536
+     ],
      "n_convergence_warnings": 0,
      "vs_everything4": {
       "difference": 0.024858187802021314,
@@ -558,16 +802,26 @@
        -0.011759648704587948,
        0.06252257421210272
       ]
+     },
+     "purity_oof_vs_everything4": {
+      "difference": -0.09612400841319912,
+      "interval": [
+       -0.2836221126393875,
+       0.08625001665214252
+      ]
      }
     }
    ],
-   "tried_at": "2026-11-19 22:36"
+   "tried_at": "2026-11-19 23:12"
   },
   {
    "name": "lda4-DC",
-   "mechanism": "supervised projection (no topology)",
+   "role": "control",
+   "mechanism": "supervised projection (composition)",
+   "round": 1,
    "kind": "supervised",
-   "what": "the same shrinkage LDA on the 51 density and composition features: the yardstick for the supervised ideas",
+   "inputs": "51 density and composition features, z-scored",
+   "what": "the same LDA without topology: the yardstick for the supervised ideas",
    "readouts": [
     {
      "k": 4,
@@ -585,6 +839,16 @@
       0.7043689947865254,
       0.7924440711540672
      ],
+     "purity_oof_macro": 2.2101810549894214,
+     "purity_oof_per_condition": [
+      1.5249615537307508,
+      1.2864399967416094,
+      1.2228833896508315,
+      2.4206060606060613,
+      1.935833333333333,
+      1.8634296875,
+      5.217113363363364
+     ],
      "n_convergence_warnings": 0,
      "vs_everything4": {
       "difference": 0.05381717535511954,
@@ -592,16 +856,26 @@
        0.012027127709424767,
        0.09387798305460203
       ]
+     },
+     "purity_oof_vs_everything4": {
+      "difference": 0.2898454828170589,
+      "interval": [
+       0.04741178971227479,
+       0.5617660736651379
+      ]
      }
     }
    ],
-   "tried_at": "2026-11-19 22:36"
+   "tried_at": "2026-11-19 23:12"
   },
   {
    "name": "lda4-DC+everything20",
-   "mechanism": "supervised projection (with composition)",
+   "role": "idea",
+   "mechanism": "supervised projection (composition + topology)",
+   "round": 1,
    "kind": "supervised",
-   "what": "shrinkage LDA on density, composition and the everything space's first 20 components",
+   "inputs": "51 density and composition features + 20 MFA components, z-scored",
+   "what": "shrinkage LDA to four discriminants, fitted in each training fold",
    "readouts": [
     {
      "k": 4,
@@ -619,6 +893,16 @@
       0.7359953648942271,
       0.8115646282964682
      ],
+     "purity_oof_macro": 2.423197069796244,
+     "purity_oof_per_condition": [
+      1.3950144173509682,
+      1.5123455821657434,
+      1.2853002385211687,
+      2.978441558441559,
+      2.4119166666666665,
+      1.985364583333333,
+      5.393996442094268
+     ],
      "n_convergence_warnings": 0,
      "vs_everything4": {
       "difference": 0.07780666810142534,
@@ -626,16 +910,26 @@
        0.044099272814915116,
        0.11279115048961019
       ]
+     },
+     "purity_oof_vs_everything4": {
+      "difference": 0.5028614976238814,
+      "interval": [
+       0.23857633029395114,
+       0.7715835841067953
+      ]
      }
     }
    ],
-   "tried_at": "2026-11-19 22:36"
+   "tried_at": "2026-11-19 23:12"
   },
   {
    "name": "h0cosine-everything",
-   "mechanism": "shape only, H0",
+   "role": "idea",
+   "mechanism": "shape only",
+   "round": 2,
    "kind": "space",
-   "what": "MFA of the H0 cosine blocks of all five point sets (the main heatmaps' strongest model)",
+   "inputs": "MFA of the 50 H0 cosine blocks",
+   "what": "the H0 cosine blocks alone (the main heatmaps' strongest model)",
    "readouts": [
     {
      "k": 4,
@@ -653,6 +947,16 @@
       0.6801621716700457,
       0.758797312203424
      ],
+     "purity_oof_macro": 2.01112708448126,
+     "purity_oof_per_condition": [
+      1.376469629536764,
+      1.239952145106984,
+      1.1878115977237425,
+      1.4300324675324678,
+      0.7140416666666665,
+      2.1628958333333332,
+      5.96668625146886
+     ],
      "n_convergence_warnings": 0,
      "vs_everything4": {
       "difference": 0.023292417705761403,
@@ -661,14 +965,14 @@
        0.05197323728396362
       ]
      },
-     "purity_macro": 2.1138656562442715,
-     "purity_vs_everything4": {
-      "difference": 0.14192140537615638,
+     "purity_oof_vs_everything4": {
+      "difference": 0.09079151230889737,
       "interval": [
-       -0.11778342988480174,
-       0.42766454270286974
+       -0.11912235593423655,
+       0.3153049514822668
       ]
-     }
+     },
+     "purity_in_sample_macro": 2.1138656562442715
     },
     {
      "k": 20,
@@ -686,17 +990,30 @@
       0.7254867249338317,
       0.7981171746523301
      ],
+     "purity_oof_macro": 2.0931115887751854,
+     "purity_oof_per_condition": [
+      1.4389563788071906,
+      1.42303192679483,
+      1.2435653135743578,
+      1.6746428571428578,
+      0.9997083333333331,
+      2.1798489583333334,
+      5.6920273534403965
+     ],
      "n_convergence_warnings": 0,
-     "purity_macro": 2.1832212720624935
+     "purity_in_sample_macro": 2.1832212720624935
     }
    ],
-   "tried_at": "2026-11-19 22:50"
+   "tried_at": "2026-11-19 23:12"
   },
   {
    "name": "pls4-allcolumns",
-   "mechanism": "supervised projection",
+   "role": "idea",
+   "mechanism": "supervised projection (topology)",
+   "round": 2,
    "kind": "supervised",
-   "what": "class-balanced PLS-DA to four components of all 1800 MFA-weighted block columns, no truncation",
+   "inputs": "1800 block columns, z-scored (MFA weights do not survive)",
+   "what": "class-balanced PLS-DA to four components, fitted in each training fold",
    "readouts": [
     {
      "k": 4,
@@ -714,6 +1031,16 @@
       0.73591942709189,
       0.8010818843285097
      ],
+     "purity_oof_macro": 2.2255868676793242,
+     "purity_oof_per_condition": [
+      1.5698821538268664,
+      1.3696570761377214,
+      1.25205038882386,
+      1.9940530303030306,
+      1.523333333333333,
+      2.2462291666666667,
+      5.623902924663794
+     ],
      "n_convergence_warnings": 0,
      "vs_everything4": {
       "difference": 0.07247855833455263,
@@ -721,16 +1048,26 @@
        0.04424202258033789,
        0.1004484060728568
       ]
+     },
+     "purity_oof_vs_everything4": {
+      "difference": 0.30525129550696173,
+      "interval": [
+       0.10301986817308331,
+       0.5122606025823303
+      ]
      }
     }
    ],
-   "tried_at": "2026-11-19 22:50"
+   "tried_at": "2026-11-19 23:12"
   },
   {
    "name": "pls4-DC",
-   "mechanism": "supervised projection (no topology)",
+   "role": "control",
+   "mechanism": "supervised projection (composition)",
+   "round": 2,
    "kind": "supervised",
-   "what": "class-balanced PLS-DA to four components of the 51 density and composition features",
+   "inputs": "51 density and composition features, z-scored",
+   "what": "the same PLS-DA without topology",
    "readouts": [
     {
      "k": 4,
@@ -748,6 +1085,16 @@
       0.6976249344072935,
       0.7726315183730826
      ],
+     "purity_oof_macro": 1.9985754213091023,
+     "purity_oof_per_condition": [
+      1.3306757001469596,
+      1.2308388671662864,
+      1.1504694486774591,
+      1.7486688311688314,
+      1.0312083333333333,
+      1.9992604166666665,
+      5.4989063520041785
+     ],
      "n_convergence_warnings": 0,
      "vs_everything4": {
       "difference": 0.039941905174493475,
@@ -755,16 +1102,26 @@
        0.009303628524281623,
        0.07013595986833891
       ]
+     },
+     "purity_oof_vs_everything4": {
+      "difference": 0.07823984913673976,
+      "interval": [
+       -0.12026235260203215,
+       0.304005804156442
+      ]
      }
     }
    ],
-   "tried_at": "2026-11-19 22:50"
+   "tried_at": "2026-11-19 23:12"
   },
   {
    "name": "pls4-DC+everything50",
-   "mechanism": "supervised projection (with composition)",
+   "role": "idea",
+   "mechanism": "supervised projection (composition + topology)",
+   "round": 2,
    "kind": "supervised",
-   "what": "class-balanced PLS-DA to four components of density, composition and the everything MFA's first 50 components",
+   "inputs": "51 features + 50 MFA components, z-scored",
+   "what": "class-balanced PLS-DA to four components, fitted in each training fold",
    "readouts": [
     {
      "k": 4,
@@ -782,6 +1139,16 @@
       0.6996725571671194,
       0.777487672354361
      ],
+     "purity_oof_macro": 2.1356351159676654,
+     "purity_oof_per_condition": [
+      1.3354980254497588,
+      1.2622985500162918,
+      1.1718272009835318,
+      1.8565854978354976,
+      1.4437499999999999,
+      2.113338541666667,
+      5.7661479958219095
+     ],
      "n_convergence_warnings": 0,
      "vs_everything4": {
       "difference": 0.04278699086250748,
@@ -789,16 +1156,26 @@
        0.013234932947795569,
        0.07184191698796563
       ]
+     },
+     "purity_oof_vs_everything4": {
+      "difference": 0.21529954379530292,
+      "interval": [
+       0.02440993767350531,
+       0.4349954932225427
+      ]
      }
     }
    ],
-   "tried_at": "2026-11-19 22:50"
+   "tried_at": "2026-11-19 23:13"
   },
   {
    "name": "pls4-residual-density-composition",
-   "mechanism": "supervised projection beyond composition",
+   "role": "diagnostic",
+   "mechanism": "supervised projection (topology beyond composition)",
+   "round": 2,
    "kind": "supervised",
-   "what": "class-balanced PLS-DA to four components of the first 50 components of the MFA of all blocks with density and composition regressed out: is any signal left?",
+   "inputs": "50 MFA components of 200 residual blocks, z-scored",
+   "what": "PLS-DA after regressing every score on density and composition: is any signal left?",
    "readouts": [
     {
      "k": 4,
@@ -816,6 +1193,16 @@
       0.4877423534408951,
       0.5900651426424276
      ],
+     "purity_oof_macro": 1.0320626306431264,
+     "purity_oof_per_condition": [
+      1.30615189062315,
+      1.2299629982621918,
+      1.136214421205808,
+      0.653939393939394,
+      0.4126666666666667,
+      1.0026041666666665,
+      1.4828988771380078
+     ],
      "n_convergence_warnings": 0,
      "vs_everything4": {
       "difference": -0.15772674903095352,
@@ -823,10 +1210,17 @@
        -0.221823637465891,
        -0.09118351419398785
       ]
+     },
+     "purity_oof_vs_everything4": {
+      "difference": -0.8882729415292361,
+      "interval": [
+       -1.1317557269197214,
+       -0.6423474235338239
+      ]
      }
     }
    ],
-   "tried_at": "2026-11-19 22:50"
+   "tried_at": "2026-11-19 23:13"
   }
  ],
  "dev_slides": 476,

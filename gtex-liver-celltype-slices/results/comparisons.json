@@ -62,6 +62,28 @@
   },
   "fixed_in_advance": false
  },
+ "composition_pca_k4": {
+  "a": "C@4",
+  "b": "everything@4",
+  "auc": {
+   "a": 0.7471192536993302,
+   "b": 0.7050263035465697,
+   "difference": 0.04209295015276049,
+   "interval": [
+    0.009878953397899333,
+    0.07289504528814543
+   ]
+  },
+  "purity": {
+   "a": 2.1997619018036714,
+   "b": 2.119073143497611,
+   "difference": 0.08068875830606048,
+   "interval": [
+    -0.16661857078091738,
+    0.32707739664248303
+   ]
+  }
+ },
  "secondary": {
   "a": "features:D+C+groups20",
   "b": "features:D+C",
@@ -587,5 +609,5 @@
    }
   ]
  },
- "runtime_seconds": 110.4
+ "runtime_seconds": 193.4
 }

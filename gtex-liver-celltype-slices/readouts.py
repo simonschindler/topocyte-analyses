@@ -27,6 +27,8 @@ the same draws for every comparison, 95% percentile intervals:
   components of ``groups`` against the ``D+C`` features alone, macro AUC;
 * the ladder: every rung's macro AUC with its interval, and paired
   differences between neighbouring rungs;
+* descriptive: the composition's PCA (``C``) against ``everything`` on four
+  components, both readouts;
 * each condition against healthy for the key spaces.
 
 Writes ``results/folds.npz``, ``results/readouts.npz``,
@@ -201,6 +203,8 @@ def main() -> None:
         result["below_zero"] = {"auc": result["auc"]["interval"][1] < 0, "purity": result["purity"]["interval"][1] < 0}
         result["fixed_in_advance"] = k == SMALL_K
         comparisons[f"primary_k{k}"] = result
+    # Descriptive: the composition's own PCA on the same four components, against everything.
+    comparisons["composition_pca_k4"] = compare("C@4", "everything@4", with_purity=True)
     secondary = compare("features:D+C+groups20", "features:D+C", with_purity=False)
     secondary["adds"] = secondary["auc"]["interval"][0] > 0
     comparisons["secondary"] = secondary

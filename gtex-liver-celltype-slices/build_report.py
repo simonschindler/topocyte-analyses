@@ -223,6 +223,34 @@ def figure_intervals(rows: list[tuple[str, float, list[float]]], title: str, xla
     return png_bytes(fig)
 
 
+def section_improvements() -> str:
+    """Summary of the improvement phase (details: improvements.md); asserted against its JSON files."""
+    dev_path, hold_path = c.RESULTS / "improve_dev.json", c.RESULTS / "improve_holdout.json"
+    if not dev_path.exists():
+        return "<p>Not run yet.</p>"
+    dev = json.loads(dev_path.read_text())
+    n_ideas = sum(entry["role"] == "idea" for entry in dev["ideas"])
+    text = (f"<p>Exploratory, after the main readouts: {n_ideas} modelling ideas (and their baselines, controls and "
+            f"diagnostics) were scored on the {dev['dev_slides']} development slides only; the rule for choosing which reach "
+            "the holdout was fixed before any readout (design.md), and the 118 holdout slides were scored once. "
+            "Every idea, its development readouts and the full holdout table are in <code>improvements.md</code>.</p>")
+    if not hold_path.exists():
+        return text + "<p>The holdout has not been scored yet.</p>"
+    hold = json.loads(hold_path.read_text())
+    rows = []
+    for name, row in hold["results"].items():
+        rows.append([html.escape(name), f"{row['macro_auc']:.3f} <span class='unit'>{fmt_interval(row['auc_interval'])}</span>",
+                     f"{signed(row['vs_everything4']['difference'])} <span class='unit'>{fmt_interval(row['vs_everything4']['interval'])}</span>",
+                     f"{signed(row['vs_DC']['difference'])} <span class='unit'>{fmt_interval(row['vs_DC']['interval'])}</span>",
+                     f"{row['purity_macro']:.2f}" if "purity_macro" in row else "—"])
+    table = html_table(["holdout entry", "macro AUC", "vs everything (4)", "vs D+C features", "purity ×chance"], rows)
+    groups = ", ".join(f"{g} {n}" for g, n in hold["holdout_per_group"].items())
+    return text + (f"<p>Holdout ({hold['holdout_slides']} slides: {html.escape(groups)}), chosen by the fixed rule: "
+                   f"{', '.join(f'<code>{html.escape(n)}</code>' for n in hold['chosen']) or 'none'}. With two "
+                   "inflammation/hepatitis and four necrosis slides, the holdout intervals understate the uncertainty.</p>"
+                   + table)
+
+
 # ---------------------------------------------------------------- main
 
 
@@ -411,23 +439,33 @@ def main() -> None:
 
     comp4 = readouts["C@4"]
     comp_feat = ladder["features:C"]
-    comp_beats4 = comp4["macro_auc"] > every4["macro_auc"] and comp4["purity_macro"] > every4["purity_macro"]
+    cp = comparisons["composition_pca_k4"]
+    assert np.isclose(cp["auc"]["a"], comp4["macro_auc"]) and np.isclose(cp["auc"]["b"], every4["macro_auc"])
     comp_vs_topology = "at least as well as" if comp_feat["auc"] >= every20["macro_auc"] else "less well than"
     assert (comp_feat["auc"] >= every20["macro_auc"]) == (comp_vs_topology == "at least as well as")
+    late = {(d["a"], d["b"]): d for d in comparisons["ladder_differences"]}[("features:D+C+everything20", "features:D+C+all-cell20")]
+
+    def relation(interval: list[float], up: str, same: str, down: str) -> str:
+        return up if interval[0] > 0 else down if interval[1] < 0 else same
+
+    comp4_auc_word = relation(cp["auc"]["interval"], "a higher", "a similar", "a lower")
+    comp4_purity_word = relation(cp["purity"]["interval"], "higher", "similar", "lower")
     if p4["verdict"] == "enhanced" and not sec["adds"]:
+        assert late["auc"]["interval"][0] <= 0 <= late["auc"]["interval"][1]
         reading = (
             "<p><strong>Reading.</strong> Splitting the cells by type makes the liver conditions easier to tell apart than "
-            "all-cell topology does, on both readouts. What does it is the number of cells of each group at each density level: "
-            "per-group topology adds nothing to density and composition summaries, and the composition alone separates the "
-            f"conditions {comp_vs_topology} the everything space.</p>")
+            "all-cell topology does, on both readouts. The number of cells of each group at each density level accounts for "
+            "the gain: per-group topology adds nothing detectable to a linear readout of density and composition "
+            f"({signed(sec['auc']['difference'])} {fmt_interval(sec['auc']['interval'])}); with density and composition in the "
+            f"model, the four groups add {signed(late['auc']['difference'])} {fmt_interval(late['auc']['interval'])} to all-cell "
+            f"topology; and the composition alone separates the conditions {comp_vs_topology} the everything space.</p>")
     else:
         reading = ""
     comp4_text = (
-        (f" At the same four components, the PCA of the composition alone (log cells per group and slice, no topology) "
-         f"separates better still: macro AUC {comp4['macro_auc']:.3f}, purity {comp4['purity_macro']:.2f} times chance.")
-        if comp_beats4 else
-        (f" At the same four components, the PCA of the composition alone reaches a macro AUC of {comp4['macro_auc']:.3f} "
-         f"and purity {comp4['purity_macro']:.2f} times chance.")
+        f" At the same four components, the PCA of the composition alone (log cells per group and slice, no topology) "
+        f"reaches {comp4_auc_word} macro AUC, {comp4['macro_auc']:.3f} ({signed(cp['auc']['difference'])} "
+        f"{fmt_interval(cp['auc']['interval'])} against everything), and {comp4_purity_word} purity, {comp4['purity_macro']:.2f} "
+        f"times chance ({signed(cp['purity']['difference'], 2)} {fmt_interval(cp['purity']['interval'], 2)})."
     )
     summary = reading + (
         f"<p><strong>Fixed in advance — {verdict_text}.</strong> On the first four components, the space of all five "
@@ -554,6 +592,9 @@ def main() -> None:
   out-of-fold probabilities, with 95% bootstrap intervals. Inflammation/hepatitis has {counts['inflammation/hepatitis']} slides and
   necrosis {counts['necrosis']}: their intervals are wide.</p>
   {vs_table}
+
+  <h2>9. Improvement phase</h2>
+  {section_improvements()}
 
   <h2>Methods and reproduction</h2>
   <ul>

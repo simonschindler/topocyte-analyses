@@ -2,7 +2,7 @@
 """Write ``improvements.md`` from ``results/improve_dev.json`` (and ``improve_holdout.json`` once it exists).
 
 No number is typed by hand; every sentence that states a direction is
-asserted against the numbers it states.
+chosen by the numbers it states.
 """
 
 from __future__ import annotations
@@ -15,11 +15,21 @@ OUT = c.HERE / "improvements.md"
 
 
 def iv(values: list[float], digits: int = 3) -> str:
-    return f"[{values[0]:.{digits}f}, {values[1]:.{digits}f}]"
+    return f"[{values[0]:.{digits}f}, {values[1]:.{digits}f}]".replace("-", "−")
 
 
 def sg(value: float, digits: int = 3) -> str:
+    if round(value, digits) == 0:
+        return f"{0:.{digits}f}"
     return f"{value:+.{digits}f}".replace("-", "−")
+
+
+def k4(entry: dict) -> dict:
+    return next((r for r in entry["readouts"] if r["k"] == 4), entry["readouts"][0])
+
+
+def relation(interval: list[float], up: str, same: str, down: str) -> str:
+    return up if interval[0] > 0 else down if interval[1] < 0 else same
 
 
 def main() -> None:
@@ -29,80 +39,118 @@ def main() -> None:
     ideas = dev["ideas"]
     by_name = {entry["name"]: entry for entry in ideas}
 
-    def k4(entry: dict) -> dict:
-        return next(r for r in entry["readouts"] if r["k"] == 4) if any(r["k"] == 4 for r in entry["readouts"]) else entry["readouts"][0]
-
     rows = []
     for number, entry in enumerate(ideas, 1):
         r4 = k4(entry)
         r20 = next((r for r in entry["readouts"] if r["k"] == 20), None)
         versus = f"{sg(r4['vs_everything4']['difference'])} {iv(r4['vs_everything4']['interval'])}" if "vs_everything4" in r4 else "—"
-        purity = f"{r4['purity_macro']:.2f}" if "purity_macro" in r4 else "—"
-        if "purity_vs_everything4" in r4:
-            purity += f" ({sg(r4['purity_vs_everything4']['difference'], 2)} {iv(r4['purity_vs_everything4']['interval'], 2)})"
-        rows.append(f"| {number} | `{entry['name']}` | {entry['mechanism']} | {entry['what']} | k={r4['k']}: {r4['macro_auc']:.3f} "
-                    f"{iv(r4['auc_interval'])} | {versus} | {purity} | {f'{r20['macro_auc']:.3f}' if r20 else '—'} |")
-    ref = k4(by_name["baseline:everything"])
-    candidates = [e for e in ideas if e["mechanism"] != "baseline" and "vs_everything4" in k4(e)]
+        purity = (f"{r4['purity_oof_macro']:.2f} ({sg(r4['purity_oof_vs_everything4']['difference'], 2)} "
+                  f"{iv(r4['purity_oof_vs_everything4']['interval'], 2)})" if "purity_oof_vs_everything4" in r4
+                  else f"{r4['purity_oof_macro']:.2f}")
+        rows.append(f"| {number} | `{entry['name']}` | {entry['role']} | {entry['round']} | {entry['mechanism']} | "
+                    f"{entry['inputs']}; {entry['what']} | k={r4['k']}: {r4['macro_auc']:.3f} {iv(r4['auc_interval'])} | "
+                    f"{versus} | {purity} | {f'{r20['macro_auc']:.3f}' if r20 else '—'} |")
+
+    reference = k4(by_name["baseline:everything"])
+    reference20 = next(r for r in by_name["baseline:everything"]["readouts"] if r["k"] == 20)
+    dc = by_name["baseline:D+C-features"]["readouts"][0]
+    candidates = [e for e in ideas if e["role"] == "idea" and "vs_everything4" in k4(e)]
     best = max(candidates, key=lambda e: k4(e)["macro_auc"])
-    best_r = k4(best)
     above = [e["name"] for e in candidates if k4(e)["vs_everything4"]["interval"][0] > 0]
-    assert all(k4(by_name[n])["vs_everything4"]["interval"][0] > 0 for n in above)
-    dev_text = (
-        f"On the {dev['dev_slides']} development slides the main experiment's `everything` space reaches a macro AUC of "
-        f"{ref['macro_auc']:.3f} {iv(ref['auc_interval'])} on four components. The best idea with a four-dimensional view is "
-        f"`{best['name']}` at {best_r['macro_auc']:.3f}, {sg(best_r['vs_everything4']['difference'])} "
-        f"{iv(best_r['vs_everything4']['interval'])} against `everything`. "
+    diagnostics = [e for e in ideas if e["role"] == "diagnostic"]
+    dev_text = [
+        f"On the {dev['dev_slides']} development slides, the main experiment's `everything` space reaches a macro AUC of "
+        f"{reference['macro_auc']:.3f} {iv(reference['auc_interval'])} on four components and {reference20['macro_auc']:.3f} "
+        f"on twenty. The `D+C` features alone reach {dc['macro_auc']:.3f} {iv(dc['auc_interval'])} ({dc['k']} features).",
+        "",
+        f"- **Best idea:** `{best['name']}` ({best['mechanism']}, {best['inputs']}) at {k4(best)['macro_auc']:.3f}, "
+        f"{sg(k4(best)['vs_everything4']['difference'])} {iv(k4(best)['vs_everything4']['interval'])} against `everything`.",
+        "- **Beyond `everything`:** "
         + (f"{len(above)} idea{'s' if len(above) != 1 else ''} beat `everything` with an interval above 0: "
-           + ", ".join(f"`{n}`" for n in above) + "." if above else "No idea beats `everything` with an interval above 0.")
-    )
+           + ", ".join(f"`{n}`" for n in above) + "." if above else "no idea beats `everything` with an interval above 0."),
+        "- **Supervised four-component views:**",
+        "  - They use more input than `everything`'s four components: 20 to 1800 dimensions, listed under \"what\" in the table.",
+        f"  - On equal inputs, `everything` on 20 components reaches {reference20['macro_auc']:.3f}.",
+        "- **Diagnostics,** built to remove signal: "
+        + "; ".join(f"`{e['name']}` {k4(e)['macro_auc']:.3f} {iv(k4(e)['auc_interval'])}" for e in diagnostics)
+        + ".",
+    ]
+
     sections = [
         "# Improvement phase: what was tried, and what held on the holdout",
         "",
-        "Exploratory, run by Claude overnight on 2026-11-19 while Simon was away, under the rules in `design.md` (\"Rulings "
-        "made after the builder check\").",
+        "Exploratory. Claude ran it overnight on 2026-11-19 while Simon was away, under the rules in `design.md`",
+        "(\"Rulings made after the builder check\") and the rulings in `progress.md`.",
         "",
-        f"- **Development slides.** Ideas are compared on the {dev['dev_slides']} development slides: 20 × stratified 5-fold "
-        f"(seed {dev['fold_seed']}), the main experiment's logistic regression, and {dev['n_draws']} bootstrap draws "
-        f"(seed {dev['bootstrap_seed']}) for the intervals.",
-        "- **Unsupervised and supervised steps.** Unsupervised steps were fitted on all slides, without labels. Supervised "
-        "projections were fitted inside each training fold.",
-        "- **Holdout.** The holdout's labels were read only by `improve_holdout.py`, once.",
-        "- **Criterion.** Development macro AUC on four components, paired against `everything`.",
+        f"- **Development slides.** Every idea is compared on the {dev['dev_slides']} development slides:",
+        f"  - 20 × stratified 5-fold (seed {dev['fold_seed']});",
+        "  - the main experiment's logistic regression on the idea's four-dimensional view;",
+        f"  - {dev['n_draws']} bootstrap draws (seed {dev['bootstrap_seed']}) for the intervals.",
+        "  - Purity is out of fold: each test slide against its 15 nearest training-fold slides in that fold's view.",
+        "- **Fitting.** Unsupervised steps saw all slides, without labels. Supervised projections and block selections were "
+        "fitted inside each training fold.",
+        "- **Roles.**",
+        "  - `idea`: a candidate for the holdout.",
+        "  - `baseline`: the main experiment's spaces.",
+        "  - `control`: the same method without topology, never chosen.",
+        "  - `diagnostic`: built to remove signal.",
+        "- **Rounds.**",
+        "  - Round 1 was conceived before any readout existed.",
+        "  - Round 2 came after the main readouts and round 1's results. It is post hoc, and the holdout is a weaker check for it.",
+        "- **The holdout is not pristine.**",
+        "  - The main experiment's readouts used all 594 slides' labels, the holdout's included, as Simon ruled.",
+        "  - `improve.py` never reads the holdout labels.",
+        "  - `improve_holdout.py` scored the holdout once.",
         "",
-        "## Every idea, in the order tried",
+        "## Every entry, in the order tried",
         "",
-        "| # | idea | mechanism | what | dev macro AUC [95%] | vs `everything`@4 | purity ×chance (vs `everything`) | dev AUC k=20 |",
-        "|---|---|---|---|---|---|---|---|",
+        "| # | entry | role | round | mechanism | inputs; what | dev macro AUC [95%] | vs `everything`@4 | "
+        "out-of-fold purity ×chance (vs `everything`) | dev AUC k=20 |",
+        "|---|---|---|---|---|---|---|---|---|---|",
         *rows,
         "",
-        dev_text,
+        *dev_text,
         "",
     ]
     if holdout is not None:
         res = holdout["results"]
-        hold_rows = [f"| {name} | {row['macro_auc']:.3f} {iv(row['auc_interval'])} | {sg(row['vs_everything4']['difference'])} "
-                     f"{iv(row['vs_everything4']['interval'])} | {f'{row['purity_macro']:.2f}' if 'purity_macro' in row else '—'} |"
-                     for name, row in res.items()]
+        hold_rows = []
+        for name, row in res.items():
+            purity = "—"
+            if "purity_macro" in row:
+                purity = (f"{row['purity_macro']:.2f} ({sg(row['purity_vs_everything4']['difference'], 2)} "
+                          f"{iv(row['purity_vs_everything4']['interval'], 2)})")
+            hold_rows.append(f"| {name} | {row['macro_auc']:.3f} {iv(row['auc_interval'])} | "
+                             f"{sg(row['vs_everything4']['difference'])} {iv(row['vs_everything4']['interval'])} | "
+                             f"{sg(row['vs_DC']['difference'])} {iv(row['vs_DC']['interval'])} | {purity} |")
         per_group = ", ".join(f"{g} {n}" for g, n in holdout["holdout_per_group"].items())
         chosen = holdout["chosen"]
-        held = [n for n in chosen if res[f"{n}@4"]["vs_everything4"]["interval"][0] > 0]
-        verdict = (
-            "On the holdout, " + (", ".join(f"`{n}`" for n in held) + " keep" + ("s" if len(held) == 1 else "")
-                                  + " an interval above 0 against `everything`." if held else
-                                  "no chosen idea keeps an interval above 0 against `everything`.")
-        )
+        verdicts = []
+        for name in chosen:
+            row = res[f"{name}@4"]
+            verdicts.append(
+                f"- `{name}`: "
+                f"{relation(row['vs_everything4']['interval'], 'above', 'level with', 'below')} `everything` "
+                f"({sg(row['vs_everything4']['difference'])} {iv(row['vs_everything4']['interval'])}), "
+                f"{relation(row['vs_DC']['interval'], 'above', 'level with', 'below')} the `D+C` features "
+                f"({sg(row['vs_DC']['difference'])} {iv(row['vs_DC']['interval'])}).")
+        secondary = holdout["secondary_on_holdout"]
         sections += [
             "## Holdout, scored once",
             "",
-            f"Chosen by the fixed rule: {', '.join(f'`{n}`' for n in chosen) or 'none'}. Scored {holdout['scored_at']} on "
-            f"{holdout['holdout_slides']} slides ({per_group}); the small groups make every holdout AUC wide.",
+            f"- **Chosen by the fixed rule:** {', '.join(f'`{n}`' for n in chosen) or 'none'}.",
+            f"- **Control:** the best supervised control without topology, `{holdout['control']}`.",
+            f"- **When and what:** scored {holdout['scored_at']} on {holdout['holdout_slides']} slides ({per_group}).",
+            "- **Uncertainty:** with groups of two and four slides, bootstrap draws within a group understate it, so every "
+            "holdout interval is too narrow for the small groups.",
             "",
-            "| entry | holdout macro AUC [95%] | vs `everything`@4 | purity ×chance |",
-            "|---|---|---|---|",
+            "| entry | holdout macro AUC [95%] | vs `everything`@4 | vs `D+C` features | purity ×chance (vs `everything`) |",
+            "|---|---|---|---|---|",
             *hold_rows,
             "",
-            verdict,
+            *verdicts,
+            f"- Secondary comparison on the holdout (`D+C` + 20 components of `groups` against `D+C`): "
+            f"{sg(secondary['difference'])} {iv(secondary['interval'])}.",
             "",
         ]
     else:
