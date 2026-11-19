@@ -144,3 +144,22 @@ density levels, adds separation that all-cell topology does not have.
 - File layout, code structure, figure details, colour choices within the dataviz rules.
 - Exact wording of the report.
 - Which ideas the improvement phase tries, within the limits above.
+
+## Rulings made after the builder check (Claude, 2026-11-19, 22:30, Simon away)
+
+A fresh reviewer read this design as a builder would and asked three questions about the improvement phase. Simon is away, so Claude settled them before any readout existed: at that point only unlabelled fPCA scores of the first per-group slices had been computed, and no separability number of any space. They are flagged in the morning report.
+
+1. **What "fitted on the development slides" covers at the holdout.**
+   - Every unsupervised step (the per-block fPCA, MFA, the baselines' PCA) stays as fitted on all 594 slides. That is also how the main experiment's cross-validation treats them: no labels are used, and refitting fPCA on the development slides alone would need persistent homology again (no diagrams are kept).
+   - Every supervised step of an idea (any projection, block selection or tuning that reads labels) is fitted on the development slides only, together with the logistic regression and the pool of labelled neighbours.
+   - Cost if wrong: the holdout check guards against selecting ideas on labels, not against the holdout's curves having shaped the unsupervised components, which carry no labels.
+2. **What the improvement phase optimizes, and how ideas reach the holdout.**
+   - **Criterion:** the development macro AUC at k = 4 (the headline's equal-components rule), paired against `everything` on the development folds. Purity at k = 4 is reported for every idea and must not fall below `everything`'s by more than its interval.
+   - **Selection:** at most three ideas reach the holdout, the highest development AUC at k = 4 first, each with a different mechanism. If no idea's paired interval lies above 0, the best one still goes as a check.
+   - **Holdout spaces:**
+     - the chosen ideas;
+     - `all-cell` and `everything`;
+     - and, because a gain carried by cell counts is an anti-goal, the `D+C` features and `D+C` plus the first 20 components of `groups`.
+3. **Time.**
+   - The holdout is scored once, by 07:00 at the latest, with whatever ideas are ready.
+   - Results go to `improvements.md`, generated from `results/improve_*.json` by a script, so that no number is typed by hand. The report's improvement section is that file.
