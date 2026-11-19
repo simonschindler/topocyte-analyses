@@ -1,0 +1,28 @@
+{
+  "n_spaces": 668,
+  "n_blocks": 200,
+  "n_mfa": 465,
+  "aliases": {
+    "all-cell": "mfa:all:h0_none+h1_none+h0_cosine+h1_cosine",
+    "groups": "mfa:epithelial+stromal+immune+other:h0_none+h1_none+h0_cosine+h1_cosine",
+    "everything": "mfa:all+epithelial+stromal+immune+other:h0_none+h1_none+h0_cosine+h1_cosine"
+  },
+  "key_spaces": [
+    "mfa:all:h0_none+h1_none+h0_cosine+h1_cosine",
+    "mfa:epithelial:h0_none+h1_none+h0_cosine+h1_cosine",
+    "mfa:stromal:h0_none+h1_none+h0_cosine+h1_cosine",
+    "mfa:immune:h0_none+h1_none+h0_cosine+h1_cosine",
+    "mfa:other:h0_none+h1_none+h0_cosine+h1_cosine",
+    "mfa:all+epithelial+stromal+immune+other:h0_none+h1_none+h0_cosine+h1_cosine"
+  ],
+  "dropped_blocks": [],
+  "all_cell_vs_sibling_min_abs_corr": 0.9999999999999998,
+  "umap_params": {
+    "n_neighbors": 15,
+    "min_dist": 0.1,
+    "metric": "euclidean",
+    "n_components": 2,
+    "random_state": 0
+  },
+  "runtime_seconds": 17.1
+}
