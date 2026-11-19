@@ -34,7 +34,7 @@
   - slice 9 per group in 45 s, with no slide lacking H1 bars and no block dropped.
 - 22:27: slices 8 to 0 done; 45.2 min of per-group PH and fPCA in all (slice 0 in 9 min, peak RSS 6.3 GB, five PH workers for epithelial at slices 0 to 2). No block dropped; every slide keeps H1 bars in every group at every slice. Gate 8 also passed exactly.
 - 22:29: `spaces.py`: 668 spaces (200 blocks, 465 MFA, 3 baselines). The all-cell space reproduces the sibling's combined space (min |r| 1.000000000).
-- 22:33: `readouts.py`: 1342 jobs × 100 fits in 74 s, no convergence warnings.
+- 22:30: `readouts.py`: 1342 jobs × 100 fits in 74 s, no convergence warnings.
   - **Primary (fixed in advance): enhanced.** At k = 4, `everything` vs `all-cell`: macro AUC 0.705 vs 0.599, +0.106 [0.073, 0.138]; purity 2.12 vs 1.60, +0.52 [0.27, 0.79]. The same holds at k = 20 (descriptive): +0.027 [0.001, 0.053] and +0.32 [0.03, 0.60].
   - **Secondary (fixed in advance): does not add.** `D+C` + 20 components of `groups` 0.773 vs `D+C` 0.773, 0.000 [−0.023, 0.024].
   - **Descriptive.**
@@ -43,3 +43,24 @@
     - Reading: the gain from splitting by cell type is the cell counts per group and density level, not their topology.
 
 Ruling: the summary leads with a "Reading" paragraph and states the composition PCA at four components beside the primary result. Why: the primary verdict alone would read as "topology per group helps", which the secondary and the ladder contradict. Cost if wrong: none to the numbers; it frames them, and every sentence in it is asserted against them.
+
+## Task 4: improvement phase (exploratory; development slides only until the holdout step)
+
+- 22:35: verifier: 61 checks pass in 290 s. Report built (1.6 MB) and looked at in the browser: composition, scatters and heatmaps render; the reading leads.
+- 22:36, round 1 (`improve.py`, 14 entries, 52 s). Development macro AUC at k = 4, against `everything` (0.696):
+  - zscore-columns −0.024;
+  - residual-density −0.066;
+  - residual-density-composition −0.150 (0.546, near chance);
+  - cosine-everything +0.015;
+  - select20/40-kruskal +0.017;
+  - lda4-everything20 +0.035 (interval crosses 0);
+  - **pls4-everything50 +0.075 [0.031, 0.117]**;
+  - lda4-allcell20 +0.025;
+  - lda4-DC +0.054;
+  - lda4-DC+everything20 +0.078.
+- 22:40–22:49: per-cell normalization.
+  - The dense Gram route costs about 60 s per matrix at slice 9 (an estimated 4 h for everything).
+  - Ruling: fit the per-cell curves (β / n) matrix-free with topocyte's private `_betti_operator` and `_fit_matrix_free` at the pinned commit, scaling the product (`D⁻¹ G D⁻¹`). Why: exact and as cheap as the main fits. Cost if wrong: private API; the identity gate (D = I reproduces the raw scores, |r| = 1 − 2e−16 at slice 9) guards the code path.
+  - A first, mistaken run of the old dense script at slice 9 (7 min) was moved to the Trash.
+- 22:50, round 2 (post hoc, after round 1 and the main readouts): h0cosine-everything +0.023; **pls4-allcolumns +0.072 [0.044, 0.100]**; pls4-DC +0.040; pls4-DC+everything50 +0.043.
+- 22:50, diagnostic: **pls4-residual-density-composition 0.539 [0.488, 0.590]**. With density and composition regressed out (linearly), even a supervised projection finds no separation: the topology per group carries nothing linear beyond composition.
