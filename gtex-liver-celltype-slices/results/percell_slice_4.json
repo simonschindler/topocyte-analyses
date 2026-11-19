@@ -1,0 +1,30 @@
+{
+  "slice": 4,
+  "topocyte_commit": "bd1d5c04fc7323c5a861816d5a0ad77f5a040f00",
+  "all": {
+    "ph_seconds": 252.3,
+    "h1_seconds": 62.7,
+    "h0_seconds": 37.2
+  },
+  "epithelial": {
+    "ph_seconds": 86.1,
+    "h1_seconds": 38.2,
+    "h0_seconds": 19.6
+  },
+  "stromal": {
+    "ph_seconds": 17.0,
+    "h1_seconds": 8.1,
+    "h0_seconds": 4.6
+  },
+  "immune": {
+    "ph_seconds": 6.8,
+    "h1_seconds": 3.9,
+    "h0_seconds": 2.2
+  },
+  "other": {
+    "ph_seconds": 7.8,
+    "h1_seconds": 4.4,
+    "h0_seconds": 2.8
+  },
+  "runtime_seconds": 558.8
+}

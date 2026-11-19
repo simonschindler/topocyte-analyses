@@ -45,6 +45,9 @@ Exploratory. Claude ran it overnight on 2026-11-19 while Simon was away, under t
 | 17 | `pls4-DC` | control | 2 | supervised projection (composition) | 51 density and composition features, z-scored; the same PLS-DA without topology | k=4: 0.736 [0.698, 0.773] | +0.040 [0.009, 0.070] | 2.00 (+0.08 [−0.12, 0.30]) | — |
 | 18 | `pls4-DC+everything50` | idea | 2 | supervised projection (composition + topology) | 51 features + 50 MFA components, z-scored; class-balanced PLS-DA to four components, fitted in each training fold | k=4: 0.739 [0.700, 0.777] | +0.043 [0.013, 0.072] | 2.14 (+0.22 [0.02, 0.43]) | — |
 | 19 | `pls4-residual-density-composition` | diagnostic | 2 | supervised projection (topology beyond composition) | 50 MFA components of 200 residual blocks, z-scored; PLS-DA after regressing every score on density and composition: is any signal left? | k=4: 0.539 [0.488, 0.590] | −0.158 [−0.222, −0.091] | 1.03 (−0.89 [−1.13, −0.64]) | — |
+| 20 | `umap4-everything` | idea | 2 | nonlinear embedding | UMAP to four dimensions of the MFA-weighted 1800 block columns; the UMAP the report draws, in four dimensions (n_neighbors 15, min_dist 0.1, seed 0), as the view | k=4: 0.655 [0.612, 0.696] | −0.042 [−0.077, −0.009] | 2.38 (+0.46 [0.19, 0.71]) | 0.655 |
+| 21 | `percell-everything` | idea | 1 | per-cell curves | MFA of 100 per-cell and 100 cosine blocks; raw blocks replaced by per-cell ones (Betti curve / number of points) | k=4: 0.719 [0.679, 0.758] | +0.022 [−0.014, 0.056] | 1.99 (+0.07 [−0.14, 0.28]) | 0.765 |
+| 22 | `percell-only` | idea | 1 | per-cell curves | MFA of the 100 per-cell blocks; the per-cell H0 and H1 blocks alone | k=4: 0.721 [0.684, 0.759] | +0.025 [−0.011, 0.058] | 1.89 (−0.03 [−0.25, 0.20]) | 0.762 |
 
 On the 476 development slides, the main experiment's `everything` space reaches a macro AUC of 0.696 [0.656, 0.736] on four components and 0.749 on twenty. The `D+C` features alone reach 0.764 [0.727, 0.800] (51 features).
 

@@ -245,6 +245,16 @@ def blocks_list(d: dict, sets: tuple[str, ...], models: tuple[str, ...] = c.MODE
     return [d["blocks"][f"{p}:{m}:{k}"] for p in sets for m in models for k in range(c.N_SLICES) if f"{p}:{m}:{k}" in d["blocks"]]
 
 
+def umap_of(X: np.ndarray, n_components: int) -> np.ndarray:
+    """UMAP with the main report's parameters (seeded, so one thread), unsupervised: it may see every slide."""
+    import umap
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=".*n_jobs value 1 overridden.*")
+        return np.asarray(umap.UMAP(n_neighbors=15, min_dist=0.1, n_components=n_components, random_state=0)
+                          .fit_transform(X), dtype=np.float64)
+
+
 def weighted_columns(blocks: list[np.ndarray]) -> np.ndarray:
     """The MFA-weighted concatenation of the blocks (each divided by the SD of its first score)."""
     return np.hstack([block / block[:, 0].std() for block in blocks])
@@ -328,6 +338,10 @@ def idea_definitions(d: dict) -> list[dict]:
          "method": "pls", "source_k": 50, "inputs": "50 MFA components of 200 residual blocks, z-scored",
          "what": "PLS-DA after regressing every score on density and composition: is any signal left?",
          "build": lambda: mfa_of([residualize(b, DC) for b in blocks_list(d, sets)])},
+        {"name": "umap4-everything", "role": "idea", "mechanism": "nonlinear embedding", "round": 2, "kind": "space",
+         "inputs": "UMAP to four dimensions of the MFA-weighted 1800 block columns",
+         "what": "the UMAP the report draws, in four dimensions (n_neighbors 15, min_dist 0.1, seed 0), as the view",
+         "build": lambda: umap_of(weighted_columns(blocks_list(d, sets)), 4)},
     ]
     if "all:h0_percell:0" in d["blocks"]:
         percell = ("h0_percell", "h1_percell")
