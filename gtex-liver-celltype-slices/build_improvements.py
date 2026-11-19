@@ -135,6 +135,30 @@ def main() -> None:
                 f"{relation(row['vs_DC']['interval'], 'above', 'level with', 'below')} the `D+C` features "
                 f"({sg(row['vs_DC']['difference'])} {iv(row['vs_DC']['interval'])}).")
         secondary = holdout["secondary_on_holdout"]
+        control_row = res[f"{holdout['control']}@4 (control)"] if holdout["control"] else None
+        beat_everything = [n for n in chosen if res[f"{n}@4"]["vs_everything4"]["interval"][0] > 0]
+        beat_dc = [n for n in chosen if res[f"{n}@4"]["vs_DC"]["interval"][0] > 0]
+        reading = []
+        if chosen and not beat_dc and control_row is not None:
+            reading = [
+                "**Reading.**",
+                "",
+                f"- **No chosen idea beats composition.** On unseen slides no chosen idea's difference to the `D+C` "
+                f"features ({res['D+C features']['macro_auc']:.3f}) has its interval above 0: "
+                + "; ".join(f"`{n}` {sg(res[f'{n}@4']['vs_DC']['difference'])} {iv(res[f'{n}@4']['vs_DC']['interval'])}"
+                            for n in chosen) + ".",
+                f"- **The topology-free control matches them.** `{holdout['control']}`, the supervised control without "
+                f"topology, reaches {control_row['macro_auc']:.3f}, "
+                + ("above" if control_row["vs_everything4"]["interval"][0] > 0 else "level with")
+                + " the unsupervised `everything` space.",
+                "- **" + (", ".join(f"`{n}`" for n in beat_everything) + (" beats" if len(beat_everything) == 1 else " beat")
+                          + " `everything`" if beat_everything else "No chosen idea beats `everything`")
+                + ".** What improves separability on a four-component view is supervision and the cell counts, not more topology.",
+                "",
+            ]
+        primary = res["all-cell@4"]["vs_everything4"]  # all-cell minus everything: the primary comparison, reversed
+        primary_text = (f"- Primary comparison on the holdout (`everything` against `all-cell`, four components): "
+                        f"{sg(-primary['difference'])} {iv([-primary['interval'][1], -primary['interval'][0]])}.")
         sections += [
             "## Holdout, scored once",
             "",
@@ -149,9 +173,11 @@ def main() -> None:
             *hold_rows,
             "",
             *verdicts,
+            primary_text,
             f"- Secondary comparison on the holdout (`D+C` + 20 components of `groups` against `D+C`): "
             f"{sg(secondary['difference'])} {iv(secondary['interval'])}.",
             "",
+            *reading,
         ]
     else:
         sections += ["## Holdout", "", "Not scored yet.", ""]

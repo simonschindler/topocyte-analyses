@@ -58,6 +58,30 @@ On the 476 development slides, the main experiment's `everything` space reaches 
   - On equal inputs, `everything` on 20 components reaches 0.749.
 - **Diagnostics,** built to remove signal: `residual-density` 0.630 [0.586, 0.675]; `residual-density-composition` 0.546 [0.499, 0.594]; `pls4-residual-density-composition` 0.539 [0.488, 0.590].
 
-## Holdout
+## Holdout, scored once
 
-Not scored yet.
+- **Chosen by the fixed rule:** `lda4-DC+everything20`, `pls4-everything50`.
+- **Control:** the best supervised control without topology, `lda4-DC`.
+- **When and what:** scored 2026-11-20 00:04 on 118 slides (healthy 13, congestion 31, steatosis 40, necrosis 4, inflammation/hepatitis 2, fibrosis 10, cirrhosis 11, unclassified 7).
+- **Uncertainty:** with groups of two and four slides, bootstrap draws within a group understate it, so every holdout interval is too narrow for the small groups.
+
+| entry | holdout macro AUC [95%] | vs `everything`@4 | vs `D+C` features | purity ×chance (vs `everything`) |
+|---|---|---|---|---|
+| everything@4 | 0.715 [0.635, 0.797] | 0.000 [0.000, 0.000] | −0.059 [−0.110, −0.008] | 2.19 (0.00 [0.00, 0.00]) |
+| all-cell@4 | 0.627 [0.559, 0.695] | −0.088 [−0.143, −0.036] | −0.147 [−0.204, −0.093] | 1.50 (−0.69 [−1.10, −0.34]) |
+| D+C features | 0.774 [0.719, 0.828] | +0.059 [0.008, 0.110] | 0.000 [0.000, 0.000] | — |
+| D+C + groups (20) | 0.747 [0.697, 0.799] | +0.032 [−0.040, 0.106] | −0.026 [−0.075, 0.022] | — |
+| lda4-DC@4 (control) | 0.768 [0.719, 0.816] | +0.053 [0.002, 0.105] | −0.005 [−0.030, 0.018] | 3.25 (+1.05 [0.52, 1.56]) |
+| lda4-DC+everything20@4 | 0.784 [0.749, 0.821] | +0.069 [0.002, 0.136] | +0.010 [−0.027, 0.051] | 2.99 (+0.80 [0.27, 1.31]) |
+| pls4-everything50@4 | 0.781 [0.737, 0.823] | +0.066 [−0.007, 0.141] | +0.007 [−0.036, 0.053] | 3.01 (+0.82 [−0.53, 2.17]) |
+
+- `lda4-DC+everything20`: above `everything` (+0.069 [0.002, 0.136]), level with the `D+C` features (+0.010 [−0.027, 0.051]).
+- `pls4-everything50`: level with `everything` (+0.066 [−0.007, 0.141]), level with the `D+C` features (+0.007 [−0.036, 0.053]).
+- Primary comparison on the holdout (`everything` against `all-cell`, four components): +0.088 [0.036, 0.143].
+- Secondary comparison on the holdout (`D+C` + 20 components of `groups` against `D+C`): −0.026 [−0.075, 0.022].
+
+**Reading.**
+
+- **No chosen idea beats composition.** On unseen slides no chosen idea's difference to the `D+C` features (0.774) has its interval above 0: `lda4-DC+everything20` +0.010 [−0.027, 0.051]; `pls4-everything50` +0.007 [−0.036, 0.053].
+- **The topology-free control matches them.** `lda4-DC`, the supervised control without topology, reaches 0.768, above the unsupervised `everything` space.
+- **`lda4-DC+everything20` beats `everything`.** What improves separability on a four-component view is supervision and the cell counts, not more topology.

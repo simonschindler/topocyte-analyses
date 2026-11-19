@@ -231,8 +231,9 @@ def section_improvements() -> str:
     dev = json.loads(dev_path.read_text())
     n_ideas = sum(entry["role"] == "idea" for entry in dev["ideas"])
     text = (f"<p>Exploratory, after the main readouts: {n_ideas} modelling ideas (and their baselines, controls and "
-            f"diagnostics) were scored on the {dev['dev_slides']} development slides only; the rule for choosing which reach "
-            "the holdout was fixed before any readout (design.md), and the 118 holdout slides were scored once. "
+            f"diagnostics) were scored on the {dev['dev_slides']} development slides only. The rule for choosing which reach "
+            "the holdout was fixed before any readout (design.md); its reading (roles, mechanisms) was settled after the "
+            "development results and before the holdout, which was scored once (progress.md). "
             "Every idea, its development readouts and the full holdout table are in <code>improvements.md</code>.</p>")
     if not hold_path.exists():
         return text + "<p>The holdout has not been scored yet.</p>"

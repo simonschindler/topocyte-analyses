@@ -64,7 +64,7 @@ Ruling: the summary leads with a "Reading" paragraph and states the composition 
   - A first, mistaken run of the old dense script at slice 9 (7 min) was moved to the Trash.
 - 22:50, round 2 (post hoc, after round 1 and the main readouts): h0cosine-everything +0.023; **pls4-allcolumns +0.072 [0.044, 0.100]**; pls4-DC +0.040; pls4-DC+everything50 +0.043.
 - 22:50, diagnostic: **pls4-residual-density-composition 0.539 [0.488, 0.590]**. With density and composition regressed out (linearly), even a supervised projection finds no separation: the topology per group carries nothing linear beyond composition.
-- 23:12: a whole-study review (fresh reviewer, model opus), before the holdout ran. Verdict: with fixes. The main study's numbers, verdicts and verification hold. The fix pass, before the single holdout run:
+- About 23:00: a whole-study review (fresh reviewer, model opus), before the holdout ran. Verdict: with fixes. The main study's numbers, verdicts and verification hold. The fix pass, before the single holdout run:
   - **Ruling: how ideas reach the holdout** (my reading of design.md's ruling 2, fixed before the run).
     - Only entries whose role is `idea` compete. Baselines, controls (the same method without topology, or on all-cell topology) and diagnostics never go.
     - Mechanisms are canonical, and ideas sharing one compete for a single place:
@@ -91,3 +91,19 @@ Ruling: the summary leads with a "Reading" paragraph and states the composition 
     - the small-group caveat;
     - the report's improvement section.
   - Round 1 and 2 rerun under the fixed code: the same AUCs, now with out-of-fold purity.
+- 23:14, round 2: `umap4-everything` (the report's UMAP in four dimensions as the view). AUC −0.042 [−0.077, −0.009] against `everything`, but purity +0.46 [0.19, 0.71]: UMAP keeps neighbourhoods, which a linear readout cannot use. Not eligible.
+- 00:03: per-cell fits done (75.1 min in all).
+  - `percell-everything` +0.022 [−0.014, 0.056];
+  - `percell-only` +0.025 [−0.011, 0.058].
+  - Both intervals cross 0, so neither is eligible.
+- 00:04: selection dry run (reads only `improve_dev.json`): `lda4-DC+everything20` and `pls4-everything50`; control `lda4-DC`. Pre-holdout state committed (a395cff).
+- 00:04: **holdout scored once** (118 slides; holdout macro AUC):
+  - `everything@4` 0.715 [0.635, 0.797];
+  - `all-cell@4` 0.627;
+  - `D+C` features 0.774 [0.719, 0.828];
+  - `D+C` + groups20 0.747;
+  - control `lda4-DC` 0.768;
+  - `lda4-DC+everything20` 0.784 [0.749, 0.821]: +0.069 [0.002, 0.136] vs everything, +0.010 [−0.027, 0.051] vs D+C;
+  - `pls4-everything50` 0.781: +0.066 [−0.007, 0.141] vs everything, +0.007 [−0.036, 0.053] vs D+C.
+  - Both comparisons fixed in advance point the same way on the holdout: primary +0.088 [0.036, 0.143], secondary −0.026 [−0.075, 0.022].
+  - Reading: supervision and cell counts improve the four-component view; topology does not.
