@@ -1,0 +1,85 @@
+{
+  "slice": 9,
+  "topocyte_commit": "bd1d5c04fc7323c5a861816d5a0ad77f5a040f00",
+  "timings": {
+    "ph_seconds": 17.8,
+    "ph_workers": 10,
+    "slides_without_h1": 0,
+    "h1_none_seconds": 8.3,
+    "h1_none_solver": "arpack",
+    "h1_cosine_seconds": 9.3,
+    "h1_cosine_solver": "arpack",
+    "h0_none_seconds": 4.7,
+    "h0_none_solver": "arpack",
+    "h0_cosine_seconds": 5.3,
+    "h0_cosine_solver": "arpack"
+  },
+  "dropped": [],
+  "n_bars_equal": true,
+  "h0_none": {
+    "min_abs_corr": 0.9999999999999998,
+    "abs_corr": [
+      1.0,
+      1.0,
+      1.0,
+      0.9999999999999999,
+      0.9999999999999998,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "max_fve_diff": 0.0,
+    "passed": true
+  },
+  "h1_none": {
+    "min_abs_corr": 0.9999999999999998,
+    "abs_corr": [
+      0.9999999999999998,
+      1.0,
+      1.0,
+      0.9999999999999998,
+      1.0,
+      0.9999999999999998,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "max_fve_diff": 0.0,
+    "passed": true
+  },
+  "h0_cosine": {
+    "min_abs_corr": 0.9999999999999999,
+    "abs_corr": [
+      1.0,
+      0.9999999999999999,
+      1.0,
+      0.9999999999999999,
+      1.0,
+      0.9999999999999999,
+      0.9999999999999999,
+      1.0,
+      1.0
+    ],
+    "max_fve_diff": 0.0,
+    "passed": true
+  },
+  "h1_cosine": {
+    "min_abs_corr": 0.9999999999999998,
+    "abs_corr": [
+      1.0,
+      1.0,
+      1.0,
+      1.0,
+      0.9999999999999998,
+      1.0,
+      1.0,
+      1.0,
+      1.0
+    ],
+    "max_fve_diff": 0.0,
+    "passed": true
+  },
+  "passed": true,
+  "runtime_seconds": 49.6
+}

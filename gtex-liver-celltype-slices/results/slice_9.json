@@ -1,0 +1,61 @@
+{
+  "slice": 9,
+  "threshold_cells_per_mm2": 4059.551924416354,
+  "topocyte": "0.1.0.post711.dev0+18e3aa5",
+  "topocyte_commit": "bd1d5c04fc7323c5a861816d5a0ad77f5a040f00",
+  "epithelial": {
+    "ph_seconds": 6.1,
+    "ph_workers": 10,
+    "slides_without_h1": 0,
+    "h1_none_seconds": 2.6,
+    "h1_none_solver": "arpack",
+    "h1_cosine_seconds": 3.1,
+    "h1_cosine_solver": "arpack",
+    "h0_none_seconds": 1.9,
+    "h0_none_solver": "arpack",
+    "h0_cosine_seconds": 1.9,
+    "h0_cosine_solver": "arpack"
+  },
+  "stromal": {
+    "ph_seconds": 3.7,
+    "ph_workers": 10,
+    "slides_without_h1": 0,
+    "h1_none_seconds": 1.5,
+    "h1_none_solver": "arpack",
+    "h1_cosine_seconds": 2.0,
+    "h1_cosine_solver": "arpack",
+    "h0_none_seconds": 1.1,
+    "h0_none_solver": "arpack",
+    "h0_cosine_seconds": 1.3,
+    "h0_cosine_solver": "arpack"
+  },
+  "immune": {
+    "ph_seconds": 2.5,
+    "ph_workers": 10,
+    "slides_without_h1": 0,
+    "h1_none_seconds": 1.2,
+    "h1_none_solver": "arpack",
+    "h1_cosine_seconds": 1.6,
+    "h1_cosine_solver": "arpack",
+    "h0_none_seconds": 0.9,
+    "h0_none_solver": "arpack",
+    "h0_cosine_seconds": 0.9,
+    "h0_cosine_solver": "arpack"
+  },
+  "other": {
+    "ph_seconds": 2.5,
+    "ph_workers": 10,
+    "slides_without_h1": 0,
+    "h1_none_seconds": 1.3,
+    "h1_none_solver": "arpack",
+    "h1_cosine_seconds": 1.7,
+    "h1_cosine_solver": "arpack",
+    "h0_none_seconds": 0.9,
+    "h0_none_solver": "arpack",
+    "h0_cosine_seconds": 0.9,
+    "h0_cosine_solver": "arpack"
+  },
+  "dropped_blocks": [],
+  "peak_rss_gb": 2.87,
+  "runtime_seconds": 44.6
+}
