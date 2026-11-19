@@ -1,0 +1,14 @@
+{
+  "status": "decided before the Betti study's run (its ledger Task 4), adopted unchanged here (ledger Task 1); descriptive, nothing tuned",
+  "readout": "AUC P(cirrhosis > healthy), 95% bootstrap interval (groups resampled separately), median gap in SD",
+  "variants": {
+    "raw": "PC2 as fitted, oriented so that cirrhosis's median lies above healthy's",
+    "share": "PC2 residualised on the densest-decile share and its square",
+    "strict": "PC2 residualised on the share, its square, PC1, PC1^2, log10 median density and log10 cell count"
+  },
+  "bootstrap": {
+    "draws": 4000,
+    "seed": 12345
+  },
+  "runtime_seconds": 1.0
+}

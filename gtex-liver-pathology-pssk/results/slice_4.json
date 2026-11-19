@@ -1,0 +1,19 @@
+{
+  "slice": 4,
+  "threshold_cells_per_mm2": 1871.0879869216897,
+  "n_cells_kept": 75731474,
+  "kernel": "gudhi PersistenceScaleSpaceKernel through random Fourier features (RBFSampler)",
+  "n_features": 1000,
+  "seed": 0,
+  "bandwidth_px2": {
+    "h0": 184.02331697940826,
+    "h1": 33.26944480367814
+  },
+  "n_components": 9,
+  "topocyte": "0.1.0.post651.dev0+7db4d26",
+  "runtime_seconds": 849.6,
+  "ph_seconds": 264.6,
+  "ph_workers": 5,
+  "h0_feature_seconds": 280.1,
+  "h1_feature_seconds": 298.0
+}

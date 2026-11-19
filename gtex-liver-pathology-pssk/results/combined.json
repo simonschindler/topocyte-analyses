@@ -1,0 +1,47 @@
+{
+  "weighting": "multiple factor analysis: each block divided by the square root of its first score's variance",
+  "spaces": {
+    "all": {
+      "blocks": 40,
+      "columns": 360,
+      "pc1": 0.5813,
+      "components_for_90": 4
+    },
+    "h0_none": {
+      "blocks": 10,
+      "columns": 90,
+      "pc1": 0.8429,
+      "components_for_90": 2
+    },
+    "h1_none": {
+      "blocks": 10,
+      "columns": 90,
+      "pc1": 0.8175,
+      "components_for_90": 2
+    },
+    "h0_cosine": {
+      "blocks": 10,
+      "columns": 90,
+      "pc1": 0.5967,
+      "components_for_90": 2
+    },
+    "h1_cosine": {
+      "blocks": 10,
+      "columns": 90,
+      "pc1": 0.5132,
+      "components_for_90": 4
+    }
+  },
+  "n_keep": 20,
+  "umap": {
+    "params": {
+      "n_neighbors": 15,
+      "min_dist": 0.1,
+      "metric": "euclidean",
+      "n_components": 2,
+      "random_state": 0
+    },
+    "umap_learn": "0.5.12"
+  },
+  "runtime_seconds": 7.0
+}
