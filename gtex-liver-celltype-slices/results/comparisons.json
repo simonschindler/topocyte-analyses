@@ -1,0 +1,591 @@
+{
+ "n_draws": 4000,
+ "seed": 12345,
+ "aliases": {
+  "all-cell": "mfa:all:h0_none+h1_none+h0_cosine+h1_cosine",
+  "groups": "mfa:epithelial+stromal+immune+other:h0_none+h1_none+h0_cosine+h1_cosine",
+  "everything": "mfa:all+epithelial+stromal+immune+other:h0_none+h1_none+h0_cosine+h1_cosine"
+ },
+ "primary_k4": {
+  "a": "everything@4",
+  "b": "all-cell@4",
+  "auc": {
+   "a": 0.7050263035465697,
+   "b": 0.5992468645750383,
+   "difference": 0.10577943897153141,
+   "interval": [
+    0.07304676798462502,
+    0.13755467658070192
+   ]
+  },
+  "purity": {
+   "a": 2.119073143497611,
+   "b": 1.5983851459785208,
+   "difference": 0.5206879975190901,
+   "interval": [
+    0.26562071202086274,
+    0.7858980759361776
+   ]
+  },
+  "verdict": "enhanced",
+  "below_zero": {
+   "auc": false,
+   "purity": false
+  },
+  "fixed_in_advance": true
+ },
+ "primary_k20": {
+  "a": "everything@20",
+  "b": "all-cell@20",
+  "auc": {
+   "a": 0.7598564610977236,
+   "b": 0.7330541579439612,
+   "difference": 0.02680230315376242,
+   "interval": [
+    0.0005910518388832694,
+    0.053403967354022815
+   ]
+  },
+  "purity": {
+   "a": 2.061601421000391,
+   "b": 1.7395026440645398,
+   "difference": 0.3220987769358512,
+   "interval": [
+    0.02621155174090978,
+    0.5955075465318572
+   ]
+  },
+  "verdict": "enhanced",
+  "below_zero": {
+   "auc": false,
+   "purity": false
+  },
+  "fixed_in_advance": false
+ },
+ "secondary": {
+  "a": "features:D+C+groups20",
+  "b": "features:D+C",
+  "auc": {
+   "a": 0.7725651724161124,
+   "b": 0.7730301452110118,
+   "difference": -0.000464972794899321,
+   "interval": [
+    -0.022587574156238195,
+    0.02352838335050126
+   ]
+  },
+  "adds": false
+ },
+ "ladder": [
+  {
+   "job": "features:D",
+   "label": "density summaries D",
+   "auc": 0.6907910134677993,
+   "interval": [
+    0.6512007544079442,
+    0.731582483316274
+   ],
+   "purity": null
+  },
+  {
+   "job": "features:C",
+   "label": "composition C",
+   "auc": 0.7746060106912706,
+   "interval": [
+    0.7409743524732059,
+    0.8069122798834351
+   ],
+   "purity": null
+  },
+  {
+   "job": "features:D+C",
+   "label": "D + C",
+   "auc": 0.7730301452110118,
+   "interval": [
+    0.7405561408310267,
+    0.8048324163175575
+   ],
+   "purity": null
+  },
+  {
+   "job": "all-cell@20",
+   "label": "all-cell topology (20)",
+   "auc": 0.7330541579439612,
+   "interval": [
+    0.6956163792736124,
+    0.7678491195619418
+   ],
+   "purity": 1.7395026440645398
+  },
+  {
+   "job": "groups@20",
+   "label": "per-group topology (20)",
+   "auc": 0.7598753878686809,
+   "interval": [
+    0.7208642728299962,
+    0.7951823646637288
+   ],
+   "purity": 2.1317217471677807
+  },
+  {
+   "job": "everything@20",
+   "label": "everything (20)",
+   "auc": 0.7598564610977236,
+   "interval": [
+    0.7206576112305008,
+    0.7954925239913029
+   ],
+   "purity": 2.061601421000391
+  },
+  {
+   "job": "features:D+C+all-cell20",
+   "label": "D + C + all-cell (20)",
+   "auc": 0.762391069035928,
+   "interval": [
+    0.7262622155517572,
+    0.7956210944358773
+   ],
+   "purity": null
+  },
+  {
+   "job": "features:D+C+groups20",
+   "label": "D + C + per-group (20)",
+   "auc": 0.7725651724161124,
+   "interval": [
+    0.7362773552197062,
+    0.8065573372629667
+   ],
+   "purity": null
+  },
+  {
+   "job": "features:D+C+everything20",
+   "label": "D + C + everything (20)",
+   "auc": 0.7718392262735724,
+   "interval": [
+    0.7353480051908068,
+    0.8057738424424439
+   ],
+   "purity": null
+  }
+ ],
+ "ladder_differences": [
+  {
+   "a": "features:D+C+groups20",
+   "b": "features:D+C",
+   "auc": {
+    "a": 0.7725651724161124,
+    "b": 0.7730301452110118,
+    "difference": -0.000464972794899321,
+    "interval": [
+     -0.022587574156238195,
+     0.02352838335050126
+    ]
+   }
+  },
+  {
+   "a": "features:D+C+all-cell20",
+   "b": "features:D+C",
+   "auc": {
+    "a": 0.762391069035928,
+    "b": 0.7730301452110118,
+    "difference": -0.01063907617508375,
+    "interval": [
+     -0.03593915817476945,
+     0.01562973489966617
+    ]
+   }
+  },
+  {
+   "a": "features:D+C+everything20",
+   "b": "features:D+C+all-cell20",
+   "auc": {
+    "a": 0.7718392262735724,
+    "b": 0.762391069035928,
+    "difference": 0.009448157237644361,
+    "interval": [
+     -0.011673415147002857,
+     0.028899928151402486
+    ]
+   }
+  },
+  {
+   "a": "everything@20",
+   "b": "all-cell@20",
+   "auc": {
+    "a": 0.7598564610977236,
+    "b": 0.7330541579439612,
+    "difference": 0.02680230315376242,
+    "interval": [
+     0.0005910518388832694,
+     0.053403967354022815
+    ]
+   }
+  },
+  {
+   "a": "groups@20",
+   "b": "all-cell@20",
+   "auc": {
+    "a": 0.7598753878686809,
+    "b": 0.7330541579439612,
+    "difference": 0.02682122992471969,
+    "interval": [
+     -0.00013956461776037338,
+     0.053911564243810606
+    ]
+   }
+  }
+ ],
+ "vs_healthy": {
+  "all-cell@4": [
+   {
+    "condition": "congestion",
+    "auc": 0.5756598240469208,
+    "interval": [
+     0.4910923753665689,
+     0.657094330400782
+    ]
+   },
+   {
+    "condition": "steatosis",
+    "auc": 0.6367386738673867,
+    "interval": [
+     0.5621699669966997,
+     0.709045904590459
+    ]
+   },
+   {
+    "condition": "necrosis",
+    "auc": 0.49242424242424243,
+    "interval": [
+     0.31734006734006737,
+     0.6675294612794613
+    ]
+   },
+   {
+    "condition": "inflammation/hepatitis",
+    "auc": 0.3611111111111111,
+    "interval": [
+     0.17676767676767677,
+     0.5505366161616163
+    ]
+   },
+   {
+    "condition": "fibrosis",
+    "auc": 0.7303030303030303,
+    "interval": [
+     0.6336363636363637,
+     0.8209166666666667
+    ]
+   },
+   {
+    "condition": "cirrhosis",
+    "auc": 0.86735778841042,
+    "interval": [
+     0.7907961190855928,
+     0.9364699627857522
+    ]
+   }
+  ],
+  "everything@4": [
+   {
+    "condition": "congestion",
+    "auc": 0.5835777126099707,
+    "interval": [
+     0.493841642228739,
+     0.6705767350928641
+    ]
+   },
+   {
+    "condition": "steatosis",
+    "auc": 0.6998949894989499,
+    "interval": [
+     0.6290879087908791,
+     0.7641032853285328
+    ]
+   },
+   {
+    "condition": "necrosis",
+    "auc": 0.9090909090909091,
+    "interval": [
+     0.819023569023569,
+     0.9747474747474747
+    ]
+   },
+   {
+    "condition": "inflammation/hepatitis",
+    "auc": 0.7196969696969697,
+    "interval": [
+     0.5353219696969697,
+     0.8813131313131313
+    ]
+   },
+   {
+    "condition": "fibrosis",
+    "auc": 0.8372727272727273,
+    "interval": [
+     0.7545454545454545,
+     0.9109090909090909
+    ]
+   },
+   {
+    "condition": "cirrhosis",
+    "auc": 0.9686337054758107,
+    "interval": [
+     0.9258373205741627,
+     0.9962852206273259
+    ]
+   }
+  ],
+  "all-cell@20": [
+   {
+    "condition": "congestion",
+    "auc": 0.6744868035190615,
+    "interval": [
+     0.5933431085043989,
+     0.7504472140762464
+    ]
+   },
+   {
+    "condition": "steatosis",
+    "auc": 0.7091209120912091,
+    "interval": [
+     0.6402602760276027,
+     0.7744524452445245
+    ]
+   },
+   {
+    "condition": "necrosis",
+    "auc": 0.8762626262626263,
+    "interval": [
+     0.7845117845117845,
+     0.9503367003367004
+    ]
+   },
+   {
+    "condition": "inflammation/hepatitis",
+    "auc": 0.7272727272727273,
+    "interval": [
+     0.5340593434343435,
+     0.8939709595959597
+    ]
+   },
+   {
+    "condition": "fibrosis",
+    "auc": 0.8490909090909091,
+    "interval": [
+     0.7702954545454546,
+     0.9184848484848485
+    ]
+   },
+   {
+    "condition": "cirrhosis",
+    "auc": 0.9861775651249336,
+    "interval": [
+     0.9691653375863902,
+     0.9973418394471026
+    ]
+   }
+  ],
+  "groups@20": [
+   {
+    "condition": "congestion",
+    "auc": 0.678494623655914,
+    "interval": [
+     0.595202834799609,
+     0.756891495601173
+    ]
+   },
+   {
+    "condition": "steatosis",
+    "auc": 0.7307980798079808,
+    "interval": [
+     0.6647858535853586,
+     0.7932043204320433
+    ]
+   },
+   {
+    "condition": "necrosis",
+    "auc": 0.8156565656565656,
+    "interval": [
+     0.6473063973063973,
+     0.9570707070707071
+    ]
+   },
+   {
+    "condition": "inflammation/hepatitis",
+    "auc": 0.7537878787878788,
+    "interval": [
+     0.5833333333333334,
+     0.8977272727272727
+    ]
+   },
+   {
+    "condition": "fibrosis",
+    "auc": 0.8457575757575757,
+    "interval": [
+     0.763628787878788,
+     0.9154621212121212
+    ]
+   },
+   {
+    "condition": "cirrhosis",
+    "auc": 0.9585326953748007,
+    "interval": [
+     0.9157296650717703,
+     0.9915005316321106
+    ]
+   }
+  ],
+  "everything@20": [
+   {
+    "condition": "congestion",
+    "auc": 0.6836754643206256,
+    "interval": [
+     0.6016617790811339,
+     0.761197458455523
+    ]
+   },
+   {
+    "condition": "steatosis",
+    "auc": 0.734023402340234,
+    "interval": [
+     0.6676398889888989,
+     0.7962083708370837
+    ]
+   },
+   {
+    "condition": "necrosis",
+    "auc": 0.8164983164983165,
+    "interval": [
+     0.6531776094276095,
+     0.952020202020202
+    ]
+   },
+   {
+    "condition": "inflammation/hepatitis",
+    "auc": 0.7537878787878788,
+    "interval": [
+     0.5732007575757576,
+     0.9053030303030303
+    ]
+   },
+   {
+    "condition": "fibrosis",
+    "auc": 0.853030303030303,
+    "interval": [
+     0.7751439393939394,
+     0.9193939393939394
+    ]
+   },
+   {
+    "condition": "cirrhosis",
+    "auc": 0.9585326953748007,
+    "interval": [
+     0.9149322169059011,
+     0.992822966507177
+    ]
+   }
+  ],
+  "features:D+C": [
+   {
+    "condition": "congestion",
+    "auc": 0.6448680351906159,
+    "interval": [
+     0.5638269794721408,
+     0.7214125122189639
+    ]
+   },
+   {
+    "condition": "steatosis",
+    "auc": 0.756900690069007,
+    "interval": [
+     0.6951676417641764,
+     0.8121080858085808
+    ]
+   },
+   {
+    "condition": "necrosis",
+    "auc": 0.9335016835016835,
+    "interval": [
+     0.857723063973064,
+     0.9882154882154882
+    ]
+   },
+   {
+    "condition": "inflammation/hepatitis",
+    "auc": 0.7954545454545454,
+    "interval": [
+     0.6376262626262627,
+     0.9305555555555556
+    ]
+   },
+   {
+    "condition": "fibrosis",
+    "auc": 0.8321212121212122,
+    "interval": [
+     0.746659090909091,
+     0.9057651515151516
+    ]
+   },
+   {
+    "condition": "cirrhosis",
+    "auc": 0.9635832004253057,
+    "interval": [
+     0.9205209994683679,
+     0.9936204146730463
+    ]
+   }
+  ],
+  "features:D+C+groups20": [
+   {
+    "condition": "congestion",
+    "auc": 0.6586510263929619,
+    "interval": [
+     0.5771260997067449,
+     0.7362658846529814
+    ]
+   },
+   {
+    "condition": "steatosis",
+    "auc": 0.7307230723072308,
+    "interval": [
+     0.664714596459646,
+     0.7920867086708672
+    ]
+   },
+   {
+    "condition": "necrosis",
+    "auc": 0.8274410774410774,
+    "interval": [
+     0.6590698653198653,
+     0.9713804713804713
+    ]
+   },
+   {
+    "condition": "inflammation/hepatitis",
+    "auc": 0.8143939393939394,
+    "interval": [
+     0.6628787878787878,
+     0.928030303030303
+    ]
+   },
+   {
+    "condition": "fibrosis",
+    "auc": 0.8566666666666667,
+    "interval": [
+     0.7787803030303031,
+     0.923030303030303
+    ]
+   },
+   {
+    "condition": "cirrhosis",
+    "auc": 0.9699627857522595,
+    "interval": [
+     0.9393872939925572,
+     0.992822966507177
+    ]
+   }
+  ]
+ },
+ "runtime_seconds": 110.4
+}
