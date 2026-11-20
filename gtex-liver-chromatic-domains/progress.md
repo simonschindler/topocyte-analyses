@@ -89,3 +89,69 @@ Claude's calls:
 - **Row order of the pilot table:** within each condition, rows follow the permutation, so half A comes first. `slide_index` numbers the rows. Cost if wrong: none; only the numbering.
 - **pytest pinned** at 9.2.0, the version that resolved: the plan pins every direct dependency but gave pytest no version. Cost: none.
 - **`read_slide` checks** that the slide's first and last cohort rows belong to it, beside the coordinates' shape and finiteness. Cost: two reads of a slide code.
+
+## Task 2: chromatic six-packs and pair counts (2026-11-20)
+
+- **Module:** `chromatic.py`, the numba port from chalc-scaling `8f370c6` (`report/port/chromatic_port.py`), crediting chalc and di Montesano et al. (arXiv:2212.03128). The plan's changes:
+  - values squared (px²) after the facet-max pass;
+  - faces up to dimension 2, with a private `_max_face_dim=3` route for the test;
+  - one boundary matrix per complex, reused for every class present;
+  - class codes 0..3 in the class masks, and a lift over the classes present only.
+- **The controller's rulings, applied:**
+  - cells of one class at one position are one point of the lift: merged before the triangulation, and the cells mapped back to cell ids;
+  - pair counts triangulate the distinct positions; every pair of cells across a Delaunay edge, and every pair at one position, is an edge;
+  - numba kernels serial, phimaker on one thread;
+  - the codomain once per ball, from the first class present.
+- **Tests:** `test_chromatic.py`, 23 tests, pass in 6.0 s with warnings as errors and the pinned topocyte on `PYTHONPATH`.
+  - **Against chalc 15.0.1:** all six modules of every class present, degrees 0–1, by bar count and bottleneck distance within 1e-9 of the scale. Run on the 5 random clouds and on 150 cells plus 50 copies of their positions with other classes.
+  - **Exact checks:**
+    - the three Betti identities at every bar endpoint, no violation;
+    - faces to dimension 2 against 3, bar for bar, on 3 random clouds and a hex lattice;
+    - same-class duplicates give the six-packs of the cloud without them, bar for bar.
+  - **Against topocyte's alpha PH:** the codomain, and the domain of each class present (classes {0, 2}).
+  - **Edge cases:** an absent class, a one-class ball, 1 and 2 cells, 5 collinear cells, and a 700-cell ball (0.44 s).
+  - **Pair counts:**
+    - the mean over all 180 labellings of a 6-cell cloud, with and without a shared position, equals `pair_expectation` as fractions;
+    - on 200 random cells, `n_edges` = 3n − 3 − hull vertices;
+    - with coincident cells, the counts per class pair equal a brute-force count over every pair of cells.
+- **Timings** (M4, warm numba cache, medians of 5): chalc's six-packs against the port's on the test clouds.
+
+  | cloud | chalc 15.0.1 | port, `full` | port |
+  |---|---|---|---|
+  | 30 cells, 1 class | 2.0 ms | 0.6 ms | 0.5 ms |
+  | 60 cells, 2 classes | 15.3 ms | 2.8 ms | 2.4 ms |
+  | 120 cells, 3 classes | 69.1 ms | 18.0 ms | 16.9 ms |
+  | 200 cells, 4 classes | 337 ms | 96 ms | 93 ms |
+  | 150 cells, 4 classes | 244 ms | 73 ms | 70 ms |
+
+  - **The chalc tests in pytest:** 0.08–0.57 s per call. The first takes 1.8 s with chalc's import and the numba cache load.
+  - **A 200-cell, 4-class ball** (synthetic: uniform positions in a 303.52 px disc, 12 balls per row, medians):
+    - 54 ms per complex with the healthy spike slide's class shares;
+    - 85 ms with the cirrhosis slide's shares;
+    - 97 ms with equal shares.
+  - **Where the time goes:** GUDHI's Delaunay of the 5D lift 22–61 ms, phimaker's four six-packs 30–33 ms, the rest about 3 ms. The spike's real balls took 36 ms (healthy, 137 cells) and 68 ms (cirrhosis, 198 cells).
+  - **numba:** the first call takes 1.3 s with a cold cache and 0.3 s with a warm one.
+
+Claude's calls:
+- **Planar only:** the port's 3D miniball, Qhull engine, timing hooks and value snapping (off in the port) are left out. Cost if wrong: none for planar cells.
+- **Input checks:** `ValueError` for positions that are not (n, 2), a class vector of another length, codes outside 0..3, and an empty ball in `ball_sixpacks`. Without the check, a code of −1 would silently count as class 3 in `pair_counts`. Cost: microseconds per call.
+- **An absent class with `full`:** its kernel, cokernel and relative keys are empty too, as the plan's interface says for every key of an absent class. The inclusion of an empty complex would have cokernel and relative equal to the codomain.
+  - Only domain and image enter the study, and both are empty for an absent class.
+  - Cost if wrong: none for the features; a check must apply the identities to present classes only, as the tests do.
+- **Tests beyond the plan's list**, each shown to fail on a deliberate break of the code it covers:
+  - **the duplicate test** (the controller's ruling);
+  - **a hex lattice in `test_dim2_equals_dim3`.** The facet-max pass never fires up to dimension 2; on a 12×12 lattice it raises 21 tetrahedra, and phimaker refuses the dimension-3 matrix without it;
+  - **exact rounding of `pair_expectation`:** 300 random draws against `fractions.Fraction`;
+  - **the brute-force pair count;**
+  - **the input checks.**
+
+  Deliberate breaks that no test can see, because they do not change any result:
+  - dropping the explicit merge (GUDHI also drops duplicate points);
+  - lifting over all four codes (any affinely independent placement of the colours gives the same Delaunay cells);
+  - taking the codomain from another class.
+- **Finding for the verifier (Task 8): exact ties.** On a 12×12 hex lattice (10 px spacing, 3 classes), the port and chalc differ by ulps in 1,320 of 4,950 simplex values.
+  - Their kernel H0 diagrams then differ by 2–5 bars, all shorter than 1e-12 of the scale; the bottleneck distance is at most 3e-14 px². After both sides drop bars that short, every module matches.
+  - The unchanged port at `8f370c6` shows the same. Its own 18×18 lattice check passed by the luck of its scale and seed.
+  - The random clouds have no such ties, and neither do the real coordinates: float32 values on GTEX-YJ89-1426, with no two cells at one position.
+  - The verifier's bar-count criterion could still trip on an exactly tied real ball. Dropping bars shorter than 1e-12 of the scale before comparing would make it robust.
+  - Cost if ignored: a spurious verifier failure, not a wrong result.
