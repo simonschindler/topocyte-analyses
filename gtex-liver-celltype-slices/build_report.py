@@ -56,6 +56,22 @@ FACETS = (
 MODEL_LABEL = {"h0_none": "H0 raw", "h1_none": "H1 raw", "h0_cosine": "H0 cosine", "h1_cosine": "H1 cosine"}
 SET_LABEL = {"all": "all cells", "epithelial": "epithelial", "stromal": "stromal", "immune": "immune", "other": "other"}
 PAIRS = [(i, j) for i in range(4) for j in range(i + 1, 4)]
+# One name per input everywhere (the glossary's): job ids of readouts.json / holdout entries -> display labels.
+DISPLAY = {
+    "features:D": "D", "features:C": "C", "features:D+C": "D+C", "D+C features": "D+C",
+    "features:D+C+all-cell20": "D+C + all-cell@20", "features:D+C+groups20": "D+C + groups@20",
+    "features:D+C+everything20": "D+C + everything@20", "D+C + groups (20)": "D+C + groups@20",
+}
+LADDER_WHAT = {
+    "features:D": "density summaries", "features:C": "cells per group and slice", "features:D+C": "both",
+    "all-cell@20": "all-cell topology", "groups@20": "the four groups' topology", "everything@20": "all five point sets' topology",
+    "features:D+C+all-cell20": "D+C plus all-cell topology", "features:D+C+groups20": "D+C plus the groups' topology",
+    "features:D+C+everything20": "D+C plus all topology",
+}
+
+
+def display(job: str) -> str:
+    return DISPLAY.get(job, job)
 
 plt.rcParams.update({
     "font.family": "sans-serif", "font.sans-serif": ["Helvetica Neue", "Arial", "DejaVu Sans"], "font.size": 8.5,
@@ -90,7 +106,8 @@ def html_table(header: list[str], rows: list[list[str]], cls: str = "") -> str:
 
 
 def fmt_interval(values: list[float], digits: int = 3) -> str:
-    return f"[{values[0]:.{digits}f}, {values[1]:.{digits}f}]".replace("-", "−")
+    lo, hi = (0.0 if round(v, digits) == 0 else v for v in values)  # no "−0.000"
+    return f"[{lo:.{digits}f}, {hi:.{digits}f}]".replace("-", "−")
 
 
 def signed(value: float, digits: int = 3) -> str:
@@ -223,6 +240,106 @@ def figure_intervals(rows: list[tuple[str, float, list[float]]], title: str, xla
     return png_bytes(fig)
 
 
+def section_glossary(v: dict) -> str:
+    """Every term and label of the report, with its numbers taken from the results (``v``)."""
+    groups_text = "; ".join(f"{g} ({', '.join(v['members'][g])})" for g in c.CELL_GROUPS)
+    conditions_text = ", ".join(f"{cond} ({v['counts'][cond]})" for cond in c.CONDITIONS)
+    n_sets, n_models = len(c.POINT_SETS), len(c.MODEL_NAMES)
+    entries = [
+        ("Slides and labels", [
+            ("slide", f"One GTEx liver whole-slide image: {v['n_slides']} slides, one per donor."),
+            ("condition", f"Each slide's pathology group, ranked by severity as in the sibling study. The {len(c.CONDITIONS)} "
+                          f"conditions are scored: {conditions_text}. Unclassified ({v['counts']['unclassified']} slides, no "
+                          "pathology category) is fitted as its own class and never scored."),
+            ("development, holdout", f"Improvement phase only (section 9): a fifth of each group, {v['n_holdout']} slides drawn at "
+                                     f"random before any result, is the holdout; the other {v['n_dev']} are the development slides."),
+        ]),
+        ("Cells and density", [
+            ("cell group", f"The {v['n_types']} HistoPLUS cell types merged into four: {groups_text}."),
+            ("ρ, 10-NN density", "Cells per mm² around a cell, from the distance to its tenth nearest neighbour among all cells "
+                                 "of the slide."),
+            ("density slice 0–9", f"The cells whose ρ is at or above the k-th decile of ρ over all {v['n_cells']:,} cells: slice 0 "
+                                  "keeps every cell, slice 9 the densest tenth. The thresholds are the same for every slide and "
+                                  "every cell group."),
+            ("point set", f"The cells that go into one persistence computation: all cells, or one of the four cell groups "
+                          f"({n_sets} point sets)."),
+        ]),
+        ("Topology of one slide", [
+            ("H0, H1", "Connected components and loops of the alpha filtration, as disks around the cells grow."),
+            ("Betti curve", "The number of H0 or H1 features alive at each scale, exact from the bar endpoints."),
+            ("model", "How the curves are compared. Raw: as they are; a raw H0 curve starts at the number of cells, so it carries "
+                      "the cell count. Cosine: each curve divided by its length, so only its shape counts. H0 raw, H1 raw, H0 cosine "
+                      f"and H1 cosine are the {n_models} models."),
+            ("fPCA, PC, FVE", f"Functional PCA of the {v['n_slides']} slides' curves for one point set, model and slice gives each "
+                              f"slide {c.N_COMPONENTS} scores, PC1 to PC{c.N_COMPONENTS}; the FVE is a component's fraction of "
+                              "variance explained."),
+            ("block", f"Those {c.N_COMPONENTS} scores: {n_sets} point sets × {n_models} models × {c.N_SLICES} slices = "
+                      f"{v['n_blocks']} blocks, {v['n_allcell_blocks']} of them all-cell (from the sibling study) and "
+                      f"{v['n_blocks'] - v['n_allcell_blocks']} of the four groups."),
+        ]),
+        ("Combined spaces", [
+            ("MFA, combined space", "Multiple factor analysis: each block divided by the standard deviation of its first score, "
+                                    f"the blocks joined, then a PCA; {v['n_keep']} components are kept. Every combined space uses "
+                                    "all ten slices."),
+            ("immune + other · H0 cosine", "How the heatmaps and captions name a combined space: the point sets before the dot, "
+                                           f"the models after it. All {v['n_spaces']} combinations of point sets and models are built."),
+            ("all-cell", f"The MFA of the {v['n_allcell_blocks']} all-cell blocks (the sibling study's combined space)."),
+            ("groups", f"The MFA of the {v['n_blocks'] - v['n_allcell_blocks']} blocks of the four cell groups, without the "
+                       "all-cell blocks."),
+            ("everything", f"The MFA of all {v['n_blocks']} blocks."),
+            ("@k", "A space's first k components, the input of both readouts: all-cell@20 is the first 20 components of "
+                   "all-cell. @4 is what the scatter plots show; a single block has only nine components (@9)."),
+        ]),
+        ("Baselines without topology", [
+            ("D", f"Density summaries, {v['wD']} numbers per slide: log10 median ρ, log10 number of cells, and the share of the "
+                  "slide's cells kept at slices 1 to 9."),
+            ("C", f"Composition, {v['wC']} numbers per slide: log10(1 + cells of each group at each slice)."),
+            ("D+C", f"Both, {v['wDC']} numbers. As an input (tables, ladder), the numbers themselves go into the logistic "
+                    "regression; D@4, C@4 and D+C@4 are the first four components of a PCA of the standardized numbers, and "
+                    "C@4 is called the composition PCA."),
+            ("D+C + groups@20", f"The {v['wDC']} numbers and the first 20 components of groups in one logistic regression; "
+                                "likewise D+C + all-cell@20 and D+C + everything@20."),
+        ]),
+        ("Readouts", [
+            ("logistic regression", f"The readout model: multinomial, fixed settings (C = 1, balanced class weights, features "
+                                    f"standardized on the training slides), {v['n_repeats']} repeats of stratified "
+                                    f"{v['n_splits']}-fold cross-validation with the same folds for every space. Every slide is "
+                                    "predicted by models that did not see it (out of fold)."),
+            ("macro AUC", f"For each condition, the AUC of telling it from the other {len(c.CONDITIONS) - 1} (0.5 is chance, 1 is "
+                          "perfect), averaged over the conditions."),
+            ("condition vs healthy", "From the same predictions, the AUC of telling one condition's slides from the healthy ones."),
+            ("purity (× chance)", f"For each slide, the share of its {v['n_neighbors']} nearest slides (Euclidean distance on the "
+                                  "space's first k components) that have its condition, divided by the share chance gives; "
+                                  "averaged per condition, then over the conditions. 1 is random, higher means the conditions "
+                                  "cluster. In the UMAP plane: the same on the drawn two-dimensional UMAP."),
+            ("difference [95% interval]", f"Two inputs compared on the same slides; the interval comes from {v['n_draws']} "
+                                          "resamples of slides within each group. Above 0 means the whole interval is above 0."),
+        ]),
+        ("Comparisons", [
+            ("fixed in advance", "Written into design.md before any readout existed. Primary: everything@4 against all-cell@4, on "
+                                 "both readouts; enhanced if both intervals lie above 0, mixed if one does, not enhanced if "
+                                 "neither does. Secondary, the composition guard: D+C + groups@20 against D+C; per-group topology "
+                                 "adds if the interval lies above 0."),
+            ("ladder", "Nested inputs from D up to D+C + everything@20, to see what each layer adds."),
+            ("descriptive", "Everything else: reported, with no decision rule."),
+        ]),
+        ("Improvement phase (section 9)", [
+            ("idea, control", "An idea is a candidate modelling change, scored on the development slides; a control is the same "
+                              "method without topology, never chosen."),
+            ("lda4-X, pls4-X", "A supervised projection of input X to four components, fitted on labelled slides only: shrinkage "
+                               "linear discriminant analysis (LDA) or partial least squares (PLS-DA). lda4-DC+everything20: LDA "
+                               "of D+C and everything@20; pls4-everything50: PLS-DA of everything's first 50 components; lda4-DC: "
+                               "LDA of D+C alone, the control."),
+            ("vs everything@4, vs D+C", "On the holdout, an entry's difference to everything@4 and to D+C."),
+        ]),
+    ]
+    parts = []
+    for heading, items in entries:
+        rows = "".join(f"<dt>{html.escape(term)}</dt><dd>{html.escape(text)}</dd>" for term, text in items)
+        parts.append(f"<h3>{html.escape(heading)}</h3><dl class='glossary'>{rows}</dl>")
+    return "".join(parts)
+
+
 def section_improvements() -> str:
     """Summary of the improvement phase (details: improvements.md); asserted against its JSON files."""
     dev_path, hold_path = c.RESULTS / "improve_dev.json", c.RESULTS / "improve_holdout.json"
@@ -240,11 +357,11 @@ def section_improvements() -> str:
     hold = json.loads(hold_path.read_text())
     rows = []
     for name, row in hold["results"].items():
-        rows.append([html.escape(name), f"{row['macro_auc']:.3f} <span class='unit'>{fmt_interval(row['auc_interval'])}</span>",
+        rows.append([html.escape(display(name)), f"{row['macro_auc']:.3f} <span class='unit'>{fmt_interval(row['auc_interval'])}</span>",
                      f"{signed(row['vs_everything4']['difference'])} <span class='unit'>{fmt_interval(row['vs_everything4']['interval'])}</span>",
                      f"{signed(row['vs_DC']['difference'])} <span class='unit'>{fmt_interval(row['vs_DC']['interval'])}</span>",
                      f"{row['purity_macro']:.2f}" if "purity_macro" in row else "—"])
-    table = html_table(["holdout entry", "macro AUC", "vs everything (4)", "vs D+C features", "purity ×chance"], rows)
+    table = html_table(["holdout entry", "macro AUC", "vs everything@4", "vs D+C", "purity ×chance"], rows)
     groups = ", ".join(f"{g} {n}" for g, n in hold["holdout_per_group"].items())
     return text + (f"<p>Holdout ({hold['holdout_slides']} slides: {html.escape(groups)}), chosen by the fixed rule: "
                    f"{', '.join(f'<code>{html.escape(n)}</code>' for n in hold['chosen']) or 'none'}. With two "
@@ -291,9 +408,15 @@ def main() -> None:
     def job(alias_or_name: str, k: int) -> dict:
         return readouts[f"{aliases.get(alias_or_name, alias_or_name)}@{k}"]
 
+    def aliases_job(job_id: str) -> str:
+        name, at, k = job_id.rpartition("@")
+        return f"{aliases.get(name, name)}@{k}" if at and not job_id.startswith("features:") else job_id
+
     n_slides = labels.size
     n_cells = int(kept_by_group[0].sum())
     counts = {g: int(np.sum(labels == i)) for i, g in enumerate(c.GROUP_ORDER)}
+    n_blocks = sum(name.startswith("block:") for name in names)
+    n_allcell_blocks = sum(name.startswith("block:all:") for name in names)
 
     # ---------------- section: cell groups
     totals = kept_by_group[0].sum(axis=0)
@@ -333,8 +456,8 @@ def main() -> None:
                              f"{label}: every pair of the first four components and a UMAP; one row per group triple")
         scatter_figures.append(
             f"<figure>{img_tag(png, f'{label}: scatter matrix of PC1 to PC4 and a UMAP, by pathology group')}"
-            f"<figcaption><strong>{html.escape(label)}</strong>: macro AUC {r4['macro_auc']:.3f} (4 components) / "
-            f"{r20['macro_auc']:.3f} (20); purity {r4['purity_macro']:.2f} / {r20['purity_macro']:.2f} times chance, "
+            f"<figcaption><strong>{html.escape(label)}</strong>: macro AUC {r4['macro_auc']:.3f} (@4) / "
+            f"{r20['macro_auc']:.3f} (@20); purity {r4['purity_macro']:.2f} / {r20['purity_macro']:.2f} times chance, "
             f"{umap_purity[name]:.2f} in the UMAP plane (descriptive). "
             "The first six columns are the pairs of the first four components; the last is a UMAP of the weighted "
             "blocks (no units). Each row colours healthy and two other groups over all remaining slides in grey."
@@ -359,7 +482,7 @@ def main() -> None:
         marks[(set_subsets.index(tuple(sets.split("+"))), model_subsets.index(tuple(models.split("+"))))] = alias
     heatmaps = []
     mfa_best = {}
-    for metric, metric_label in (("macro_auc", "macro AUC"), ("purity_macro", "purity, times chance")):
+    for metric, metric_label in (("macro_auc", "macro AUC"), ("purity_macro", "purity (× chance)")):
         for k in (4, 20):
             matrix = grid(metric, k)
             best = np.unravel_index(np.nanargmax(matrix), matrix.shape)
@@ -368,7 +491,7 @@ def main() -> None:
                                  f"{metric_label}, first {k} components, every combined space (outlined: all-cell, groups, everything)",
                                  metric_label, marks)
             heatmaps.append(f"<figure>{img_tag(png, f'Heatmap of {metric_label} at {k} components over 465 combined spaces')}"
-                            f"<figcaption>{metric_label.capitalize()} of the {len(set_subsets) * len(model_subsets)} combined "
+                            f"<figcaption>{metric_label[0].upper() + metric_label[1:]} of the {len(set_subsets) * len(model_subsets)} combined "
                             f"spaces on their first {k} components: rows are the point sets combined, columns the models. "
                             "Outlined: the three named spaces.</figcaption></figure>")
     block_rows = [f"{SET_LABEL[p]}, {MODEL_LABEL[m]}" for p in c.POINT_SETS for m in c.MODEL_NAMES]
@@ -400,21 +523,21 @@ def main() -> None:
                              signed(result["purity"]["difference"], 2), fmt_interval(result["purity"]["interval"], 2), ""])
     primary_table = html_table(["components", "readout", "everything", "all-cell", "difference", "95% interval", "verdict"], primary_rows)
     secondary_text = (
-        f"The <code>D+C</code> features alone reach a macro AUC of {sec['auc']['b']:.3f}; with the first 20 components of "
-        f"<code>groups</code> added, {sec['auc']['a']:.3f}, a difference of {signed(sec['auc']['difference'])} "
+        f"<code>D+C</code> alone reaches a macro AUC of {sec['auc']['b']:.3f}; <code>D+C + groups@20</code>, "
+        f"{sec['auc']['a']:.3f}, a difference of {signed(sec['auc']['difference'])} "
         f"{fmt_interval(sec['auc']['interval'])}. "
         + ("Per-group topology adds to density and composition by the rule fixed in advance: the interval lies above 0."
            if sec["adds"] else
            "By the rule fixed in advance, per-group topology does not add to density and composition: the interval does not lie above 0.")
     )
     assert sec["adds"] == (sec["auc"]["interval"][0] > 0)
-    ladder_png = figure_intervals([(row["label"], row["auc"], row["interval"]) for row in comparisons["ladder"]],
+    ladder_png = figure_intervals([(display(row["job"]), row["auc"], row["interval"]) for row in comparisons["ladder"]],
                                   "Ladder: macro AUC of nested inputs, 20 × stratified 5-fold, 95% bootstrap interval", "macro AUC")
-    ladder_rows = [[row["label"], f"{row['auc']:.3f}", fmt_interval(row["interval"]),
-                    f"{row['purity']:.2f}" if row["purity"] is not None else "—"] for row in comparisons["ladder"]]
-    ladder_table = html_table(["input", "macro AUC", "95% interval", "purity (×chance)"], ladder_rows)
-    diff_label = {row["job"]: row["label"] for row in comparisons["ladder"]}
-    diff_rows = [[f"{diff_label[d['a']]} − {diff_label[d['b']]}", signed(d["auc"]["difference"]), fmt_interval(d["auc"]["interval"])]
+    ladder_rows = [[display(row["job"]), LADDER_WHAT[row["job"]], str(readouts[aliases_job(row["job"])]["k"]), f"{row['auc']:.3f}",
+                    fmt_interval(row["interval"]), f"{row['purity']:.2f}" if row["purity"] is not None else "—"]
+                   for row in comparisons["ladder"]]
+    ladder_table = html_table(["input", "what", "columns", "macro AUC", "95% interval", "purity (×chance)"], ladder_rows)
+    diff_rows = [[f"{display(d['a'])} − {display(d['b'])}", signed(d["auc"]["difference"]), fmt_interval(d["auc"]["interval"])]
                  for d in comparisons["ladder_differences"]]
     diff_table = html_table(["difference", "macro AUC", "95% interval"], diff_rows)
     vs_rows = []
@@ -423,7 +546,7 @@ def main() -> None:
         vs_rows.append([cond] + [f"{comparisons['vs_healthy'][j][cond_index]['auc']:.2f} "
                                  f"<span class='unit'>{fmt_interval(comparisons['vs_healthy'][j][cond_index]['interval'], 2)}</span>"
                                  for j in jobs_vs])
-    vs_table = html_table(["condition vs healthy"] + [html.escape(j.replace("features:", "")) for j in jobs_vs], vs_rows)
+    vs_table = html_table(["condition vs healthy"] + [html.escape(display(j)) for j in jobs_vs], vs_rows)
 
     # ---------------- headline numbers, asserted
     allcell4, every4 = job("all-cell", 4), job("everything", 4)
@@ -436,6 +559,21 @@ def main() -> None:
     best_auc4_name, best_auc4 = mfa_best[("macro_auc", 4)]
     best_auc20_name, best_auc20 = mfa_best[("macro_auc", 20)]
     n_warn = sum(row["n_convergence_warnings"] for row in readouts.values())
+    import readouts as ro  # the readout constants (no computation on import)
+
+    holdout_mask = pd.read_csv(c.RESULTS / "holdout.csv")["holdout"].to_numpy(dtype=bool)
+    glossary_values = {
+        "n_slides": n_slides, "counts": counts, "n_cells": n_cells, "n_types": len(categories),
+        "members": {g: [categories[i] for i in range(len(categories)) if category_group[i] == j]
+                    for j, g in enumerate(c.CELL_GROUPS)},
+        "n_holdout": int(holdout_mask.sum()), "n_dev": int((~holdout_mask).sum()),
+        "n_blocks": n_blocks, "n_allcell_blocks": n_allcell_blocks,
+        "n_spaces": (2 ** len(c.POINT_SETS) - 1) * (2 ** len(c.MODEL_NAMES) - 1),
+        "n_keep": space_scores[aliases["everything"]].shape[1],
+        "wD": readouts["features:D"]["k"], "wC": readouts["features:C"]["k"], "wDC": readouts["features:D+C"]["k"],
+        "n_repeats": ro.N_REPEATS, "n_splits": ro.N_SPLITS, "n_neighbors": ro.N_NEIGHBORS, "n_draws": comparisons["n_draws"],
+    }
+    assert glossary_values["n_spaces"] == sum(name.startswith("mfa:") for name in names)
     total_runtime = sum(s["runtime_seconds"] for s in slices) / 60
 
     comp4 = readouts["C@4"]
@@ -457,26 +595,29 @@ def main() -> None:
             "<p><strong>Reading.</strong> Splitting the cells by type makes the liver conditions easier to tell apart than "
             "all-cell topology does, on both readouts. The number of cells of each group at each density level accounts for "
             "the gain: per-group topology adds nothing detectable to a linear readout of density and composition "
-            f"({signed(sec['auc']['difference'])} {fmt_interval(sec['auc']['interval'])}); with density and composition in the "
-            f"model, the four groups add {signed(late['auc']['difference'])} {fmt_interval(late['auc']['interval'])} to all-cell "
-            f"topology; and the composition alone separates the conditions {comp_vs_topology} the everything space.</p>")
+            f"(<code>D+C + groups@20</code> against <code>D+C</code>: {signed(sec['auc']['difference'])} "
+            f"{fmt_interval(sec['auc']['interval'])}); <code>D+C + everything@20</code> adds "
+            f"{signed(late['auc']['difference'])} {fmt_interval(late['auc']['interval'])} to <code>D+C + all-cell@20</code>; "
+            f"and composition alone (<code>C</code>, {comp_feat['auc']:.3f}) separates the conditions {comp_vs_topology} "
+            f"<code>everything@20</code> ({every20['macro_auc']:.3f}).</p>")
     else:
         reading = ""
     comp4_text = (
-        f" At the same four components, the PCA of the composition alone (log cells per group and slice, no topology) "
+        f" At the same four components, the composition PCA (<code>C@4</code>: log cells per group and slice, no topology) "
         f"reaches {comp4_auc_word} macro AUC, {comp4['macro_auc']:.3f} ({signed(cp['auc']['difference'])} "
-        f"{fmt_interval(cp['auc']['interval'])} against everything), and {comp4_purity_word} purity, {comp4['purity_macro']:.2f} "
+        f"{fmt_interval(cp['auc']['interval'])} against <code>everything@4</code>), and {comp4_purity_word} purity, {comp4['purity_macro']:.2f} "
         f"times chance ({signed(cp['purity']['difference'], 2)} {fmt_interval(cp['purity']['interval'], 2)})."
     )
     summary = reading + (
         f"<p><strong>Fixed in advance — {verdict_text}.</strong> On the first four components, the space of all five "
-        f"point sets (<code>everything</code>) reaches a macro AUC of {every4['macro_auc']:.3f} against "
-        f"{allcell4['macro_auc']:.3f} for all-cell topology, a difference of {signed(p4['auc']['difference'])} "
+        f"point sets (<code>everything@4</code>) reaches a macro AUC of {every4['macro_auc']:.3f} against "
+        f"{allcell4['macro_auc']:.3f} for all-cell topology (<code>all-cell@4</code>), a difference of {signed(p4['auc']['difference'])} "
         f"{fmt_interval(p4['auc']['interval'])}; purity {every4['purity_macro']:.2f} against {allcell4['purity_macro']:.2f} "
         f"times chance, {signed(p4['purity']['difference'], 2)} {fmt_interval(p4['purity']['interval'], 2)}.{below_text}{comp4_text}</p>"
         f"<p><strong>Composition guard.</strong> {secondary_text}</p>"
-        f"<p>Density summaries and cell counts per group reach {dc_auc:.3f}, the cell counts alone {comp_feat['auc']:.3f}; the everything space on 20 components "
-        f"lies {topo_vs_dc} that, at {every20['macro_auc']:.3f}. Among all 465 combined spaces the highest macro AUC is "
+        f"<p><code>D+C</code> (density summaries and cell counts per group) reaches {dc_auc:.3f}, <code>C</code> alone "
+        f"{comp_feat['auc']:.3f}; <code>everything@20</code> lies {topo_vs_dc} that, at {every20['macro_auc']:.3f}. Among all "
+        f"{glossary_values['n_spaces']} combined spaces the highest macro AUC is "
         f"{best_auc4:.3f} on four components (<em>{html.escape(space_label(best_auc4_name, aliases))}</em>) and {best_auc20:.3f} "
         f"on twenty (<em>{html.escape(space_label(best_auc20_name, aliases))}</em>); these maxima are picked after the fact "
         "and carry no interval.</p>"
@@ -519,6 +660,11 @@ def main() -> None:
   code {{ font-size: 0.86em; background: var(--rule); padding: 1px 4px; border-radius: 3px; }}
   details {{ margin: 14px 0; }} summary {{ cursor: pointer; color: var(--ink2); }}
   ul {{ margin: 8px 0 8px 22px; padding: 0; }} li {{ margin: 4px 0; }}
+  dl.glossary {{ display: grid; grid-template-columns: minmax(9rem, 15rem) 1fr; gap: 6px 18px; margin: 8px 0 18px;
+                 font-size: 0.92rem; }}
+  dl.glossary dt {{ font-weight: 600; color: var(--ink); }}
+  dl.glossary dd {{ margin: 0; color: var(--ink2); max-width: 80ch; }}
+  @media (max-width: 640px) {{ dl.glossary {{ grid-template-columns: 1fr; gap: 2px; }} dl.glossary dd {{ margin-bottom: 8px; }} }}
 </style>
 </head>
 <body>
@@ -532,12 +678,16 @@ def main() -> None:
 
   <div class="summary">{summary}</div>
 
+  <h2>Glossary</h2>
+  <p class="note">The terms and labels used below; every number comes from the results.</p>
+  {section_glossary(glossary_values)}
+
   <h2>1. Question and set-up</h2>
   <p>The sibling Betti-curve study cut each of the {n_slides} GTEx liver slides ({n_cells:,} cells) at ten levels of the
   all-cell 10-nearest-neighbour density and found the leading combined component to be tissue density. Here the cells kept at
   each level are split by HistoPLUS cell type into four groups, and each group gets its own alpha persistent homology and
-  Betti-curve fPCA (H0 and H1, raw and cosine, nine components) at the same ten levels: 200 blocks of scores with the sibling's
-  40 all-cell blocks. Two readouts measure how well a space separates the seven pathology groups: cross-validated logistic
+  Betti-curve fPCA (H0 and H1, raw and cosine, nine components) at the same ten levels: {n_blocks - n_allcell_blocks} new
+  blocks of scores, {n_blocks} with the sibling's {n_allcell_blocks} all-cell blocks. Two readouts measure how well a space separates the seven conditions: cross-validated logistic
   regression (macro one-vs-rest AUC) and the purity of each slide's 15 nearest neighbours relative to chance. Spaces are
   compared on the same number of leading components.</p>
   {type_table}
@@ -549,7 +699,7 @@ def main() -> None:
   is therefore one of the baselines below. At the densest slice the immune share is highest in {html.escape(immune_top)}
   slides (median {100 * max(immune_dense):.1f}%).</p>
   <figure>{img_tag(figure_composition(kept_by_group, labels), "Median share of each cell group by slice, per pathology group")}
-  <figcaption>Median share of each cell group among the slide's kept cells at each slice, per pathology group; each row colours
+  <figcaption>Median share of each cell group among the slide's kept cells at each slice, per condition; each row colours
   healthy and two other groups over the others in grey.</figcaption></figure>
   <details><summary>Table: median shares at slice 0 and slice 9</summary>{comp_table}</details>
 
@@ -564,15 +714,15 @@ def main() -> None:
   {''.join(scatter_figures)}
 
   <h2>5. Fixed in advance</h2>
-  <p><strong>Primary.</strong> <code>everything</code> against <code>all-cell</code> on the first four components: enhanced if the
+  <p><strong>Primary.</strong> <code>everything@4</code> against <code>all-cell@4</code>: enhanced if the
   95% paired bootstrap intervals of both differences lie above 0, mixed if one does, not enhanced if neither does.</p>
   {primary_table}
   <p><strong>Secondary (composition guard).</strong> {secondary_text}</p>
 
   <h2>6. Ladder</h2>
-  <p>Logistic regression on nested inputs: density summaries (<code>D</code>: log median density, log cell count and the share
-  of cells kept at each slice), composition (<code>C</code>: log cells of each group at each slice), both, the topology spaces on
-  20 components, and <code>D+C</code> with each topology space's first 20 components.</p>
+  <p>Logistic regression on nested inputs (see the glossary): <code>D</code>, <code>C</code> and <code>D+C</code> without
+  topology; the topology spaces <code>all-cell@20</code>, <code>groups@20</code> and <code>everything@20</code>; and each of
+  them added to <code>D+C</code>.</p>
   <figure>{img_tag(ladder_png, "Macro AUC with 95% intervals for the ladder of nested inputs")}
   <figcaption>Macro AUC of each input, with its 95% bootstrap interval.</figcaption></figure>
   {ladder_table}

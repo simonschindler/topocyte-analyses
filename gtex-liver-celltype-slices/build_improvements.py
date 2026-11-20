@@ -15,7 +15,12 @@ OUT = c.HERE / "improvements.md"
 
 
 def iv(values: list[float], digits: int = 3) -> str:
-    return f"[{values[0]:.{digits}f}, {values[1]:.{digits}f}]".replace("-", "−")
+    lo, hi = (0.0 if round(v, digits) == 0 else v for v in values)  # no "−0.000"
+    return f"[{lo:.{digits}f}, {hi:.{digits}f}]".replace("-", "−")
+
+
+# The report glossary's names for the holdout entries.
+DISPLAY = {"D+C features": "D+C", "D+C + groups (20)": "D+C + groups@20"}
 
 
 def sg(value: float, digits: int = 3) -> str:
@@ -61,7 +66,7 @@ def main() -> None:
     dev_text = [
         f"On the {dev['dev_slides']} development slides, the main experiment's `everything` space reaches a macro AUC of "
         f"{reference['macro_auc']:.3f} {iv(reference['auc_interval'])} on four components and {reference20['macro_auc']:.3f} "
-        f"on twenty. The `D+C` features alone reach {dc['macro_auc']:.3f} {iv(dc['auc_interval'])} ({dc['k']} features).",
+        f"on twenty. `D+C` alone reaches {dc['macro_auc']:.3f} {iv(dc['auc_interval'])} ({dc['k']} features).",
         "",
         f"- **Best idea:** `{best['name']}` ({best['mechanism']}, {best['inputs']}) at {k4(best)['macro_auc']:.3f}, "
         f"{sg(k4(best)['vs_everything4']['difference'])} {iv(k4(best)['vs_everything4']['interval'])} against `everything`.",
@@ -80,6 +85,7 @@ def main() -> None:
         "# Improvement phase: what was tried, and what held on the holdout",
         "",
         "Exploratory. Claude ran it overnight on 2026-11-19 while Simon was away, under the rules in `design.md`",
+        "The names (`everything@4`, `D+C`, `lda4-X`, ...) are explained in the glossary of `report.html`.",
         "(\"Rulings made after the builder check\") and the rulings in `progress.md`.",
         "",
         f"- **Development slides.** Every idea is compared on the {dev['dev_slides']} development slides:",
@@ -120,7 +126,7 @@ def main() -> None:
             if "purity_macro" in row:
                 purity = (f"{row['purity_macro']:.2f} ({sg(row['purity_vs_everything4']['difference'], 2)} "
                           f"{iv(row['purity_vs_everything4']['interval'], 2)})")
-            hold_rows.append(f"| {name} | {row['macro_auc']:.3f} {iv(row['auc_interval'])} | "
+            hold_rows.append(f"| {DISPLAY.get(name, name)} | {row['macro_auc']:.3f} {iv(row['auc_interval'])} | "
                              f"{sg(row['vs_everything4']['difference'])} {iv(row['vs_everything4']['interval'])} | "
                              f"{sg(row['vs_DC']['difference'])} {iv(row['vs_DC']['interval'])} | {purity} |")
         per_group = ", ".join(f"{g} {n}" for g, n in holdout["holdout_per_group"].items())
@@ -132,7 +138,7 @@ def main() -> None:
                 f"- `{name}`: "
                 f"{relation(row['vs_everything4']['interval'], 'above', 'level with', 'below')} `everything` "
                 f"({sg(row['vs_everything4']['difference'])} {iv(row['vs_everything4']['interval'])}), "
-                f"{relation(row['vs_DC']['interval'], 'above', 'level with', 'below')} the `D+C` features "
+                f"{relation(row['vs_DC']['interval'], 'above', 'level with', 'below')} `D+C` "
                 f"({sg(row['vs_DC']['difference'])} {iv(row['vs_DC']['interval'])}).")
         secondary = holdout["secondary_on_holdout"]
         control_row = res[f"{holdout['control']}@4 (control)"] if holdout["control"] else None
@@ -143,8 +149,8 @@ def main() -> None:
             reading = [
                 "**Reading.**",
                 "",
-                f"- **No chosen idea beats composition.** On unseen slides no chosen idea's difference to the `D+C` "
-                f"features ({res['D+C features']['macro_auc']:.3f}) has its interval above 0: "
+                f"- **No chosen idea beats composition.** On unseen slides no chosen idea's difference to `D+C` "
+                f"({res['D+C features']['macro_auc']:.3f}) has its interval above 0: "
                 + "; ".join(f"`{n}` {sg(res[f'{n}@4']['vs_DC']['difference'])} {iv(res[f'{n}@4']['vs_DC']['interval'])}"
                             for n in chosen) + ".",
                 f"- **The topology-free control matches them.** `{holdout['control']}`, the supervised control without "
@@ -168,7 +174,7 @@ def main() -> None:
             "- **Uncertainty:** with groups of two and four slides, bootstrap draws within a group understate it, so every "
             "holdout interval is too narrow for the small groups.",
             "",
-            "| entry | holdout macro AUC [95%] | vs `everything`@4 | vs `D+C` features | purity ×chance (vs `everything`) |",
+            "| entry | holdout macro AUC [95%] | vs `everything@4` | vs `D+C` | purity ×chance (vs `everything@4`) |",
             "|---|---|---|---|---|",
             *hold_rows,
             "",
