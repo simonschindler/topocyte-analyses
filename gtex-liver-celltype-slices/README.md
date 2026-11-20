@@ -30,7 +30,7 @@ the commit below.
 
 | scripts | topocyte commit | run |
 |---|---|---|
-| `make_holdout.py`, `run_celltype_slices.py groups`, `gate 9`, `gate 8`, `slice 9`...`0`, `spaces.py` (umap-learn 0.5.12), `readouts.py` (scikit-learn 1.9.0), `verify_results.py`, `build_report.py`, `percell_fpca.py slice 9`...`0` and `collect` (topocyte's private `_betti_operator` and `_fit_matrix_free` at this commit), `improve.py`, `improve_holdout.py`, `build_improvements.py` | `bd1d5c0` | 2026-11-19 |
+| `make_holdout.py`, `run_celltype_slices.py groups`, `gate 9`, `gate 8`, `slice 9`...`0`, `spaces.py` (umap-learn 0.5.12), `readouts.py` (scikit-learn 1.9.0), `verify_results.py`, `build_report.py`, `percell_fpca.py slice 9`...`0` and `collect` (topocyte's private `_betti_operator` and `_fit_matrix_free` at this commit), `improve.py`, `improve_holdout.py`, `build_improvements.py`, `pls_study.py` | `bd1d5c0` | 2026-11-19/20 |
 
 ```bash
 export PYTHONPATH=/path/to/topocyte-bd1d5c0
@@ -49,7 +49,9 @@ $PY -m pytest -q test_improve.py
 $PY improve.py
 $PY improve_holdout.py      # once only: it refuses to score the holdout twice
 $PY build_improvements.py
-$PY build_report.py         # again, for its improvement section
+$PY -m pytest -q test_pls.py
+$PY pls_study.py            # development slides only; never the holdout
+$PY build_report.py         # again, for the improvement, PLS and discussion sections
 ```
 
 The per-group slices take about 45 minutes in all (slice 0, all 126 million

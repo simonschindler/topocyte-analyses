@@ -323,6 +323,14 @@ def section_glossary(v: dict) -> str:
             ("ladder", "Nested inputs from D up to D+C + everything@20, to see what each layer adds."),
             ("descriptive", "Everything else: reported, with no decision rule."),
         ]),
+        ("PLS-DA in depth (section 10)", [
+            ("input and PLS components", "How many leading components of a space go into PLS-DA (inputs), and how many "
+                                         "supervised components come out (the view the readout uses)."),
+            ("nested cross-validation", "Inside each training fold, a second cross-validation chooses the numbers of input "
+                                        "and PLS components; the outer test fold is predicted with the choice."),
+            ("axis", "One of the four PLS-DA components fitted on all development slides."),
+            ("CV R²", "How much of an axis a linear regression on D, C or D+C predicts, cross-validated."),
+        ]),
         ("Improvement phase (section 9)", [
             ("idea, control", "An idea is a candidate modelling change, scored on the development slides; a control is the same "
                               "method without topology, never chosen."),
@@ -367,6 +375,267 @@ def section_improvements() -> str:
                    f"{', '.join(f'<code>{html.escape(n)}</code>' for n in hold['chosen']) or 'none'}. With two "
                    "inflammation/hepatitis and four necrosis slides, the holdout intervals understate the uncertainty.</p>"
                    + table)
+
+
+def figure_pls_grid(rows: list[dict], e4_auc: float, dc_auc: float) -> bytes:
+    """Development macro AUC against the number of input components of everything, one line per number of PLS components."""
+    grid = [r for r in rows if r["part"] == "grid"]
+    n_outs = sorted({r["n_out"] for r in grid if r["n_out"] is not None})
+    k_ins = sorted({r["k_in"] for r in grid})
+    fig, ax = plt.subplots(figsize=(9.8, 4.8), constrained_layout=True)
+    cmap = plt.get_cmap("Blues")
+    for i, n_out in enumerate(n_outs):
+        points = sorted((r["k_in"], r["macro_auc"]) for r in grid if r["n_out"] == n_out)
+        ax.plot(*zip(*points), color=cmap(0.38 + 0.57 * i / max(len(n_outs) - 1, 1)), lw=2.0, marker="o", ms=5,
+                mec=SURFACE, mew=0.8, zorder=3, label=f"PLS-DA to {n_out} component{'s' if n_out > 1 else ''}")
+    direct = sorted((r["k_in"], r["macro_auc"]) for r in grid if r["n_out"] is None)
+    ax.plot(*zip(*direct), color=INK2, lw=1.6, ls="--", marker="s", ms=4, zorder=2,
+            label="no PLS: logistic regression on the k components")
+    for value, text, style in ((e4_auc, "everything@4 (unsupervised)", ":"), (dc_auc, "D+C (no topology)", "-.")):
+        ax.axhline(value, color=MUTED, lw=1.1, ls=style, zorder=1)
+        ax.annotate(text, (k_ins[-1], value), xytext=(-2, 4), textcoords="offset points", fontsize=8, color=INK2, ha="right")
+    ax.set_xscale("log")
+    ax.set_xticks(k_ins, [str(k) for k in k_ins])
+    ax.minorticks_off()
+    ax.set_xlabel("input: first k components of everything")
+    ax.set_ylabel("development macro AUC")
+    ax.grid(alpha=0.6)
+    ax.legend(frameon=False, fontsize=8, loc="lower left", ncol=2)
+    ax.set_title("PLS-DA on the development slides: input components × PLS components (out of fold)", loc="left",
+                 color=INK, fontsize=10)
+    return png_bytes(fig)
+
+
+def section_pls(pls: dict, dc_dev_auc: float) -> dict[str, str]:
+    """The PLS-DA study (pls_study.py): text, figures and tables, every direction asserted."""
+    rows = {r["name"]: r for r in pls["rows"]}
+    ref = rows[pls["reference"]]
+    grid = [r for r in pls["rows"] if r["part"] == "grid" and r["n_out"] is not None]
+    best = max(grid, key=lambda r: r["macro_auc"])
+    near = [r for r in grid if r["macro_auc"] >= best["macro_auc"] - 0.01]
+    k_lo, k_hi = min(r["k_in"] for r in near), max(r["k_in"] for r in near)
+    n_lo, n_hi = min(r["n_out"] for r in near), max(r["n_out"] for r in near)
+    big = [rows[f"everything k{k} n4 z sqrt"] for k in (100, 200)]
+    assert all(r["macro_auc"] < ref["macro_auc"] for r in big)
+    lr20, lr50 = rows["everything k20 logistic"], rows["everything k50 logistic"]
+    p20 = rows["everything k20 n4 z sqrt"]
+    assert p20["macro_auc"] > lr20["macro_auc"] and ref["macro_auc"] > lr50["macro_auc"]
+    k4p, k4l = rows["everything k4 n4 z sqrt"], rows["everything k4 logistic"]
+    assert abs(k4p["macro_auc"] - k4l["macro_auc"]) < 0.01
+    nested = pls["nested"]
+    n_outer = sum(nested["chosen"].values())
+    k20_share = sum(v for key, v in nested["chosen"].items() if key.startswith("k20 ")) / n_outer
+    assert nested["vs_reference"]["interval"][0] <= 0 <= nested["vs_reference"]["interval"][1]
+    figure_grid = img_tag(figure_pls_grid(pls["rows"], pls["everything4_auc"], dc_dev_auc),
+                          "Development macro AUC of PLS-DA by input and output components")
+    text_grid = (
+        f"<p>On the development slides PLS-DA works best between {k_lo} and {k_hi} input components and with {n_lo} to "
+        f"{n_hi} PLS components; the best setting, {best['k_in']} inputs and {best['n_out']} components, reaches "
+        f"{best['macro_auc']:.3f}, the improvement phase's setting (50 inputs, 4 components) {ref['macro_auc']:.3f}. With 100 "
+        "or 200 inputs it falls "
+        f"({big[0]['macro_auc']:.3f} and {big[1]['macro_auc']:.3f} on four components): once z-scored, the many small "
+        "components add noise faster than the projection can set it aside. Against the readout's logistic regression on the "
+        f"same inputs, the projection helps: with 20 inputs {p20['macro_auc']:.3f} against {lr20['macro_auc']:.3f}, with 50 "
+        f"{ref['macro_auc']:.3f} against {lr50['macro_auc']:.3f}; on four inputs it only rotates them ({k4p['macro_auc']:.3f} "
+        f"against {k4l['macro_auc']:.3f}). Choosing the two numbers inside each training fold by an inner 5-fold gives "
+        f"{nested['macro_auc']:.3f} {fmt_interval(nested['auc_interval'])}, {signed(nested['vs_reference']['difference'])} "
+        f"{fmt_interval(nested['vs_reference']['interval'])} against the fixed setting; the inner folds chose 20 inputs in "
+        f"{100 * k20_share:.0f}% of the outer folds.</p>")
+    pre = [r for r in pls["rows"] if r["part"] == "preprocessing"] + [ref]
+    pre.sort(key=lambda r: (not r["whiten"], ["plain", "sqrt", "inverse"].index(r["targets"])))
+    target_text = {"plain": "0/1", "sqrt": "1/√size (default)", "inverse": "1/size"}
+    pre_rows = [["z-scored" if r["whiten"] else "as fitted", target_text[r["targets"]],
+                 f"{r['macro_auc']:.3f} <span class='unit'>{fmt_interval(r['auc_interval'])}</span>",
+                 "—" if r is ref else f"{signed(r['vs_reference']['difference'])} <span class='unit'>{fmt_interval(r['vs_reference']['interval'])}</span>"]
+                for r in pre]
+    pre_table = html_table(["components", "class targets", "macro AUC", "vs default"], pre_rows)
+    raw_sqrt = rows["everything k50 n4 raw sqrt"]
+    inverse_z = rows["everything k50 n4 z inverse"]
+    assert raw_sqrt["macro_auc"] < ref["macro_auc"] and inverse_z["vs_reference"]["interval"][1] < 0
+    inputs = sorted([r for r in pls["rows"] if r["part"] == "inputs"] + [ref], key=lambda r: -r["macro_auc"])
+    def input_label(r: dict) -> str:
+        if r["name"] == pls["reference"]:
+            return "everything (default)"
+        source = r["input"]
+        for m in c.MODEL_NAMES:
+            if source.startswith(m):
+                return f"{MODEL_LABEL[m]}, all point sets"
+        return source.replace(" (all models)", ", all models")
+
+    figure_inputs = img_tag(figure_intervals([(input_label(r), r["macro_auc"], r["auc_interval"]) for r in inputs],
+                                             "PLS-DA to four components of each input (development slides, out of fold)", "macro AUC"),
+                            "Development macro AUC of PLS-DA by input")
+    groups_row, allcell_row = rows["groups k50 n4 z sqrt"], rows["all-cell k50 n4 z sqrt"]
+    dc_row, resid_row = rows["D+C k51 n4 z sqrt"], rows["everything, density and composition removed k50 n4 z sqrt"]
+    dens_row = rows["everything, density removed k50 n4 z sqrt"]
+    models = {m: rows[f"{m} (all point sets) k50 n4 z sqrt"]["macro_auc"] for m in c.MODEL_NAMES}
+    best_model = max(models, key=models.get)
+    assert groups_row["vs_reference"]["interval"][0] <= 0 <= groups_row["vs_reference"]["interval"][1]
+    assert resid_row["auc_interval"][0] <= 0.5 <= resid_row["auc_interval"][1]
+    text_inputs = (
+        f"<p>The four groups alone ({groups_row['macro_auc']:.3f}) do as well as everything; all-cell topology alone reaches "
+        f"{allcell_row['macro_auc']:.3f}. Of the models, {MODEL_LABEL[best_model]} is the strongest ({models[best_model]:.3f}). "
+        f"Density and composition through the same projection reach {dc_row['macro_auc']:.3f} "
+        f"({signed(dc_row['vs_reference']['difference'])} {fmt_interval(dc_row['vs_reference']['interval'])} against everything). "
+        f"With density regressed out of every block, {dens_row['macro_auc']:.3f}; with density and composition regressed out, "
+        f"{resid_row['macro_auc']:.3f} {fmt_interval(resid_row['auc_interval'])}, which includes chance.</p>")
+    cond_cols = [("everything@4", rows["everything k4 logistic"]), ("PLS-DA, everything", ref),
+                 ("PLS-DA, D+C", dc_row), ("PLS-DA, density and composition removed", resid_row)]
+    cond_rows = [[cond] + [f"{col['auc_per_condition'][i]:.2f}" for _, col in cond_cols] for i, cond in enumerate(c.CONDITIONS)]
+    cond_table = html_table(["condition (one vs rest)"] + [name for name, _ in cond_cols], cond_rows)
+    axes = pls["axes"]
+    axis_rows = []
+    for a in range(4):
+        means = [axes["condition_means"][g][a] for g in range(len(c.CONDITIONS))]
+        marked = sorted([(abs(m), c.CONDITIONS[g], m) for g, m in enumerate(means) if abs(m) >= 0.75], reverse=True)
+        separates = ", ".join(f"{name} {signed(m, 1)}" for _, name, m in marked) or "—"
+        sets = " · ".join(f"{SET_LABEL[s]} {100 * axes['by_point_set'][a][j]:.0f}" for j, s in enumerate(c.POINT_SETS))
+        mods = " · ".join(f"{MODEL_LABEL[m]} {100 * axes['by_model'][a][j]:.0f}" for j, m in enumerate(c.MODEL_NAMES))
+        sl = axes["by_slice"][a]
+        axis_rows.append([f"axis {a + 1}", html.escape(separates), sets, mods,
+                          f"{100 * sl[0]:.0f} / {100 * sl[-1]:.0f}",
+                          " / ".join(f"{axes['r2'][key][a]:.2f}" for key in ("D", "C", "D+C")),
+                          f"{axes['fold_agreement_median'][a]:.2f} ({axes['fold_agreement_p10'][a]:.2f})"])
+    axis_table = html_table(["axis", "separates (mean, SD units)", "point sets, % of variance", "models, %",
+                             "slices 0 / 9, %", "CV R² on D / C / D+C", "fold agreement, median (10th pct)"], axis_rows)
+    cosine = [axes["by_model"][a][2] + axes["by_model"][a][3] for a in range(4)]
+    assert all(value > 0.5 for value in cosine)
+    first_sets = axes["by_point_set"][0]
+    top_set = c.POINT_SETS[int(np.argmax(first_sets))]
+    first_means = [axes["condition_means"][g][0] for g in range(len(c.CONDITIONS))]
+    first_cond = c.CONDITIONS[int(np.argmax(np.abs(first_means)))]
+    text_axes = (
+        f"<p>Fitted on all development slides, the first axis separates {first_cond} ({signed(max(first_means, key=abs), 1)} SD); "
+        f"{SET_LABEL[top_set]} blocks carry {100 * max(first_sets):.0f}% of its variance, and density and composition predict "
+        f"{100 * axes['r2']['D+C'][0]:.0f}% of it (cross-validated R²). Every axis draws mostly on the cosine models "
+        f"({100 * min(cosine):.0f}–{100 * max(cosine):.0f}% of its variance) and leans on the sparsest and densest slices. "
+        f"The first axis is stable across the training folds (median |r| {axes['fold_agreement_median'][0]:.2f}); the second "
+        f"and third less so ({axes['fold_agreement_median'][1]:.2f}, {axes['fold_agreement_median'][2]:.2f}): they turn into "
+        "each other from fold to fold.</p>")
+    return {"text_grid": text_grid, "figure_grid": figure_grid, "pre_table": pre_table,
+            "text_pre": (f"<p>Z-scoring the components helps: without it the default reaches {raw_sqrt['macro_auc']:.3f} "
+                         f"({signed(raw_sqrt['vs_reference']['difference'])} {fmt_interval(raw_sqrt['vs_reference']['interval'])}, "
+                         "an interval that just reaches 0). The class weights matter less, except that dividing the targets "
+                         f"by the class size loses ({signed(inverse_z['vs_reference']['difference'])} "
+                         f"{fmt_interval(inverse_z['vs_reference']['interval'])}).</p>"),
+            "text_inputs": text_inputs, "figure_inputs": figure_inputs, "cond_table": cond_table,
+            "text_axes": text_axes, "axis_table": axis_table,
+            "values": {"ref": ref, "nested": nested, "dc": dc_row, "resid": resid_row, "best_model": best_model,
+                       "r2_first": axes["r2"]["D+C"][0], "first_cond": first_cond, "top_set": top_set,
+                       "cosine_min": min(cosine)}}
+
+
+def section_discussion(v: dict) -> str:
+    """Discussion, conclusion and future directions; every number formatted from ``v``, every direction asserted."""
+    assert v["p4"]["auc"]["interval"][0] > 0 and v["hold_primary"]["interval"][0] > 0
+    assert v["sec"]["auc"]["interval"][0] <= 0 <= v["sec"]["auc"]["interval"][1]
+    assert v["hold_sec"]["interval"][0] <= 0 <= v["hold_sec"]["interval"][1]
+    assert v["resid_pls"]["auc_interval"][0] <= 0.5 <= v["resid_pls"]["auc_interval"][1]
+    assert v["resid_unsup"]["auc_interval"][0] <= 0.5 <= v["resid_unsup"]["auc_interval"][1]
+    assert v["hold_pls"]["vs_DC"]["interval"][0] <= 0 <= v["hold_pls"]["vs_DC"]["interval"][1]
+    assert v["umap"]["purity_oof_vs_everything4"]["interval"][0] > 0 and v["umap"]["vs_everything4"]["interval"][1] < 0
+    assert v["comp_feat"] >= v["every20"] and v["cirr_stromal"] > v["healthy_stromal"]
+    measured = (
+        "<h3>What the topology measured</h3>"
+        "<p>Across this study and its siblings, the persistent homology of cell positions has mostly measured how many cells "
+        "there are and how densely they lie. The sibling Betti-curve study found its leading combined component to be "
+        "tissue density. Here, splitting the cells by type separates the conditions better than all-cell topology, "
+        f"{signed(v['p4']['auc']['difference'])} {fmt_interval(v['p4']['auc']['interval'])} in macro AUC on four components "
+        f"(fixed in advance) and {signed(v['hold_primary']['difference'])} {fmt_interval(v['hold_primary']['interval'])} on "
+        "the holdout. But the composition guard finds nothing that per-group topology adds to density and cell counts: "
+        f"{signed(v['sec']['auc']['difference'])} {fmt_interval(v['sec']['auc']['interval'])} on all slides, "
+        f"{signed(v['hold_sec']['difference'])} {fmt_interval(v['hold_sec']['interval'])} on the holdout. With density and "
+        "composition regressed out of every block, neither the unsupervised space "
+        f"({v['resid_unsup']['macro_auc']:.3f} {fmt_interval(v['resid_unsup']['auc_interval'])} on four components) nor a "
+        f"supervised projection ({v['resid_pls']['macro_auc']:.3f} {fmt_interval(v['resid_pls']['auc_interval'])}) separates "
+        "the conditions better than chance. Even the best supervised view is mostly density and composition: they predict "
+        f"{100 * v['r2_first']:.0f}% of the variance of its first axis, the {html.escape(v['first_cond'])} axis.</p>")
+    why = (
+        "<h3>Why</h3>"
+        "<p>The reason lies in the construction. For the cells of one type, the H0 Betti curve of the alpha filtration counts, "
+        "at each scale, the components left once every closer pair has been joined: the number of cells minus the "
+        "minimum-spanning-tree edges below that scale. It is a function of how far apart the cells of that type lie, and the "
+        "spacing is set by how many of them share the tissue: composition and density. The H1 curves of such clouds scale with "
+        "the same spacing. A raw curve keeps the count; the cosine model removes the scale but keeps the shape of the spacing "
+        f"distribution, which is why the cosine models are the strongest here (the best single model is "
+        f"{MODEL_LABEL[v['best_model']]}) and carry {100 * v['cosine_min']:.0f}% or more of every supervised axis. The "
+        "conditions change exactly these quantities: at the densest slice the median immune share reaches "
+        f"{100 * v['immune_share']:.1f}% in {html.escape(v['immune_top'])} slides, and at slice 0 the median stromal share is "
+        f"{100 * v['cirr_stromal']:.1f}% in cirrhosis against {100 * v['healthy_stromal']:.1f}% in healthy slides "
+        "(section 2).</p>")
+    readouts_text = (
+        "<h3>What the readouts can and cannot see</h3>"
+        "<p>Every main readout is linear in the fPCA scores, and each block keeps nine components. A nonlinear view keeps "
+        f"neighbourhoods better: a four-dimensional UMAP of everything raises purity by "
+        f"{signed(v['umap']['purity_oof_vs_everything4']['difference'], 2)} but loses "
+        f"{abs(v['umap']['vs_everything4']['difference']):.3f} in macro AUC (improvements.md). Supervision helps where it is "
+        f"fitted honestly. PLS-DA lifts the four-component view of everything from {v['e4_dev']:.3f} to "
+        f"{v['ref']['macro_auc']:.3f} on the development slides and reaches {v['hold_pls']['macro_auc']:.3f} on the holdout; "
+        f"tuned by nested cross-validation it stays at {v['nested']['macro_auc']:.3f}. But the same projection of D+C reaches "
+        f"{v['dc_pls']['macro_auc']:.3f}, and logistic regression on the D+C numbers {v['dc_lr_dev']:.3f}: the supervised "
+        f"topology view matches composition without exceeding it ({signed(v['hold_pls']['vs_DC']['difference'])} "
+        f"{fmt_interval(v['hold_pls']['vs_DC']['interval'])} on the holdout).</p>")
+    tool = (
+        "<h3>Is topology the right tool here?</h3>"
+        "<p>For telling these GTEx liver conditions apart at slide level, no. The cell counts of four types at ten density "
+        f"levels, 51 numbers per slide counted in {v['comp_runtime']:.0f} s, separate the conditions as well as "
+        f"{v['n_blocks']} blocks of topology that took {v['ph_runtime']:.0f} min of persistent homology and fPCA; on all "
+        f"slides the counts alone reach {v['comp_feat']:.3f}, everything on twenty components {v['every20']:.3f}. The topology "
+        "computed here re-describes density and composition, and that is a property of the construction rather than of "
+        "topology as such:</p><ul>"
+        "<li>each cell type is a cloud of its own, so the relations between types, such as immune cells along portal tracts "
+        "or stromal septa around regenerative nodules, never enter;</li>"
+        "<li>whole-slide curves pool portal, lobular and septal regions;</li>"
+        "<li>the Betti curve forgets which birth belongs to which death;</li>"
+        "<li>the conditions are labelled from pathology notes, not by how the tissue is arranged.</li></ul>"
+        "<p>Topology remains a candidate where the question is arrangement at fixed composition: how cell types sit relative "
+        "to each other, local structure, and comparisons whose null model holds the counts and densities fixed, so that what "
+        "remains is arrangement by construction.</p>")
+    limits = (
+        "<h3>Limitations</h3><ul>"
+        f"<li>{v['n_slides']} slides, with {v['counts']['inflammation/hepatitis']} inflammation/hepatitis and "
+        f"{v['counts']['necrosis']} necrosis slides: estimates for the small groups are wide, and the holdout holds only "
+        f"{v['hold_groups']['inflammation/hepatitis']} and {v['hold_groups']['necrosis']} of them.</li>"
+        f"<li>Labels come from GTEx pathology notes, one group per slide by severity; {v['counts']['unclassified']} slides "
+        "have no category.</li>"
+        "<li>HistoPLUS was trained on tumour tissue: its cancer-cell class labels many cells in non-tumour liver, and its "
+        "apoptotic-body class is large here. The four groups inherit these errors.</li>"
+        "<li>One linear readout with a fixed regularization; nonlinear classifiers were not part of the plan.</li>"
+        "<li>The improvement phase and the PLS study were chosen after the main readouts. Only the holdout scoring was "
+        "single-use, and the PLS study did not touch the holdout.</li></ul>")
+    conclusion = (
+        "<h2>12. Conclusion</h2><ul>"
+        "<li>Splitting the cells into four types makes the liver conditions easier to tell apart than all-cell topology: "
+        "fixed in advance, and on the holdout.</li>"
+        "<li>The gain is the number of cells of each type at each density level. Per-group topology adds nothing detectable "
+        "to density and composition: fixed in advance, on the holdout, and with no signal left once density and composition "
+        "are regressed out.</li>"
+        "<li>Supervised four-component views (PLS-DA, LDA) give the clearest pictures. They reach the separation of "
+        "composition, not beyond, and their axes are mostly density and composition.</li>"
+        "<li>For slide-level classification of these conditions, cell-type composition across density levels is the "
+        "parsimonious representation. Any topological claim on these data should first beat it.</li></ul>")
+    future = (
+        "<h2>13. Future directions</h2><ol>"
+        "<li><strong>Density and composition as the null, by construction.</strong> Relabel cell types at random within each "
+        "slide (positions and counts kept) and report a representation's separation relative to that null; keep D+C as the "
+        "first rung of every ladder.</li>"
+        "<li><strong>Topology between types.</strong> Chromatic alpha complexes or bifiltrations by type (the chalc "
+        "integration in topocyte is pending), and filtrations of type pairs, such as immune cells within a distance of "
+        "stromal cells.</li>"
+        "<li><strong>Local and regional analysis.</strong> Tile the slides, compute local persistence and attribution maps "
+        "(topocyte's local log-odds) to find where the conditions differ, and label regions (portal, lobular, septal) "
+        "rather than whole slides.</li>"
+        "<li><strong>Targets where arrangement is the diagnosis.</strong> Fibrosis stage and nodularity with "
+        "pathologist-reviewed labels, more cirrhotic and inflamed slides, and an external cohort.</li>"
+        "<li><strong>Representations that keep more.</strong> The pairing of births and deaths (rank functions, persistence "
+        "kernels) and nonlinear readouts, each tested against D+C first.</li>"
+        "<li><strong>Liver cell types.</strong> Hepatocytes, cholangiocytes, Kupffer and stellate cells instead of a "
+        "tumour-trained classifier, and confidence filtering of the existing calls.</li>"
+        "<li><strong>The planned GTEx graphcode study.</strong> Its ablation ladder already puts composition first; this study "
+        "suggests that rung will be hard to beat, so fix the composition guard in advance there too.</li>"
+        "<li><strong>Figures.</strong> When a figure should show the conditions apart, a supervised projection (PLS-DA of "
+        "composition or topology) fitted on other slides gives the clearest view; say that it is supervised.</li></ol>")
+    return "<h2>11. Discussion</h2>" + measured + why + readouts_text + tool + limits + conclusion + future
 
 
 # ---------------------------------------------------------------- main
@@ -608,6 +877,41 @@ def main() -> None:
         f"{fmt_interval(cp['auc']['interval'])} against <code>everything@4</code>), and {comp4_purity_word} purity, {comp4['purity_macro']:.2f} "
         f"times chance ({signed(cp['purity']['difference'], 2)} {fmt_interval(cp['purity']['interval'], 2)})."
     )
+    pls = json.loads((c.RESULTS / "pls_study.json").read_text())
+    dev_ideas = {entry["name"]: entry for entry in json.loads((c.RESULTS / "improve_dev.json").read_text())["ideas"]}
+    hold = json.loads((c.RESULTS / "improve_holdout.json").read_text())
+    dc_lr_dev = dev_ideas["baseline:D+C-features"]["readouts"][0]["macro_auc"]
+    pls_sec = section_pls(pls, dc_lr_dev)
+    pv = pls_sec["values"]
+    hold_allcell = hold["results"]["all-cell@4"]["vs_everything4"]
+    stromal = c.CELL_GROUPS.index("stromal")
+    discussion_values = {
+        "p4": p4, "sec": sec, "hold_sec": hold["secondary_on_holdout"],
+        "hold_primary": {"difference": -hold_allcell["difference"],
+                         "interval": [-hold_allcell["interval"][1], -hold_allcell["interval"][0]]},
+        "resid_unsup": next(r for r in dev_ideas["residual-density-composition"]["readouts"] if r["k"] == 4),
+        "resid_pls": pv["resid"], "r2_first": pv["r2_first"], "first_cond": pv["first_cond"],
+        "best_model": pv["best_model"], "cosine_min": pv["cosine_min"],
+        "immune_share": max(immune_dense), "immune_top": immune_top,
+        "cirr_stromal": float(np.median(share[0, labels == c.GROUP_ORDER.index("cirrhosis"), stromal])),
+        "healthy_stromal": float(np.median(share[0, labels == c.GROUP_ORDER.index("healthy"), stromal])),
+        "umap": next(r for r in dev_ideas["umap4-everything"]["readouts"] if r["k"] == 4),
+        "e4_dev": pls["everything4_auc"], "ref": pv["ref"], "nested": pv["nested"], "dc_pls": pv["dc"],
+        "dc_lr_dev": dc_lr_dev, "hold_pls": hold["results"]["pls4-everything50@4"],
+        "comp_runtime": json.loads((c.RESULTS / "composition.json").read_text())["runtime_seconds"],
+        "n_blocks": n_blocks, "ph_runtime": total_runtime, "comp_feat": comp_feat["auc"], "every20": every20["macro_auc"],
+        "n_slides": n_slides, "counts": counts, "hold_groups": hold["holdout_per_group"],
+    }
+    pls_summary = (
+        "<p><strong>PLS-DA and discussion.</strong> A supervised four-component view (PLS-DA, fitted on other slides) "
+        f"separates the conditions better than everything's first four components: {pv['nested']['macro_auc']:.3f} "
+        f"{fmt_interval(pv['nested']['auc_interval'])} tuned by nested cross-validation on the development slides, "
+        f"{hold['results']['pls4-everything50@4']['macro_auc']:.3f} on the holdout. It still only matches composition "
+        f"({signed(hold['results']['pls4-everything50@4']['vs_DC']['difference'])} "
+        f"{fmt_interval(hold['results']['pls4-everything50@4']['vs_DC']['interval'])} against <code>D+C</code> on the "
+        "holdout), and density and composition predict most of its first axis (section 10). Sections 11 to 13 discuss "
+        "what the topology measured, conclude, and list future directions.</p>")
+    assert pv["nested"]["macro_auc"] > pls["everything4_auc"]
     summary = reading + (
         f"<p><strong>Fixed in advance — {verdict_text}.</strong> On the first four components, the space of all five "
         f"point sets (<code>everything@4</code>) reaches a macro AUC of {every4['macro_auc']:.3f} against "
@@ -621,7 +925,7 @@ def main() -> None:
         f"{best_auc4:.3f} on four components (<em>{html.escape(space_label(best_auc4_name, aliases))}</em>) and {best_auc20:.3f} "
         f"on twenty (<em>{html.escape(space_label(best_auc20_name, aliases))}</em>); these maxima are picked after the fact "
         "and carry no interval.</p>"
-    )
+    ) + pls_summary
 
     document = f"""<!doctype html>
 <html lang="en">
@@ -746,6 +1050,33 @@ def main() -> None:
 
   <h2>9. Improvement phase</h2>
   {section_improvements()}
+
+  <h2>10. PLS-DA in depth</h2>
+  <p class="note">Exploratory: what the improvement phase's best topology-only idea depends on (<code>pls_study.py</code>).
+  All on the {pls['dev_slides']} development slides with the improvement phase's folds and bootstrap draws; the holdout,
+  scored once, is not used. Every readout is the main logistic regression, out of fold.</p>
+  <h3>Input and output dimensions</h3>
+  {pls_sec['text_grid']}
+  <figure>{pls_sec['figure_grid']}<figcaption>Development macro AUC of PLS-DA by the number of input components of
+  everything and of PLS components, with the logistic regression on the same inputs and two references.</figcaption></figure>
+  <h3>Preprocessing</h3>
+  {pls_sec['text_pre']}
+  {pls_sec['pre_table']}
+  <h3>Inputs</h3>
+  {pls_sec['text_inputs']}
+  <figure>{pls_sec['figure_inputs']}<figcaption>Development macro AUC of PLS-DA to four components of each input, with
+  its 95% interval.</figcaption></figure>
+  <h3>Per condition</h3>
+  <p class="note">One-vs-rest AUC of each condition on the development slides, out of fold.</p>
+  {pls_sec['cond_table']}
+  <h3>What the four axes read</h3>
+  {pls_sec['text_axes']}
+  {pls_sec['axis_table']}
+  <p class="note">Variance shares: the variance of each block's part of an axis score over the sum across blocks. CV R²:
+  5-fold cross-validated linear regression of the axis on the features. Fold agreement: |r| between the axis scores of
+  each of the 100 training-fold fits and those of the fit on all development slides.</p>
+
+  {section_discussion(discussion_values)}
 
   <h2>Methods and reproduction</h2>
   <ul>

@@ -107,3 +107,28 @@ Ruling: the summary leads with a "Reading" paragraph and states the composition 
   - `pls4-everything50` 0.781: +0.066 [−0.007, 0.141] vs everything, +0.007 [−0.036, 0.053] vs D+C.
   - Both comparisons fixed in advance point the same way on the holdout: primary +0.088 [0.036, 0.143], secondary −0.026 [−0.075, 0.022].
   - Reading: supervision and cell counts improve the four-component view; topology does not.
+
+## Task 5: PLS-DA in depth, discussion (2026-11-20, Simon: "test pls more extensively ... write a discussion ... conclusion ... future directions")
+
+- `pls_study.py`, development slides only (the holdout was scored once and is not used again). It covers:
+  - input components (4–200) × PLS components (1–8), against the readout on the same inputs without PLS;
+  - preprocessing: z-scoring and target weights;
+  - 16 inputs, including D+C and the residual topology;
+  - per-condition AUCs;
+  - nested CV;
+  - the four axes, traced back to blocks, with the CV R² of each axis on D, C and D+C and their stability across folds.
+- Gates: the default setting and the residual input reproduce `improve.py`'s probabilities exactly.
+- Results:
+  - **Dimensions:** best at 20–50 inputs and 3–8 components (20/4: 0.774). With 100 or 200 inputs it falls. PLS beats the readout on the same inputs: 0.774 against 0.749 at 20 inputs.
+  - **Nested CV:** 0.773 [0.734, 0.810]; the inner folds chose 20 inputs in 84% of the outer folds.
+  - **Z-scoring** helps (−0.040 without it). Targets divided by the class size lose (−0.023).
+  - **Inputs:** groups alone 0.768; D+C through PLS 0.736; residual topology 0.539.
+  - **Axis 1 (cirrhosis):** stromal blocks carry 41% of its variance, and D+C predicts 81% of it. Every axis draws 54–81% of its variance from the cosine models.
+- Ruling: the axes are read by variance shares (the variance of each block's part of the axis score), not by loading mass. Why: z-scoring lets loading mass overweight low-variance components. Cost if wrong: none to the readouts; the loading-mass shares are kept in `pls_study.json`.
+- Caught before any result was used: `min(50, columns)` would have cut the feature inputs (D+C + everything50 would have silently been D+C alone). The run was stopped and the code fixed, with a test.
+- Report:
+  - section 10 covers the PLS study;
+  - sections 11–13 are the discussion, conclusion and future directions;
+  - the summary gains a PLS-and-discussion paragraph;
+  - the glossary gains four PLS terms.
+  - Every number comes from the results, and every directional claim is asserted.
