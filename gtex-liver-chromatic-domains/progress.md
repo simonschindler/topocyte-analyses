@@ -155,3 +155,75 @@ Claude's calls:
   - The random clouds have no such ties, and neither do the real coordinates: float32 values on GTEX-YJ89-1426, with no two cells at one position.
   - The verifier's bar-count criterion could still trip on an exactly tied real ball. Dropping bars shorter than 1e-12 of the scale before comparing would make it robust.
   - Cost if ignored: a spurious verifier failure, not a wrong result.
+
+## Task 3: exact weighted step functions (2026-11-20)
+
+- **Module:** `curves.py`, exact algebra on signed, weighted step functions Σ w·1[b, d) of finite bars, held as flat arrays with offsets (`CurveSet`).
+  - `curve_set`, `combine` and `scale` build them. `combine` keeps every bar, so a residual curve is exact; `scale` shares the bars with its input.
+  - `inner_matrix`: exact L² inner products. Each curve's step table (sorted distinct breakpoints, and the value to the next) is built once; each inner product is a merged sweep over two tables, with numba `prange` over rows.
+  - `spread2`: each centre's reference spread.
+  - `components`: φ_k = Σ_i v_ik/√ρ_k · f_i from `fpca_from_gram`'s eigenpairs, as one step table.
+  - `score`: ⟨g, φ_k⟩ − ⟨f̄, φ_k⟩, through the antiderivative Φ_k at each bar endpoint (binary search).
+- **The controller's rulings, applied:**
+  - numba `prange` in `inner_matrix` only, called from the main thread;
+  - step tables built once per curve and reused across pairs;
+  - compensated event sums for φ and its antiderivative;
+  - scoring by binary search of Φ;
+  - a curve without bars gives zero rows and columns, and the score −mean_term.
+- **Tests:** `test_curves.py`, 10 tests, pass in 2.7 s with warnings as errors and the pinned topocyte on `PYTHONPATH`, cold numba cache included. The whole study suite: 44 tests in 4.9 s. Measured margins:
+  - the unit-weight Gram matrix against topocyte's `betti_inner_product_matrix`: at most 7.4e-16 relative (bound 1e-12), with exact zeros where topocyte has them;
+  - bilinearity with weights 1 and −1/19: 9.2e-16 of the terms (bound 1e-12);
+  - `spread2` against mean_r ‖ref_r − mean‖², with the mean built by `combine`: 1.3e-15 (bound 1e-10);
+  - the fit curves' scores against `fpca_from_gram`: 2.9e-15 of the largest (bound 1e-9);
+  - scores of curves outside the fit against the kernel route (C − r̄)·V/√ρ: 2.0e-15 (bound 1e-9);
+  - a residual's score against the observed score minus the mean reference score: 1.7e-16 (bound 1e-10);
+  - φ on 2e6 events of ±1e8 and ±1e-8 against `math.fsum` per segment: 1.1–2.2e-16 over 6 seeds (bound 1e-12).
+- **Timings** (M4, warm numba cache). The curves are residuals of 20 labellings × 28 bars, scaled per curve. `inner_matrix` and `fpca_from_gram` run on 10 threads; `components` and `score` are serial.
+
+  | step, 6,000 curves | H1-like (1,120 breakpoints per curve) | H0-like (561) |
+  |---|---|---|
+  | `inner_matrix` | 23.2 s | 11.8 s |
+  | `fpca_from_gram` (topocyte, dense) | 18.8 s | 18.7 s |
+  | `components`, 9 | 2.7 s (6.7M breakpoints) | 1.5 s |
+  | `score` of the fit curves | 1.3 s | 0.8 s |
+
+  - **Threads:** 1,500 H1-like curves take 11.3 s on 1 thread, 3.0 s on 4 and 1.5 s on 10 (7.5×). numba's dynamic chunks (`parallel_chunksize(8)`) were 10% slower than its static split, whose steps pair rows t and n − 1 − t.
+  - **The Gram cost grows with the square of the curves.** Extrapolated, not measured: about 95 s for an H1 block's 12,000-curve fit on all slides, and about half an hour for the 48 Gram matrices of the 16 blocks.
+  - **`fpca_from_gram` is a dense eigendecomposition,** cubic in the curves: 18.8 s at 6,000 curves, so expect several times the Gram's cost at 12,000 (not measured).
+  - **At the full block size** (H1-like, serial):
+    - `score` of 45,000 curves (25.2M bars) takes 9.5 s;
+    - `spread2` of 45,000 centres × 19 references takes 5.5 s;
+    - `combine` of 20 sets takes 0.3 s;
+    - peak RSS was 4.8 GB with a 6,000-curve fit in memory.
+
+Claude's calls:
+- **The spread from squared distances.**
+  - `spread2` computes (1/(2R²))·Σ_{r,s} ‖ref_r − ref_s‖², each distance a merged sweep of (ref_r − ref_s)². It is the same number as the plan's (1/R)·Σ_r ‖ref_r‖² − ‖mean‖² from the R × R inner products.
+  - **Why:** when the references agree, the inner-product form cancels to a rounding residue of either sign, while the design's s0 is the median over the centres with s > 0. The distance form is exactly 0 there and never negative.
+  - `test_spread_zero_when_references_agree` fails with the inner-product form.
+  - Cost if wrong: none; the quantity is the same.
+- **Second-order Neumaier.**
+  - On the plan's test events (2e6 of ±1e8 and ±1e-8), first-order Neumaier drifts by 2.1–2.2e-12 relative on every one of 6 seeds, above the 1e-12 bound. Second order is within 1.1–2.2e-16 on the same seeds, in `components` itself: the first step's rounding errors are summed by a second Neumaier step (Klein 2006, iterative Kahan–Babuška).
+  - Every compensated sum uses it: the step values, φ, Φ and each curve's score.
+  - Cost: two Neumaier steps per event instead of one; `components` takes 1.5–2.7 s for 6,000 fit curves with it.
+- **The linearity test's identity.** The score ⟨g, φ_k⟩ − mean_term_k is affine. With coefficients summing to 0, a residual's score is score(obs) − mean_r score(ref_r) − mean_term; the plan's shorthand leaves out the mean_term. The test asserts the exact identity. Cost if wrong: none.
+- **The compensated-sum test's input.**
+  - The 1e8 bars come in pairs of opposite weight on one interval, so every segment's value is the 1e-8 bars alive there. Without the pairs, the segment values are dominated by the 1e8 events, and a plain running sum passes too.
+  - The test asserts that `np.cumsum` fails on its input.
+- **Tests beyond the plan's list**, each shown to fail on a deliberate break of the code it covers:
+  - `test_spread_zero_when_references_agree` (the spread from inner products);
+  - `test_scores_of_new_curves_match_kernel_route` (Φ read only at breakpoints). This break passed every other test: the fit curves' endpoints are all breakpoints of φ, and the broken score is still linear;
+  - an odd-sized Gram matrix in `test_inner_matches_topocyte` (a balanced loop that misses the middle row);
+  - `test_bad_inputs_refused` (the input checks).
+
+  Ten deliberate breaks in all, each caught. The other six were: death events with +w, a sweep that adds after the update, scores without the mean_term, components without 1/√ρ, `combine` ignoring the earlier sets' rows, and a nonzero value after a curve's last breakpoint.
+- **Input checks.**
+  - `CurveSet` refuses non-finite values, d ≤ b and offsets that do not rise from 0 to the number of bars.
+  - `curve_set` refuses NaN or infinite births and deaths below births.
+  - `components` refuses a cosine fPCA, and more components than it kept.
+  - Cost: one pass over the bars per set built.
+- **The whole line.** The inner products integrate over the whole line, and topocyte's from 0. They agree for births ≥ 0, as squared radii are; `curve_set` does not check this. Cost if wrong: none for the study's values.
+- **Serial `score` and `spread2`**, as the ruling names `inner_matrix` only: 9.5 s and 5.5 s per call at the full block size.
+  - Cost: the observed and control scores take about 19 s per block and fitting set, about 15 min over the 48 pairs.
+  - `prange` over curves would cut this several-fold, under the same main-thread condition.
+- **The sweep kept branchy:** a branchless sweep gave identical bits but only 16% less time, since the loop is bound by its dependent loads, not by mispredictions.
