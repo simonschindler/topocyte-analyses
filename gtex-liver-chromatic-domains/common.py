@@ -5,11 +5,13 @@ draws need numpy and pandas only and are unit-tested in ``test_common.py`` on
 synthetic inputs.
 
 Seeds: the pilot draw runs one ``default_rng(SEED)`` through the conditions.
-Every other generator comes from
-``SeedSequence([SEED, slide_index, centre_index, stream])``, so any slide or
-centre can be recomputed alone:
+Every other generator comes from a 4-entry key
+``SeedSequence([SEED, slide_index, centre_index, stream])`` whose last entry
+is non-zero. SeedSequence pads short keys with zeros, so ``default_rng(SEED)``
+is ``SeedSequence([SEED, 0, 0, 0])``, and the non-zero stream keeps every
+other key apart from it. Any slide or centre can be recomputed alone:
 
-- the slide's centre draw is centre index 0, stream 0;
+- the slide's centre draw is centre index 0, stream R + 1;
 - labelling r (1..R) of a centre is stream r. Labelling 0 is the observed
   classes and draws nothing.
 """
@@ -175,9 +177,9 @@ def draw_centres(n_cells: int, slide_index: int) -> np.ndarray:
     """``N_CENTRES`` distinct rows of a slide's cells, uniform without replacement, in draw order.
 
     A row's position in the result is its centre index. The generator is the
-    slide's (centre index 0, stream 0).
+    slide's: centre index 0, stream R + 1, after the labellings' streams 1..R.
     """
-    return _generator(slide_index, 0, 0).choice(n_cells, size=N_CENTRES, replace=False)
+    return _generator(slide_index, 0, R + 1).choice(n_cells, size=N_CENTRES, replace=False)
 
 
 def labelling(cls: np.ndarray, slide_index: int, centre_index: int, r: int) -> np.ndarray:

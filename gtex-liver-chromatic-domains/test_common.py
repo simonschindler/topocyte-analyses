@@ -114,10 +114,17 @@ def test_draw_centres():
     a = common.draw_centres(10_000, 3)
     assert a.shape == (1500,) and np.unique(a).size == 1500 and a.max() < 10_000
     assert np.array_equal(a, common.draw_centres(10_000, 3))
-    # The slide's generator is SeedSequence([SEED, slide_index, 0, 0]); rows stay in draw order.
-    slide_rng = np.random.default_rng(np.random.SeedSequence([common.SEED, 3, 0, 0]))
+    # The slide's generator is SeedSequence([SEED, slide_index, 0, R + 1]); rows stay in draw order.
+    slide_rng = np.random.default_rng(np.random.SeedSequence([common.SEED, 3, 0, common.R + 1]))
     assert np.array_equal(a, slide_rng.choice(10_000, size=1500, replace=False))
     assert not np.array_equal(a, common.draw_centres(10_000, 4))
+
+
+def test_centre_draw_is_not_the_pilot_stream():
+    # SeedSequence pads short keys with zeros, so the pilot's default_rng(SEED) is SeedSequence([SEED, 0, 0, 0]);
+    # slide 0's centre draw must not reuse it.
+    pilot_rng = np.random.default_rng(common.SEED)
+    assert not np.array_equal(common.draw_centres(10_000, 0), pilot_rng.choice(10_000, size=1500, replace=False))
 
 
 def test_draw_centres_reads_n_centres_at_call_time(monkeypatch):

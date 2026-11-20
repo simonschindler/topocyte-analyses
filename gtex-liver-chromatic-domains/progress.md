@@ -74,10 +74,17 @@ after the builder check. `design.md` ("Rulings") has them in full.
 - The draw picked GTEX-YJ89-1426, the timing spike's healthy slide (slide index 4, half B). The builder check's 80 balls, which led to the moderated scaling, came from the spike's two slides. The other spike slide, GTEX-NPJ8-0726, was not drawn.
 
 Claude's calls:
-- **Seed keys.**
-  - The slide's centre draw uses `SeedSequence([SEED, slide_index, 0, 0])`.
-  - Labelling r of a centre uses `[SEED, slide_index, centre_index, r]`; labelling 0 draws nothing.
-  - SeedSequence pads short keys with zeros, so the plan's fit-sample key `[SEED, slide_index, 0xF17]` equals `[SEED, slide_index, 0xF17, 0]`, and no key repeats.
+- **Seed keys** (corrected after the task review, before any centre was drawn).
+  - **The rule:** the pilot draw uses `default_rng(SEED)`; every other generator uses a 4-entry key `SeedSequence([SEED, slide_index, centre_index, stream])` whose last entry is non-zero.
+  - **Why:** SeedSequence pads short keys with zeros, so `default_rng(SEED)` is `SeedSequence([SEED, 0, 0, 0])`. The first version keyed the slide's centre draw `[SEED, slide_index, 0, 0]`, which for slide 0 is the pilot draw's stream. The review found it.
+  - **Keys:**
+    - the slide's centre draw: `[SEED, slide_index, 0, R + 1]` (stream 20);
+    - labelling r of a centre: `[SEED, slide_index, centre_index, r]`, r = 1..19;
+    - labelling 0 draws nothing.
+  - **Checked,** padded:
+    - the pilot's key, the 30 centre draws', the 855,000 labellings' and the 30 fit-sample keys the plan gives Task 6 are all distinct;
+    - the fit-sample key, `[SEED, slide_index, 0xF17]`, has 3 entries and pads to a final 0, so it does not have the rule's form.
+  - `results/pilot.csv` is unchanged, since the pilot draw did not move.
   - Cost if wrong: none while the keys stay fixed; changing one redraws every centre or labelling.
 - **Row order of the pilot table:** within each condition, rows follow the permutation, so half A comes first. `slide_index` numbers the rows. Cost if wrong: none; only the numbering.
 - **pytest pinned** at 9.2.0, the version that resolved: the plan pins every direct dependency but gave pytest no version. Cost: none.
