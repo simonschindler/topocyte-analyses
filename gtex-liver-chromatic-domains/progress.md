@@ -227,3 +227,118 @@ Claude's calls:
   - Cost: the observed and control scores take about 19 s per block and fitting set, about 15 min over the 48 pairs.
   - `prange` over curves would cut this several-fold, under the same main-thread condition.
 - **The sweep kept branchy:** a branchless sweep gave identical bits but only 16% less time, since the loop is bound by its dependent loads, not by mispredictions.
+
+## Task 4: rule for k and pre-flight (2026-11-21)
+
+- **Module:** `domains.py`, the rule for k of design step 10 as pure functions, with numpy and scikit-learn only.
+  - `kmeans_fit`: `KMeans(k, n_init=20, random_state=seed)`. For k = 1, one start at the column means, which Lloyd's step keeps.
+  - `gap_choice`: one half's gap statistic against B = 20 draws from a Gaussian with the half's mean, covariance and number of rows, from one `default_rng(seed)` in order.
+    - W_1 is the total sum of squares about the means and W_k the k-means inertia, for the data and every reference.
+    - s_k = sd_b(log W*_k)·sqrt(1 + 1/B), with ddof 0.
+  - `stop_rule`: the half's k from its curves (rulings below).
+  - `ps_from_labels`, `prediction_strength`: Tibshirani and Walther's prediction strength, from an integer contingency table, never a loop over pairs. A test cluster of one row counts 0.
+  - `choose_k`: the smaller half's k, kept only with prediction strength of at least 0.8 in both directions.
+- **The controller's rulings, applied:**
+  - R2's synthetic clouds for the tests: 4,000 × 20 from one `default_rng(1)`, in the order elongated, skewed, two clusters, three clusters;
+  - the gap statistic as above, with gap and k-means seeds 0;
+  - prediction strength from the contingency table.
+
+### Two rulings on the rule for k (2026-11-21, before any study data)
+
+1. **The floor is 0.03, not 0.02 (Simon).**
+   - **Under 0.02, `test_gap_skewed_unimodal` failed.** The R2 skewed cloud (column 0 exp(N(0, 0.6)), the others variances 1/i, 4,000 × 20) gained −0.0038, 0.0169, 0.0214, 0.0159 and 0.0150 over Gap(1) at k = 2..6. The rule's first version picked k = 4.
+   - **The design's "at most 0.016" was one draw.** On the test's draw, the controller's settings (B = 10, `n_init=10`) gave 0.0229 at k = 4, so the draw made the difference, not B or `n_init`.
+   - **Ten fresh draws** gained 0.0169 ± 0.0030 at k = 4 and 0.0134 ± 0.0029 at k = 3, and 2 of the 10 picked k > 1. A draw of 22,500 × 20 gained at most 0.0174.
+   - **Ruling:** Simon raised the floor to 0.03 and added skewed cluster-free clouds to the pre-flight, where k must be 1.
+   - Cost if wrong: splits whose gain falls between 0.02 and 0.03 are missed (design step 10).
+2. **Tibshirani's stopping rule from k = 1 (the controller's correction of the formal rule).**
+   - **The first formal version** took the smallest k ≥ 2 with a gain at the floor and the stop condition. It skipped k = 1, while the ruling says k is "where the gap stops rising".
+   - **The pre-flight's level-1 skewed cloud exposed it** (22,500 × 5: column 0 exp(N(0, 0.6)), the others variances [1.5, 0.8, 0.4, 0.2]).
+     - Its gap falls at k = 2 and rises again from k = 5: gains 0.042 and 0.046 there, up to 0.055 at k = 9.
+     - The first version picked k = 5 in both halves, and prediction strength confirmed it: 0.849 and 0.847, and also 0.98 at k = 2 and 0.88 at k = 4.
+     - No floor could separate that cloud from the two-cluster mixture, whose gains are 0.041 and 0.045 in 20 dimensions.
+   - **The rule now:**
+     - k̂ is the smallest k ≥ 1 with Gap(k) ≥ Gap(k+1) − s_{k+1}, or k_max if there is none.
+     - If k̂ ≥ 2, its gain Gap(k̂) − Gap(1) must reach 0.03; otherwise the half's k is 1.
+     - `stop_rule` holds it, and the pre-flight adds a skew-dominant 5-d cloud (the lognormal column scaled to variance 3).
+   - Cost if wrong: a structure whose gap does not rise from k = 1 to k = 2 is missed, the standard rule's known caution.
+
+- **Tests:** `test_domains.py`, 30 tests (18 of them `test_stop_rule` cases), pass in 62 s with warnings as errors, without topocyte or the cohort. The whole study suite: 74 tests in 63 s.
+  - **The R2 clouds** under the binding settings, gains Gap(k) − Gap(1) at k = 2..6:
+
+    | cloud | gains | k |
+    |---|---|---|
+    | elongated | 0.0041, 0.0025, 0.0017, 0.0017, 0.0017 | 1 |
+    | skewed | −0.0038, 0.0169, 0.0214, 0.0159, 0.0150 | 1 |
+    | two clusters, 4 SD apart | 0.0429, 0.0205, 0.0191, 0.0174, 0.0167 | 2 |
+    | three clusters | 0.0322, 0.1127, 0.0767, 0.0658, 0.0593 | 3 |
+
+  - **`stop_rule` on hand-made curves:**
+    - the controller's four cases;
+    - the stop and the floor in detail;
+    - the level-1 skewed half that broke the first version.
+  - **The gap statistic** against its definition: 60 × 3, B = 4, to 1e-12.
+  - **The binding settings:** B = 20, the 0.03 floor, PS 0.8, `n_init` 20, and `gap_choice`'s defaults.
+  - **Prediction strength:**
+    - separated blobs give 1.0;
+    - the training centroids judge the test clusters, not the reverse;
+    - `ps_from_labels` against a hand example, the singleton rule and an all-pairs count.
+  - **`choose_k`,** with its parts patched.
+  - **Deliberate breaks** of a scratch copy: 20 of 21 fail a test. The 21st, k = 1 through k-means++, changes no result.
+- **Pre-flight** (`run_pilot.py preflight`, `results/preflight.json`): the full rule on synthetic halves of the pilot's sizes. One `default_rng(1)` draws them in case order, half A then half B. **Passed**, 9 of 9 cases, in 560 s (2,538 s CPU), peak RSS 0.27 GB.
+
+  | case (rows per half × columns, k_max) | must be | k | k_A, k_B | largest gain, A / B | stop at 1, margin A / B | PS, A→B / B→A |
+  |---|---|---|---|---|---|---|
+  | level-1 Gaussian, variances [3, 1.5, 0.8, 0.4, 0.2] (22,500 × 5, 10) | 1 | 1 | 1, 1 | −0.0014 / 0.0006 | +0.0070 / +0.0059 | — |
+  | level-2 Gaussian, variances 1/i (5,000 × 20, 6) | 1 | 1 | 1, 1 | 0.0029 / 0.0036 | +0.0049 / +0.0049 | — |
+  | level-2 Gaussian, variances 1/i (22,500 × 20, 6) | 1 | 1 | 1, 1 | 0.0016 / 0.0004 | +0.0032 / +0.0031 | — |
+  | two clusters, 4 SD apart (5,000 × 20, 6) | 2 | 2 | 2, 2 | 0.0412 / 0.0447 | −0.0374 / −0.0408 | 0.998 / 0.996 |
+  | three clusters (5,000 × 20, 6) | 3 | 3 | 3, 3 | 0.1167 / 0.1111 | −0.0317 / −0.0272 | 0.994 / 0.992 |
+  | level-2 skewed (5,000 × 20, 6) | 1 | 1 | 1, 1 | 0.0174 / 0.0176 | +0.0146 / +0.0125 | — |
+  | level-2 skewed (22,500 × 20, 6) | 1 | 1 | 1, 1 | 0.0188 / 0.0205 | +0.0103 / +0.0076 | — |
+  | level-1 skewed (22,500 × 5, 10) | 1 | 1 | 1, 1 | 0.0501 / 0.0553 | +0.0054 / +0.0070 | — |
+  | level-1 skew-dominant (22,500 × 5, 10) | 1 | 1 | 1, 1 | 0.0514 / 0.0439 | +0.0359 / +0.0348 | — |
+
+  - **The margin** is Gap(1) − (Gap(2) − s_2): where it is positive, the gap stops at k = 1. The mixtures' largest gains are at the k they chose.
+  - **The skewed clouds' gains are not small, but they come after the gap has stopped at 1.** The 5-d ones reach 0.044–0.055 by k = 8–9, the 20-d ones about 0.02.
+  - **The gap gains** Gap(k) − Gap(1), k = 2..k_max, per case and half:
+
+    | case | half | gains |
+    |---|---|---|
+    | level-1 Gaussian | A | −0.0014, −0.0037, −0.0023, −0.0043, −0.0037, −0.0043, −0.0041, −0.0027, −0.0015 |
+    | | B | −0.0003, −0.0007, 0.0006, 0.0004, 0.0000, 0.0002, −0.0010, −0.0018, −0.0018 |
+    | level-2 Gaussian, 5,000 | A | 0.0012, −0.0005, 0.0014, 0.0015, 0.0029 |
+    | | B | 0.0012, 0.0011, 0.0034, 0.0036, 0.0023 |
+    | level-2 Gaussian, 22,500 | A | −0.0000, 0.0004, 0.0009, 0.0016, 0.0006 |
+    | | B | −0.0000, −0.0001, 0.0004, −0.0005, −0.0013 |
+    | two clusters | A | 0.0412, 0.0197, 0.0176, 0.0155, 0.0142 |
+    | | B | 0.0447, 0.0216, 0.0205, 0.0184, 0.0178 |
+    | three clusters | A | 0.0359, 0.1167, 0.0797, 0.0679, 0.0608 |
+    | | B | 0.0313, 0.1111, 0.0755, 0.0638, 0.0571 |
+    | level-2 skewed, 5,000 | A | −0.0087, 0.0135, 0.0159, 0.0134, 0.0174 |
+    | | B | −0.0066, 0.0146, 0.0176, 0.0127, 0.0140 |
+    | level-2 skewed, 22,500 | A | −0.0073, 0.0156, 0.0181, 0.0146, 0.0188 |
+    | | B | −0.0046, 0.0185, 0.0205, 0.0173, 0.0189 |
+    | level-1 skewed | A | −0.0004, −0.0023, −0.0013, 0.0419, 0.0432, 0.0407, 0.0433, 0.0501, 0.0477 |
+    | | B | −0.0019, −0.0030, 0.0070, 0.0459, 0.0491, 0.0468, 0.0500, 0.0553, 0.0550 |
+    | level-1 skew-dominant | A | −0.0303, 0.0215, 0.0195, 0.0273, 0.0371, 0.0411, 0.0508, 0.0514, 0.0490 |
+    | | B | −0.0292, 0.0194, 0.0107, 0.0157, 0.0250, 0.0304, 0.0439, 0.0427, 0.0404 |
+
+  - The pre-flight ran three times as the rulings came. The draws of every case are the same in all three runs, and the curves agree to four decimals. The table is the last run's, under the rule as it now stands.
+- **Timings** (M4, 10 cores, scikit-learn's k-means threads):
+  - one `gap_choice`: 12–16 s at 4,000 × 20 with k_max 6 (105 fits of 20 starts), and 30–36 s at 22,500 × 20;
+  - a 22,500 × 5 pre-flight case with k_max 10: 91–111 s for both halves;
+  - the test file: 62 s, of which the three gap tests take 14–27 s each.
+
+Claude's calls:
+- **`gap_A` and `gap_B` in `choose_k`'s result** are each half's whole `gap_choice` result: its k, and the curves `gap` and `s`. The plan says "the curves", and s gives the report's error bars. Cost if wrong: one key's shape.
+- **`ps` is empty when min(k_A, k_B) = 1.** When prediction strength rejects, `ps` keeps the values at min(k_A, k_B), so the JSON shows why k fell to 1. Cost: none.
+- **`choose_k` refuses anything but two directions,** so the "both directions" condition cannot be skipped. Cost: none for the study's calls.
+- **The pre-flight's data:**
+  - no z-scoring, and cases added later are appended, so earlier cases keep their draws;
+  - the skew-dominant column is scaled by the lognormal's theoretical variance, (e^0.36 − 1)·e^0.36 ≈ 0.621, not a sample's.
+  
+  Cost if wrong: none; any fixed draw serves.
+- **k = 1 in `kmeans_fit`** is one start at the mean instead of 20 k-means++ starts; the result is the same.
+- **k-means inertia is not bit-reproducible.** scikit-learn's OpenMP reduction order moved s by 1e-16 between two calls on one input, and the gap curve not at all. The verifier (Task 8) should compare recomputed gap statistics with a tolerance. Cost if ignored: a spurious verifier failure.
+- **`README.md`** is not updated: Task 8 owns its run table, and its "Nothing else has run" is now stale.

@@ -43,7 +43,9 @@
   - numba kernels serial;
   - the run uses 8 processes (spawn), never threads around the port.
 - **Rule for k** (design step 10):
-  - gap statistic against a matched Gaussian, B = 20, minimum gain 0.02, Tibshirani's stopping rule, at k = k_max the gain condition only;
+  - gap statistic against a matched Gaussian, B = 20;
+  - Tibshirani's stopping rule from k = 1: k̂ is the smallest k ≥ 1 with Gap(k) ≥ Gap(k+1) − s_{k+1}, k_max if none (corrected 2026-11-21, design step 10);
+  - if k̂ ≥ 2, its gain Gap(k̂) − Gap(1) must be ≥ 0.03 (Simon, 2026-11-21; first 0.02), else 1;
   - k = the smaller of the two halves' choices;
   - prediction strength ≥ 0.8 in both directions, else k = 1;
   - k_max is 10 for compartments and 6 for subdomains;
@@ -247,7 +249,7 @@ def test_empty_curves(): ...                # curves without bars: zero rows/col
 
 **Interfaces (produces), in `domains.py`:**
 - `kmeans_fit(X: np.ndarray, k: int, seed: int = 0) -> KMeans`: `n_init=20`. For k = 1 the single centroid is the mean.
-- `gap_choice(X: np.ndarray, k_max: int, *, B: int = 20, min_gain: float = 0.02, seed: int = 0) -> dict` with keys `k`, `gap` (k_max,) and `s` (k_max,), per design step 10.
+- `gap_choice(X: np.ndarray, k_max: int, *, B: int = 20, min_gain: float = 0.03, seed: int = 0) -> dict` with keys `k`, `gap` (k_max,) and `s` (k_max,), per design step 10.
 - `ps_from_labels(test_labels: np.ndarray, train_assign: np.ndarray) -> float`: the minimum over test clusters of the share of within-cluster pairs that `train_assign` puts together. A test cluster of one centre counts as 0.
 - `prediction_strength(train: np.ndarray, test: np.ndarray, k: int, *, seed: int = 0) -> float`: Tibshirani–Walther. `kmeans_fit` on train and on test, then `ps_from_labels` of the test labels against the training centroids' assignment of the test rows.
 - `choose_k(gap_A: np.ndarray, gap_B: np.ndarray, directions: Sequence[tuple[np.ndarray, np.ndarray]], k_max: int, *, seed: int = 0) -> dict` with keys `k`, `k_A`, `k_B`, `ps` (one value per direction at the chosen k), `gap_A` and `gap_B` (the curves).
@@ -269,7 +271,7 @@ def test_choose_k_min_of_halves_and_ps(monkeypatch): ...  # halves 3 and 2 -> 2;
 
 - [ ] **Step 2: Run:** `.venv/bin/python -m pytest -q test_domains.py`. Expected: FAIL.
 - [ ] **Step 3: Implement the four functions.** `gap_choice` draws its B Gaussians from `default_rng(seed)` with X's mean and `np.cov(X, rowvar=False)`.
-- [ ] **Step 4: Run** the tests (pass), then `run_pilot.py preflight`. The pre-flight cases use matched Gaussians with PCA-like variances at the pilot's sizes (22,500 × 5; 5,000 and 22,500 × 20), where k must be 1, and two- and three-cluster mixtures, where k must be 2 and 3. Expected: `results/preflight.json` has `"passed": true`. Record the gap gains in `progress.md`.
+- [ ] **Step 4: Run** the tests (pass), then `run_pilot.py preflight`. The pre-flight cases use matched Gaussians with PCA-like variances at the pilot's sizes (22,500 × 5; 5,000 and 22,500 × 20) and skewed cluster-free clouds at the same sizes (first axis lognormal with σ = 0.6), where k must be 1, and two- and three-cluster mixtures, where k must be 2 and 3. Expected: `results/preflight.json` has `"passed": true`. Record the gap gains in `progress.md`.
 - [ ] **Step 5: Commit** (if agreed).
 
 ### Task 5: Bars of the pilot (the 2-hour run)

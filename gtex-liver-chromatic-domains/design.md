@@ -43,7 +43,7 @@ labels.
 | Neighbourhood | The closed δ-ball around each centre cell, δ = 150 µm. |
 | Summaries | **Per class, as Betti curves:** the six-pack of the inclusion (class t → all cells) for each class. Only its domain and image curves are kept; see "Why domain and image suffice". |
 | Clustering | k-means at both levels, with k chosen by prediction strength across the two slide halves. Refined after the builder check (next row). |
-| Choosing k (after the builder check) | Prediction strength alone finds clusters in cluster-free elongated clouds, so k comes from the **gap statistic against a Gaussian with the same mean and covariance**: k is where the gap stops rising, counting only gains of at least 0.02. **Prediction strength** of at least 0.8 in both directions then confirms recurrence; otherwise k = 1. Both levels (step 10). |
+| Choosing k (after the builder check) | Prediction strength alone finds clusters in cluster-free elongated clouds, so k comes from the **gap statistic against a Gaussian with the same mean and covariance**: k is where the gap stops rising, counting only gains of at least 0.03 (raised from 0.02 on 2026-11-21, before any study data, after Task 4 showed that skewed cluster-free clouds reach 0.02; step 10). **Prediction strength** of at least 0.8 in both directions then confirms recurrence; otherwise k = 1. Both levels (step 10). |
 | Scaling of residuals (after the builder check) | **Moderated spread:** each residual curve is divided by sqrt(s² + s0²), the centre's own reference spread plus the block's median reference spread. A structure never seen in the shuffles keeps a finite, large value (step 5). |
 | Cost | Measured by a timing spike before this design (appendix). |
 
@@ -195,8 +195,20 @@ curves therefore determine every Betti-curve residual of the six-pack.
       - for a feature matrix X, W_k is the k-means within-cluster sum of squares, and W_1 the total sum of squares about the mean. X holds one half's centres: at level 1 the half's z-scored features; at level 2 the half's centres of one compartment, in the level-2 basis fitted on that half;
       - the reference is B = 20 draws from a Gaussian with X's mean and covariance and X's number of rows, with W*_k for each draw;
       - Gap(k) = mean_b log W*_k − log W_k and s_k = sd_b(log W*_k) · sqrt(1 + 1/B);
-      - **the half's k** is the smallest k ≥ 2 with Gap(k) − Gap(1) ≥ 0.02 and Gap(k) ≥ Gap(k+1) − s_{k+1}; if there is none, it is 1. At k = k_max only the 0.02 condition applies.
-      - In Claude's simulation (4,000 points, 20 dimensions) this gave k = 1 on a cluster-free elongated cloud (largest gain 0.006), on a skewed one and on a level-1-like cloud, and k = 2 and k = 3 on real two- and three-cluster mixtures (gains 0.044 and 0.115). A weak two-cluster split, 2.5 SD apart (gain 0.010), is missed.
+      - **the half's k** comes from Tibshirani's stopping rule, starting at k = 1. k̂ is the smallest k ≥ 1 with Gap(k) ≥ Gap(k+1) − s_{k+1}, and k̂ = k_max if there is none. If k̂ ≥ 2, its gain Gap(k̂) − Gap(1) must reach 0.03; otherwise the half's k is 1. This is the ruling's own wording: k is "where the gap stops rising".
+      - **Corrected 2026-11-21** (Claude, before any study data). The first formal version took "the smallest k ≥ 2 with a gain ≥ floor and the stop condition", which skips k = 1. On skewed cluster-free 5-d clouds the gap falls at k = 2 and rises again from k = 5, so that version split them into 5 to 8 groups, and prediction strength confirmed the split. The standard rule stops at k = 1 there. Throwaway comparison, B = 10, at the pilot's sizes:
+      
+        | Cloud | Rule as corrected (0.03) | First version |
+        |---|---|---|
+        | skewed 5-d (the pre-flight's level-1 case) | k = 1 | k = 5 |
+        | skewed 5-d, skewed axis carrying the most variance | k = 1 | k = 8 |
+        | skewed 20-d | k = 1 | k = 1 |
+        | two clusters, 4 SD, 20-d and 5-d | k = 2 | k = 2 |
+        | three clusters, 20-d | k = 3 | k = 3 |
+        
+        A dip-test confirmation was also tried. Its neighbour-pair version picked k = 3 for a two-cluster mixture, so it is not used.
+      - **The floor of 0.03** (Simon, 2026-11-21) replaces the 0.02 first ruled. It was raised before any study data existed, on Task 4's evidence. A skewed but cluster-free cloud (20 dimensions, 4,000 points, first axis lognormal with σ = 0.6, the others with variances 1/i) gave gap gains of 0.017 ± 0.003 over 10 draws, with a maximum near 0.023. Under 0.02, 2 of 10 single halves picked k > 1, one of them k = 4 at 0.0214. A floor of 0.03 sits about 4 SD above those clouds.
+      - **What the rule then finds.** In Claude's simulation (4,000 points, 20 dimensions) the rule gives k = 1 on a cluster-free elongated cloud (largest gain 0.006), on the skewed cloud and on a level-1-like cloud. It gives k = 2 and k = 3 on real two- and three-cluster mixtures (gains 0.044 and 0.115). Splits whose gain falls between 0.02 and 0.03 (roughly 2.5–3.5 SD of bimodality) are missed, including a weak two-cluster split 2.5 SD apart (gain 0.010).
     - **Both halves:** k = the smaller of the two halves' choices (Claude's call).
     - **Prediction strength** (Tibshirani and Walther, 2005) at that k must confirm recurrence. Otherwise k = 1.
       - In direction A→B, the basis (steps 6–7, level 2 only) and the training k-means are fitted on half A. Half B is scored in that basis and clustered on its own with the same k.
@@ -218,7 +230,7 @@ curves therefore determine every Betti-curve residual of the six-pack.
    - Labelling 1 stands in for the observed, and its residual is taken against labellings 2..19, with the same moderated scaling (its own s, the observed fitting set's s0).
    - It is projected into the observed bases (fPCA components and MFA weights, Claude's call), then run through the same compartments and the same rule for k (step 10). It asks whether those coordinates and that rule find structure in pure shuffle noise.
    - It must find k = 1 in every compartment. If it finds subdomains, the pipeline manufactures structure. Level 2 then stops and the report says so; the level-1 compartments still go to the atlas and to study 2.
-   - **Pre-flight, before the 2-hour run:** the rule for k must return k = 1 on matched Gaussian clouds of the pilot's sizes, and the right k on synthetic two- and three-cluster mixtures.
+   - **Pre-flight, before the 2-hour run:** the rule for k must return k = 1 on matched Gaussian clouds and on skewed cluster-free clouds of the pilot's sizes, and the right k on synthetic two- and three-cluster mixtures.
 2. **Pairwise guard (the verdict).** For each compartment with k_c ≥ 2 and each direction (train on one half, test on the other):
    - **Stability:** the test half's final subdomain labels predicted by the training half's own subdomain centroids, fitted on the training half alone in its own basis. Labels are matched by the Hungarian assignment on the training half. This gives the balanced accuracy BA_stab.
    - **Pairwise:** the test half's final subdomain labels predicted by a classifier trained on the training half's final labels from the 15 pairwise, density and composition features. The classifier is scikit-learn's `HistGradientBoostingClassifier` with default settings and a fixed seed: flexible, to give the pairwise features every chance. This gives BA_pw.
