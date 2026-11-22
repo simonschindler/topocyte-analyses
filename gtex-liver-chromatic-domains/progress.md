@@ -472,3 +472,160 @@ Claude's calls:
   - Cost: none.
 - **`main`'s dispatch:** the `preflight` branch no longer folds its exit into the `elif` condition, so `bars` reads as its own branch (Task 4's deferred minor, touched in passing). Cost: none.
 - **The json carries more than the plan names:** condition, half, the slide's cells, read, pool and write seconds, the pool's busy share, the ball and timing extremes with their centres, the workers' CPU seconds, the parent's peak RSS, bar counts, the npz size, and start and finish times. Cost: none.
+
+## Task 6: features (2026-11-22)
+
+- **Module:** `features.py`, run as `features.py` with no subcommand. It reads `results/pilot.csv` and `results/bars/*.npz` and writes `results/features.npz`: 45,000 rows, slides in slide-index order, then centre index 0..1499.
+  - **Per centre:** `slide_index`, `half`, `centre_row`, `xy`, `fit` (in its slide's fit sample); `L1` (log10 cells, then the four class fractions); `P` (pair counts minus `chromatic.pair_expectation`, called on one ball's (4,) counts at a time).
+  - **Per fitting set f (A, B, all):** `blk_obs_{f}` (N, 16, 9), `L2_obs_{f}` and `L2_ctl_{f}` (N, 20), `s0_{f}`, `kept_{f}`, `dropped_{f}` and `gate_scores_{f}` (16,), `evr_{f}` (16, 9), `mfa_evr_{f}` (20,).
+  - **Diagnostics:** `zero_spread_nonzero` (16,) and `gate_gram` (16,).
+  - **One block at a time, in two passes over the slides.**
+    - Pass 1 reads each slide's bars and extracts the block's 20 labellings. It keeps every centre's observed and control s², its exact zero test, and the fit sample's residuals.
+    - Then come the three fits.
+    - Pass 2 reads each slide again and scores every centre's observed and control residuals in each fit's basis.
+    - No copy of the bars is written.
+- **The controller's rulings, applied:**
+  - **Fit sample:** the key `[SEED, slide_index, 0, 0xF17]` draws 400 of a slide's 1,500 centres without replacement, sorted. Each slide has one sample: the halves fit on their 15 slides' samples (6,000 centres) and all on 12,000.
+  - **s0:** s0² is the median positive observed s² over the fitting set's fit sample. The fit's s0, components and MFA weights are applied unchanged to all 45,000 centres.
+  - **Dropped blocks:** a block with no fit centre of s > 0, or whose fit residuals are all zero, is dropped. Its `blk` columns are 0, it is left out of that fit's MFA, and `dropped_{f}` is set.
+  - **Rank:** see Claude's calls.
+  - **Control:** labelling 1 minus the mean of labellings 2..19, with its own spread (2..19) and the observed fit's s0. It is scored in the observed components and projected with the observed MFA's weights, centring and loadings.
+  - **`zero_spread_nonzero`** counts over all 45,000 centres.
+- **Tests:** `test_features.py`, 19 tests, pass in 4–8 s with warnings as errors and the pinned topocyte on `PYTHONPATH`. The study suite: 100 tests in 86 s.
+  - **The brief's five:**
+    - the level-1 features of [[50, 30, 15, 5]];
+    - the control is lab1 − mean(lab2..19) by inner products, and the observed lab0 − mean(lab1..19); labelling 0 plays no part in the control;
+    - s0² is the median of the positive s² only;
+    - a zero-spread centre with a non-zero residual keeps a finite value through s0 (Review Focus 1);
+    - the MFA projection of the fit sample equals its PCA scores to 1e-12.
+  - **Beside them:**
+    - the fit-sample key, against the 3-entry key it replaced;
+    - `P` against per-row `pair_expectation` calls;
+    - `take` and `concat`;
+    - the labellings follow the owner code;
+    - the moderated scaling;
+    - `fit_block`: both drop rules, its scores against `fpca_from_gram` (gate 2), and a rank-2 block that keeps 2 components;
+    - gate 1 against topocyte, and that it catches non-unit weights;
+    - `mfa` refuses fewer than 20 components;
+    - `level2` projects the control in the observed basis, and a dropped block plays no part;
+    - `block_features` scales each residual with its own spread and the fit's s0, which is the median positive observed s² of that fit's sample;
+    - `run` on four synthetic slides (24 centres, fit samples of 12): every key, shape and row, the slides' arrays, the dropped absent class, `zero_spread_nonzero`, the gates, and centred fit samples;
+    - `run` again after changing a centre outside the fit samples: only that centre's features move, never s0, the fractions, the bases or the MFA, and a change of its labelling 0 leaves the control untouched.
+  - **Deliberate breaks:** 19 of 19 caught, on a scratch copy of `features.py`:
+    - control weights −1/19;
+    - the control residual from labelling 0;
+    - the control scaled with the observed spread;
+    - the s0 median over every s², zeros included;
+    - the 3-entry fit-sample key;
+    - the zero test without the factor R, so a rounding residue counts as non-zero;
+    - the control's MFA fitted on its own;
+    - the kept count ignoring `fpca_from_gram`'s;
+    - the kept count not capped at 9;
+    - dropped blocks kept in the MFA;
+    - the MFA weight from the second column;
+    - no sign rule;
+    - `take` sorting its index;
+    - labellings off by one;
+    - the halves fitted on misaligned rows;
+    - level 1 with the natural log;
+    - `P` with its sign flipped;
+    - the fPCA fitted on every centre;
+    - gate 1 on weighted curves.
+
+    For two of these faults (the control scaled with the observed spread, the control's own MFA), the only failing test is one written after the first green run, when I saw no test would catch them.
+- **Profile before the run** (a scratch script on block 1, epithelial domain H1, the block with the most distinct endpoints, over all 30 slides):
+  - **Time:** 520 s for the block.
+    - Pass 1 took 38 s and pass 2 146 s.
+    - The all-slides fit took 244 s: the Gram matrix 77 s, `fpca_from_gram` 147 s, and the components with the fit sample's scores 20 s.
+    - Each half took about 45 s.
+    - Peak RSS was 7.07 GB.
+  - **Gates:** gate 1 2.2e-15, gate 2 0.7–1.3e-14.
+  - **Component tables:** 11.3M breakpoints for the all-slides fit (φ 0.81 GB) and 5.3–6.0M for a half.
+  - **Φ is not cached.**
+    - One rebuild of Φ takes 0.08 s for the all-slides fit and 0.04 s for a half.
+    - So the 180 `score` calls of a block spend about 10 s on it, 2% of the block.
+    - `curves.py` is unchanged.
+  - **Scoring:** one slide's observed residuals (2.4M bars) score in 0.72 s, 0.3 µs per bar.
+  - **`fpca_from_gram` alone,** on a synthetic Gram matrix handed over without a name: 145 s and 4.97 GB peak RSS at 12,000 curves, 17.5 s and 2.25 GB at 6,000.
+- **The run** (`logs/features.log`): 22:45–23:53 on 2026-11-22, on AC power inside `caffeinate -is`.
+  - **Time:** 4,059 s of wall time and 7,344 s of CPU.
+    - `fpca_from_gram` took about 2,880 s of it: 2,303 s for the 16 all-slides fits and about 18 s per half fit.
+    - Pass 2 took 506 s, the all-slides Gram matrices 254 s, and pass 1 159 s.
+    - The blocks took 182–524 s each.
+  - **Memory:**
+    - Peak RSS was 9.85 GB, and the peak memory footprint 12.8 GB (`/usr/bin/time -l`), which also counts compressed pages.
+    - Sampled between fits, RSS was 2.4 and 4.9 GB, and the footprint 8.6 GB and, a minute later, 5.0 GB. Of the 5.0 GB, 2.3 GB was malloc's cache of freed large regions, mostly swapped out.
+    - System swap reached 3.4 GB. The block times matched the profile, so swap did not slow the run.
+  - **Output:** `results/features.npz`, 206 MB, every array finite (`*.npz` is ignored).
+  - **Gates:** gate 1 at most 2.2e-15 (bound 1e-10). Gate 2 at most 2.6e-13 (A), 2.2e-13 (B) and 5.9e-13 (all) (bound 1e-9). In all 48 block fits, the fit sample's pass-2 scores equal the gated scores bit for bit.
+  - **Dropped blocks: none.** Every block has s > 0 and non-zero residuals in every fit sample, and every block keeps 9 components in every fit.
+  - **`zero_spread_nonzero`:** 1,952 centre-blocks in all.
+    - The four image H1 blocks hold almost all of them: epithelial 81, stromal 314, immune 715, other 837 (up to 1.9% of a block's centres).
+    - Two domain H1 blocks hold the rest: immune 4, other 1.
+    - The builder check's 80 balls found the case in image H1 only.
+  - **MFA:** all 16 blocks in each fit.
+
+    | fit | first 20 components explain | first five components | 20th |
+    |---|---|---|---|
+    | A | 0.624 | 0.115, 0.069, 0.061, 0.045, 0.043 | 0.012 |
+    | B | 0.582 | 0.105, 0.070, 0.046, 0.040, 0.033 | 0.013 |
+    | all | 0.603 | 0.110, 0.069, 0.054, 0.042, 0.038 | 0.012 |
+
+  - **Per block:** s0 per fit, the fraction of variance explained by the 9 components (FVE) per fit, the first component's share in the all-slides fit, the zero-spread non-zero count, and the gates (gate 2 is the largest of the three fits).
+
+    | block | class, module, degree | s0 A / B / all | FVE A / B / all | first component (all) | zero spread, non-zero | gate 1 | gate 2 | wall |
+    |---|---|---|---|---|---|---|---|---|
+    | 0 | epithelial domain H0 | 79.43 / 79.13 / 79.29 | 0.936 / 0.933 / 0.935 | 0.550 | 0 | 1.3e-15 | 4.8e-15 | 344 s |
+    | 1 | epithelial domain H1 | 109.7 / 107.4 / 108.7 | 0.728 / 0.727 / 0.728 | 0.206 | 0 | 2.2e-15 | 1.3e-14 | 524 s |
+    | 2 | epithelial image H0 | 40.71 / 41.06 / 40.84 | 0.959 / 0.958 / 0.959 | 0.668 | 0 | 1.5e-15 | 1.4e-14 | 298 s |
+    | 3 | epithelial image H1 | 67.12 / 66.02 / 66.53 | 0.780 / 0.774 / 0.777 | 0.261 | 81 | 1.7e-15 | 1.0e-14 | 331 s |
+    | 4 | stromal domain H0 | 122.1 / 123.0 / 122.6 | 0.910 / 0.909 / 0.909 | 0.373 | 0 | 7.4e-16 | 9.6e-15 | 261 s |
+    | 5 | stromal domain H1 | 100.5 / 93.17 / 96.73 | 0.655 / 0.648 / 0.649 | 0.153 | 0 | 1.1e-15 | 4.4e-14 | 285 s |
+    | 6 | stromal image H0 | 34.16 / 34.34 / 34.25 | 0.939 / 0.937 / 0.938 | 0.600 | 0 | 8.4e-16 | 9.9e-15 | 219 s |
+    | 7 | stromal image H1 | 6.532 / 6.177 / 6.322 | 0.578 / 0.567 / 0.569 | 0.144 | 314 | 4.2e-16 | 8.9e-14 | 189 s |
+    | 8 | immune domain H0 | 121.8 / 121.6 / 121.7 | 0.942 / 0.936 / 0.939 | 0.429 | 0 | 6.4e-16 | 5.7e-14 | 214 s |
+    | 9 | immune domain H1 | 65.34 / 60.11 / 62.90 | 0.617 / 0.592 / 0.603 | 0.140 | 4 | 7.6e-16 | 4.5e-14 | 221 s |
+    | 10 | immune image H0 | 21.78 / 22.17 / 21.95 | 0.969 / 0.965 / 0.967 | 0.736 | 0 | 9.8e-16 | 2.2e-14 | 201 s |
+    | 11 | immune image H1 | 3.464 / 3.900 / 3.689 | 0.495 / 0.546 / 0.499 | 0.119 | 715 | 5.1e-16 | 5.9e-13 | 184 s |
+    | 12 | other domain H0 | 119.6 / 119.4 / 119.4 | 0.937 / 0.927 / 0.932 | 0.359 | 0 | 6.3e-16 | 5.9e-14 | 206 s |
+    | 13 | other domain H1 | 63.86 / 58.51 / 61.44 | 0.631 / 0.576 / 0.601 | 0.133 | 1 | 8.4e-16 | 1.1e-13 | 204 s |
+    | 14 | other image H0 | 21.12 / 21.44 / 21.30 | 0.950 / 0.945 / 0.948 | 0.617 | 0 | 1.1e-15 | 6.8e-14 | 195 s |
+    | 15 | other image H1 | 5.174 / 4.176 / 4.660 | 0.604 / 0.564 / 0.578 | 0.148 | 837 | 8.5e-16 | 1.9e-13 | 182 s |
+
+    s0 is in px: a squared L² norm integrates a count over squared radii (px²).
+  - **The halves against each other** (the larger s0 over the smaller):
+    - s0 differs by at most 1.8% in the eight H0 blocks and by 1.7–2.2% in the epithelial H1 blocks;
+    - by 5.7–9.2% in the stromal, immune and other domain H1 blocks and in stromal image H1;
+    - by 12.6% and 23.9% in immune and other image H1, the two blocks with the fewest bars and the smallest s0 (3.5–5.2);
+    - the 9 components' FVE differs by at most 0.054 (other domain H1).
+  - **Descriptive only (Task 7 runs the control's rule):** in the all-slides basis, the control's level-2 columns have a mean SD of 0.77 against 1.12 for the observed, and its first column 0.59 against 2.26.
+  - **Single-class balls occur:** some balls are all epithelial or all stromal (a fraction of 1.0 in `L1`). The smallest ball holds 11 cells (log10 1.04), the largest 744 (log10 2.87).
+
+Claude's calls:
+- **The rank ruling's threshold never binds.** The ruling keeps a block's components with an eigenvalue above 1e-12 times its largest, at most 9.
+  - `fpca_from_gram` has by then dropped every eigenvalue up to 1e-10 of the Gram matrix's trace (its default `rtol`), and the trace is at least the largest centred eigenvalue.
+  - So every component it returns passes the ruling's threshold, and a block keeps the first 9 it returns, or all of them when there are fewer.
+  - This showed when a deliberate break that removed the explicit 1e-12 filter passed every test. The filter is gone, and `features.py` says why.
+  - To make the ruling's threshold bind, `rtol` would have to be smaller, close to eigh's rounding at 12,000 curves, so the default stays.
+  - Cost if wrong: none in this run, where every block kept 9 components in every fit.
+- **An exact zero test.** A residual is zero exactly when R·lab0 − Σ_r lab_r is, and that curve has integer step values. `nonzero` takes its squared norm as four times `spread2` of the two sets R·lab0 and Σ_r lab_r, which is exactly 0 when they agree.
+  - **Why:** the residual's weights −1/19 are rounded, so a residual that should be zero keeps a residue of about 1e-17, and no test on its norm can tell it from a small one.
+  - It decides `zero_spread_nonzero` and the second drop rule.
+  - Cost: one more `spread2` of two sets per slide and block.
+- **Keys beyond the brief's list:**
+  - `fit`, the fit-sample rows: the verifier recomputes s0, the fPCA and the MFA from them;
+  - `kept_{f}`, since the ruling says the count of components is recorded;
+  - `gate_scores_{f}` and `gate_gram`, the gates' errors, for the report to assert.
+
+  A dropped block's gate error, and the s0 of a block without a positive s², are 0, not NaN, so every saved array stays finite (Task 8 checks that); `dropped_{f}` says which. Cost: under 1 MB.
+- **The MFA refuses fewer than 20 components** with a variance above 1e-12 of the first, instead of padding level 2 with rounding noise. That is why the synthetic run tests have 24 fit rows per half. Cost: none here (144 columns, 6,000 rows or more).
+- **Fit samples are sorted.** The draw is the set; sorted, the fit rows are a subsequence of the row order. Cost: none.
+- **Gate 1's 200 curves** are every 60th centre of the all-slides fit sample, spread over the 30 slides: each block's labelling-0 curves in its degree. Its error is taken entry by entry, relative, and every zero of topocyte's matrix must be exactly zero here too.
+- **Gate 2 per block and fit,** relative to that fit's largest score.
+- **A third check:** the fit sample's scores from pass 2 must equal the gate-checked scores of the fit bit for bit, or the run stops. It ties the written rows to the gated scores. Cost: none.
+- **Two passes over the slides per block,** rereading the bars, rather than holding a whole block: the epithelial H0 blocks have 94M bars, 2.3 GB per copy of a residual set. Cost: a few seconds of reading per pass.
+- **Memory of the fit:** the Gram matrix goes to `fpca_from_gram` without a name, so its symmetrized copy replaces it, and the result's n × n matrices are dropped right after. Cost: none.
+- **The halves fit on their rows of the all-slides fit set,** taken from it, so pass 1 builds the fit sample's residuals once.
+- **`pca` and `mfa` are copied** from the cell-type study's `common.py`, with their sign rule. `mfa` also returns its column means and loadings for the projection, and its `zip`s are strict.
+- **The npz is written to `features.tmp.npz` and renamed;** `*.npz` ignores that name (Task 5's deferred minor about `.npz.tmp`).
+- **One `BlockFit` outlives its block,** found while watching the run's memory. In `run`, the loop variable `fit` keeps the previous block's all-slides fit, with its component tables (up to 0.9 GB), through the next block. This is memory only and no result depends on it. It was left as it ran, so that the committed code is the code that wrote `features.npz`.
