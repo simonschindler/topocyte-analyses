@@ -1,0 +1,50 @@
+{
+ "slide_id": "GTEX-15RJE-1126",
+ "slide_index": 9,
+ "condition": "congestion",
+ "half": "B",
+ "slide_cells": 294129,
+ "centres": 1500,
+ "labellings": 20,
+ "blocks": 16,
+ "delta_px": 303.52084176446783,
+ "workers": 8,
+ "chunk": 100,
+ "start_method": "spawn",
+ "wall_seconds": 481.8,
+ "read_seconds": 0.0,
+ "pool_seconds": 481.2,
+ "pool_busy_share": 0.927,
+ "ball_cells": {
+  "min": 11,
+  "median": 188.0,
+  "max": 292,
+  "max_centre": 163
+ },
+ "seconds_per_centre": {
+  "median": 2.465,
+  "max": 4.757,
+  "max_centre": 661,
+  "total": 3561.5
+ },
+ "worker_cpu_seconds": 4616.9,
+ "worker_peak_rss_gb": 0.444,
+ "parent_peak_rss_gb": 1.354,
+ "bars": 20318879,
+ "codomain_bars": 569520,
+ "npz_bytes": 421850998,
+ "versions": {
+  "python": "3.13.9",
+  "numpy": "2.5.5",
+  "scipy": "1.18.1",
+  "numba": "0.68.1",
+  "gudhi": "3.13.0",
+  "phimaker": "0.5.0",
+  "h5py": "3.16.0",
+  "pandas": "3.1.1"
+ },
+ "topocyte_commit": "18e3aa5",
+ "started": "2026-11-22T11:57:10",
+ "finished": "2026-11-22T12:05:12",
+ "write_seconds": 0.4
+}

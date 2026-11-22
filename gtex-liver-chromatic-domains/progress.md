@@ -342,3 +342,133 @@ Claude's calls:
 - **k = 1 in `kmeans_fit`** is one start at the mean instead of 20 k-means++ starts; the result is the same.
 - **k-means inertia is not bit-reproducible.** scikit-learn's OpenMP reduction order moved s by 1e-16 between two calls on one input, and the gap curve not at all. The verifier (Task 8) should compare recomputed gap statistics with a tolerance. Cost if ignored: a spurious verifier failure.
 - **`README.md`** is not updated: Task 8 owns its run table, and its "Nothing else has run" is now stale.
+
+## Task 5: bars of the pilot (2026-11-22)
+
+- **Subcommand:** `run_pilot.py bars [--slides ...] [--workers 8]` writes `results/bars/{slide_id}.npz` and `.json` for each pilot slide, in slide-index order.
+  - **Balls:** `cKDTree(xy).query_ball_point(xy[centre], r=DELTA_PX)` over the slide's cells: closed, holding the centre, rows sorted ascending.
+  - **Per centre:** labelling 0 and labellings 1..19 (`common.labelling`) go through `chromatic.ball_sixpacks`. Kept: the finite bars of the 16 blocks of every labelling, the finite codomain of labelling 0, and the class counts, pair counts and edge count of the observed classes.
+  - **The npz:**
+    - per centre: `centre_rows`, `centre_xy`, `n_cells` (cells in the ball), `class_counts`, `pair_counts`, `n_edges`, `seconds`;
+    - `bars`, sorted by owner = (centre·20 + labelling)·16 + block (`common.encode_owner`), then birth and death, with `offsets` (480,001 entries);
+    - `codomain`, sorted by `codomain_owner` = 2·centre + p.
+    
+    Essential bars are left out, as topocyte's reduced curves leave them out; values are the port's float64, untouched.
+  - **The json:** wall, read and pool seconds, the pool's busy share, workers, ball sizes (minimum, median, maximum and its centre), seconds per centre (median, maximum and its centre, total), the workers' CPU seconds and peak RSS, the parent's peak RSS, bar counts, npz size, versions and the topocyte commit.
+  - **Workers:** one spawn `ProcessPoolExecutor(8)` per slide over chunks of 100 centres.
+    - The parent reads the slide, draws the centres, finds the balls and sends each chunk its balls' cells; each worker returns its chunk's arrays, and the parent assembles the slide.
+    - numba is warmed once in the parent, and in each worker's initializer, so a worker's first centre is not timed with a cache load.
+  - **Atomic writes and resume:**
+    - the npz is written to `{slide}.npz.tmp` and synced, the json is written atomically, and the npz is renamed last;
+    - a rerun skips a slide whose npz opens, holds every key (each read in full, so zipfile checks every CRC), has offsets of the right length, and has `offsets[-1] == len(bars) == len(owner)`.
+  - **The `labelling` guard** (Task 1's carried minor): r must be 0 or 1..19. Stream 20 is the slide's centre draw, so r = 20 and anything else raise `ValueError`.
+- **Tests:** `test_common.py`, 18 tests (7 new), pass in 20 s with warnings as errors; the study suite, 81 tests in 79 s.
+  - **The guard,** at r = −1, 20 and 100.
+  - **The owner code:** the extremes round-trip; the codes of all 480,000 triples are 0..479,999 in order; out-of-range arguments raise.
+  - **`bars_complete`:** a missing file, a missing key, too few bars, offsets of the wrong length, owners and bars of different lengths, a truncated file and junk bytes are each incomplete.
+  - **Resume:** a fake two-slide run (`read_slide` patched to 300-cell slides, `N_CENTRES` = 20). The complete slide is skipped, its mtime unchanged. The truncated one, with a stale `.tmp` beside it, is redone, bit for bit except `seconds`, and no `.tmp` is left.
+  - **Every stored array of a fake slide against a direct computation:**
+    - the closed ball by brute force;
+    - the class and pair counts;
+    - all 20 × 16 owners and the codomain of every centre, bit for bit.
+  - The fake runs use a real spawn pool of 2 processes and chunks of 6 centres, so 20 centres make 4 chunks.
+  - **Deliberate breaks:** 10 of 10 caught, on a scratch copy:
+    - no finite filter;
+    - a wrong owner formula;
+    - `bars_complete` ignoring the offsets;
+    - no skip;
+    - a wrong seed key;
+    - no `.tmp` rename;
+    - no sort within an owner;
+    - no guard;
+    - pair counts of a shuffle;
+    - chunks assembled in completion order.
+- **One slide first** (GTEX-YJ89-1426, slide index 4, the timing spike's healthy slide; `logs/bars_first_slide.log`):
+  - 246 s on 8 processes; balls of 11–232 cells (median 129; the spike's 12 balls had a median of 137);
+  - **median 1.25 s per centre, 1.62× the spike's 0.77 s, inside the 2× gate;** maximum 2.63 s;
+  - the pool was busy 92% of the time, workers' peak RSS 0.36 GB, 12.9M bars, 0.27 GB of npz.
+  - **Spot checks** (a scratch script, reading the cohort read only):
+    - on every centre: the centre rows are the slide's draw; the class counts add up to `n_cells`; the pair counts add up to `n_edges`; the codomain has (distinct positions in the ball) − 1 finite H0 bars;
+    - on centre 0, the largest ball (232 cells) and the smallest (11): the ball equals a brute-force closed ball, and the stored codomain equals topocyte's alpha PH (`compute_persistent_homology(ball_xy, filtration="alpha", max_dim=1)`, finite bars) in bar count. Values agree to 1e-16–6e-14 of the scale (at most 3.5e-10 px²): the port's Welzl radii and GUDHI's alpha values are computed differently;
+    - the largest ball recomputed through `ball_sixpacks`: all 20 × 16 owners (16,799 bars), the codomain, the pair counts and `n_edges`, bit for bit.
+- **phimaker's threads (a finding).**
+  - phimaker 0.5.0 runs up to 10 threads inside each six-pack call, though the port passes `num_threads=1`.
+    - On 8 real balls of this slide, serially: 2.4 CPU-seconds per wall second inside phimaker, against 1.00 in GUDHI's Delaunay and in the port's numba code.
+    - `ps` sees up to 10 threads; between calls the process has one, so the threads are scoped to the call.
+    - `RAYON_NUM_THREADS=1` changes nothing.
+  - **Results are unaffected:**
+    - the pairing is unique for a fixed column order;
+    - the resume test reproduces a slide bit for bit in other processes;
+    - the spot check reproduces the largest ball bit for bit.
+  - **Throughput is affected.** A centre of this slide takes 0.50 s serially on this machine (8 centres), against 1.25 s with 8 processes, so 8 processes give about 3.2× the serial throughput, not the ~6× the design's Compute section assumed.
+  - The design's "phimaker on one thread" is true of the parameter passed, not of the library's threads.
+- **Full run** (`logs/bars.log`; `logs/` stays out of git):
+  - 29 slides computed and GTEX-YJ89-1426 skipped as complete, in 11,546 s; with the first slide, 11,792 s of slide wall time (3.3 h), 11:13–14:33 on 2026-11-22.
+  - **Totals:** 447,050,046 finite domain and image bars and 13,355,202 codomain bars; 9.33 GB of npz in `results/bars/` (ignored by `*.npz`); the 30 jsons are tracked.
+  - **Review Focus 4, dense balls:**
+    - 7 slides held a ball of at least 500 cells, the largest 744 cells (GTEX-PWOO-0826, steatosis), whose centre took 12.36 s, the run's slowest;
+    - every slide completed;
+    - the workers' peak RSS was 0.33–0.45 GB per slide; the parent's, counted over the whole run, 1.50 GB at most.
+  - **Pool:** busy 91–93% of each slide's time. The workers' CPU time was 1.29× their timed centre seconds (111,774 s against 86,809 s, or 24.1 centre-hours), from phimaker's threads and the workers' start-up.
+  - **Against the spike's serial medians:** the healthy slides took 1.01–1.98 s per centre against 0.77 s, the cirrhosis slides 1.78–2.83 s against 1.38 s. The slides with the larger medians also have larger balls (medians of up to 212 cells against the spike's 137 and 198).
+  - **Spot checks on all 30 slides** (the scratch script of the one-slide check):
+    - every whole-file check holds on every centre;
+    - 90 centres' codomains equal topocyte's alpha PH, to within 2.0e-13 of the scale;
+    - each slide's largest ball is recomputed bit for bit, the 744-cell one included (50,779 bars);
+    - no ball holds two cells at one position.
+
+  | index | slide | condition | half | cells | ball cells, median (max) | s per centre, median (max) | wall | busy | workers' peak RSS | bars | npz |
+  |---|---|---|---|---|---|---|---|---|---|---|---|
+  | 0 | GTEX-RTLS-1326 | healthy | A | 120,013 | 113 (188) | 1.01 (2.01) | 201 s | 0.92 | 0.36 GB | 11.2M | 0.23 GB |
+  | 1 | GTEX-1HCU7-1726 | healthy | A | 150,352 | 124 (247) | 1.14 (2.91) | 226 s | 0.92 | 0.38 GB | 12.7M | 0.26 GB |
+  | 2 | GTEX-144GM-1326 | healthy | A | 255,657 | 176 (254) | 1.98 (3.28) | 371 s | 0.93 | 0.42 GB | 17.8M | 0.37 GB |
+  | 3 | GTEX-1HBPI-1026 | healthy | B | 274,842 | 106 (356) | 1.06 (4.23) | 221 s | 0.92 | 0.37 GB | 10.5M | 0.22 GB |
+  | 4 | GTEX-YJ89-1426 | healthy | B | 220,475 | 129 (232) | 1.25 (2.63) | 246 s | 0.92 | 0.36 GB | 12.9M | 0.27 GB |
+  | 5 | GTEX-R55F-2026 | congestion | A | 221,627 | 135 (509) | 1.52 (6.26) | 320 s | 0.92 | 0.38 GB | 14.2M | 0.30 GB |
+  | 6 | GTEX-12ZZW-1426 | congestion | A | 214,488 | 154 (317) | 2.01 (4.13) | 410 s | 0.93 | 0.36 GB | 15.7M | 0.33 GB |
+  | 7 | GTEX-17F96-1226 | congestion | B | 202,483 | 117 (301) | 1.19 (4.42) | 249 s | 0.92 | 0.33 GB | 12.1M | 0.25 GB |
+  | 8 | GTEX-1B8L1-0726 | congestion | B | 190,664 | 123 (243) | 0.89 (3.60) | 217 s | 0.92 | 0.39 GB | 12.9M | 0.27 GB |
+  | 9 | GTEX-15RJE-1126 | congestion | B | 294,129 | 188 (292) | 2.46 (4.76) | 482 s | 0.93 | 0.44 GB | 20.3M | 0.42 GB |
+  | 10 | GTEX-PWOO-0826 | steatosis | A | 441,554 | 209 (744) | 3.02 (12.36) | 612 s | 0.93 | 0.43 GB | 21.9M | 0.46 GB |
+  | 11 | GTEX-1399R-1226 | steatosis | A | 390,561 | 129 (379) | 1.75 (6.46) | 365 s | 0.92 | 0.40 GB | 12.5M | 0.26 GB |
+  | 12 | GTEX-13NZ8-1826 | steatosis | A | 268,526 | 192 (316) | 2.73 (5.38) | 554 s | 0.93 | 0.44 GB | 20.0M | 0.41 GB |
+  | 13 | GTEX-RM2N-1926 | steatosis | B | 246,310 | 121 (421) | 1.64 (6.88) | 346 s | 0.92 | 0.40 GB | 11.5M | 0.24 GB |
+  | 14 | GTEX-13FTY-0826 | steatosis | B | 57,372 | 120 (264) | 1.50 (4.15) | 313 s | 0.92 | 0.39 GB | 11.9M | 0.25 GB |
+  | 15 | GTEX-145MF-0826 | inflammation/hepatitis | A | 224,292 | 113 (465) | 1.00 (6.22) | 264 s | 0.91 | 0.41 GB | 12.6M | 0.26 GB |
+  | 16 | GTEX-139TS-1426 | inflammation/hepatitis | A | 107,738 | 124 (418) | 1.61 (6.92) | 356 s | 0.92 | 0.41 GB | 13.0M | 0.27 GB |
+  | 17 | GTEX-Y3IK-0326 | inflammation/hepatitis | B | 307,839 | 139 (542) | 2.08 (8.99) | 514 s | 0.92 | 0.44 GB | 15.4M | 0.32 GB |
+  | 18 | GTEX-1LGRB-0626 | inflammation/hepatitis | B | 172,037 | 109 (375) | 1.49 (5.30) | 318 s | 0.92 | 0.33 GB | 10.7M | 0.22 GB |
+  | 19 | GTEX-ZPU1-0826 | inflammation/hepatitis | B | 377,777 | 156 (341) | 2.28 (5.34) | 463 s | 0.93 | 0.41 GB | 14.9M | 0.31 GB |
+  | 20 | GTEX-1HT8W-0826 | fibrosis | A | 240,788 | 135 (405) | 1.77 (6.86) | 377 s | 0.92 | 0.41 GB | 13.6M | 0.28 GB |
+  | 21 | GTEX-U8XE-1526 | fibrosis | A | 156,224 | 150 (372) | 1.98 (6.00) | 435 s | 0.92 | 0.43 GB | 16.0M | 0.33 GB |
+  | 22 | GTEX-PWO3-1826 | fibrosis | A | 279,524 | 212 (500) | 3.38 (8.35) | 714 s | 0.93 | 0.44 GB | 20.4M | 0.43 GB |
+  | 23 | GTEX-132AR-0426 | fibrosis | B | 152,608 | 104 (374) | 1.41 (5.64) | 330 s | 0.92 | 0.39 GB | 10.6M | 0.22 GB |
+  | 24 | GTEX-111VG-0826 | fibrosis | B | 317,274 | 108 (557) | 1.39 (7.79) | 322 s | 0.91 | 0.40 GB | 11.4M | 0.24 GB |
+  | 25 | GTEX-1IL2U-2026 | cirrhosis | A | 316,834 | 165 (568) | 2.34 (9.72) | 532 s | 0.92 | 0.45 GB | 17.3M | 0.36 GB |
+  | 26 | GTEX-ZTTD-1526 | cirrhosis | A | 260,538 | 172 (670) | 2.83 (9.45) | 644 s | 0.92 | 0.45 GB | 17.7M | 0.37 GB |
+  | 27 | GTEX-13YAN-1626 | cirrhosis | B | 190,171 | 180 (360) | 2.54 (5.45) | 520 s | 0.93 | 0.44 GB | 18.8M | 0.39 GB |
+  | 28 | GTEX-1EX96-0326 | cirrhosis | B | 376,833 | 148 (380) | 1.78 (5.28) | 348 s | 0.93 | 0.40 GB | 15.4M | 0.32 GB |
+  | 29 | GTEX-ZZPT-1726 | cirrhosis | B | 239,163 | 199 (310) | 2.60 (5.30) | 522 s | 0.92 | 0.45 GB | 21.1M | 0.44 GB |
+
+  - **Seconds per centre** are each centre's wall time in its worker while 8 workers ran: its 20 six-packs, its pair counts and its class counts.
+  - **The run took 3.3 h, not the design's 2 h:** 8 processes gave about 3.2× the serial throughput (phimaker's threads, above), and several slides have larger balls than the spike's two.
+
+Claude's calls:
+- **The parent finds the balls** and sends each chunk its balls' cells; the controller allowed the workers to re-read the slide or to receive it through an initializer.
+  - **Why:** the slide is read once, a worker holds only its chunk's cells, and a test's patched `read_slide` and `N_CENTRES` hold in spawned workers.
+  - Cost if wrong: none; the same KD-tree call, and the rows are sorted either way.
+- **Bars sorted within each owner** by birth, then death.
+  - **Why:** phimaker returns its pairs in an order that changes from process to process. Without the sort, the resume test's redone slide comes back with the same bars in another order.
+  - The sort makes a slide's npz reproducible bit for bit. Cost: one lexsort per chunk.
+- **The owner code in `common.py`** (`encode_owner`, `decode_owner`), beside the constants it uses, because Task 6 reads the bars with it. Cost: none.
+- **One pool per slide:** fresh workers give each slide's peak RSS exactly. The price is idle workers in each slide's last round of chunks: busy 91–93%, so about 7% of the 3.3 h. Cost if wrong: about 14 min.
+- **The json before the npz's rename:** a slide counts as done only once its npz is in place, and its json is then already there. Cost: none.
+- **`bars_complete` reads every array,** so zipfile checks every CRC: about 0.3 s per slide on a rerun.
+- **numba warmed in each worker's initializer too,** so no worker's first centre is timed with a cache load. Cost: about 0.3 s per worker and slide.
+- **Sleep.** On 2026-11-21 the Mac went into clamshell sleep on battery while the study's tests ran (28 min of wall clock for 92 s of work), and the session was cut off.
+  - The runs of 2026-11-22 went on AC power inside `caffeinate -is`, and the session asked the app to keep the Mac awake. Neither changes a setting.
+  - The lid was closed at 11:33, 13 min into the full run. caffeinate's system-sleep assertion held on AC power, so the Mac stayed in dark wake until the run ended. It slept at 14:32:41, the second the last slide was written.
+  - The slides' start and finish times run back to back from 11:13:36 to 14:32:41, so no sleep fell inside the run. On battery, a closed lid would have stopped it.
+  - Cost: none.
+- **`main`'s dispatch:** the `preflight` branch no longer folds its exit into the `elif` condition, so `bars` reads as its own branch (Task 4's deferred minor, touched in passing). Cost: none.
+- **The json carries more than the plan names:** condition, half, the slide's cells, read, pool and write seconds, the pool's busy share, the ball and timing extremes with their centres, the workers' CPU seconds, the parent's peak RSS, bar counts, the npz size, and start and finish times. Cost: none.

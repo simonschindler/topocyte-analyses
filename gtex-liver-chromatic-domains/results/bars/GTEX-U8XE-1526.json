@@ -1,0 +1,50 @@
+{
+ "slide_id": "GTEX-U8XE-1526",
+ "slide_index": 21,
+ "condition": "fibrosis",
+ "half": "A",
+ "slide_cells": 156224,
+ "centres": 1500,
+ "labellings": 20,
+ "blocks": 16,
+ "delta_px": 303.52084176446783,
+ "workers": 8,
+ "chunk": 100,
+ "start_method": "spawn",
+ "wall_seconds": 435.0,
+ "read_seconds": 0.0,
+ "pool_seconds": 434.6,
+ "pool_busy_share": 0.923,
+ "ball_cells": {
+  "min": 47,
+  "median": 150.0,
+  "max": 372,
+  "max_centre": 1016
+ },
+ "seconds_per_centre": {
+  "median": 1.975,
+  "max": 6.004,
+  "max_centre": 1016,
+  "total": 3205.3
+ },
+ "worker_cpu_seconds": 4156.2,
+ "worker_peak_rss_gb": 0.427,
+ "parent_peak_rss_gb": 1.502,
+ "bars": 16042971,
+ "codomain_bars": 477829,
+ "npz_bytes": 334499018,
+ "versions": {
+  "python": "3.13.9",
+  "numpy": "2.5.5",
+  "scipy": "1.18.1",
+  "numba": "0.68.1",
+  "gudhi": "3.13.0",
+  "phimaker": "0.5.0",
+  "h5py": "3.16.0",
+  "pandas": "3.1.1"
+ },
+ "topocyte_commit": "18e3aa5",
+ "started": "2026-11-22T13:19:53",
+ "finished": "2026-11-22T13:27:08",
+ "write_seconds": 0.2
+}

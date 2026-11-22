@@ -1,0 +1,50 @@
+{
+ "slide_id": "GTEX-Y3IK-0326",
+ "slide_index": 17,
+ "condition": "inflammation/hepatitis",
+ "half": "B",
+ "slide_cells": 307839,
+ "centres": 1500,
+ "labellings": 20,
+ "blocks": 16,
+ "delta_px": 303.52084176446783,
+ "workers": 8,
+ "chunk": 100,
+ "start_method": "spawn",
+ "wall_seconds": 513.5,
+ "read_seconds": 0.0,
+ "pool_seconds": 513.2,
+ "pool_busy_share": 0.922,
+ "ball_cells": {
+  "min": 29,
+  "median": 139.0,
+  "max": 542,
+  "max_centre": 870
+ },
+ "seconds_per_centre": {
+  "median": 2.083,
+  "max": 8.988,
+  "max_centre": 870,
+  "total": 3780.2
+ },
+ "worker_cpu_seconds": 4830.8,
+ "worker_peak_rss_gb": 0.438,
+ "parent_peak_rss_gb": 1.502,
+ "bars": 15364250,
+ "codomain_bars": 490243,
+ "npz_bytes": 321172878,
+ "versions": {
+  "python": "3.13.9",
+  "numpy": "2.5.5",
+  "scipy": "1.18.1",
+  "numba": "0.68.1",
+  "gudhi": "3.13.0",
+  "phimaker": "0.5.0",
+  "h5py": "3.16.0",
+  "pandas": "3.1.1"
+ },
+ "topocyte_commit": "18e3aa5",
+ "started": "2026-11-22T12:52:01",
+ "finished": "2026-11-22T13:00:35",
+ "write_seconds": 0.1
+}

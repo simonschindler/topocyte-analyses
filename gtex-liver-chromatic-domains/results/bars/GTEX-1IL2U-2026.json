@@ -1,0 +1,50 @@
+{
+ "slide_id": "GTEX-1IL2U-2026",
+ "slide_index": 25,
+ "condition": "cirrhosis",
+ "half": "A",
+ "slide_cells": 316834,
+ "centres": 1500,
+ "labellings": 20,
+ "blocks": 16,
+ "delta_px": 303.52084176446783,
+ "workers": 8,
+ "chunk": 100,
+ "start_method": "spawn",
+ "wall_seconds": 532.1,
+ "read_seconds": 0.0,
+ "pool_seconds": 531.6,
+ "pool_busy_share": 0.922,
+ "ball_cells": {
+  "min": 29,
+  "median": 165.0,
+  "max": 568,
+  "max_centre": 90
+ },
+ "seconds_per_centre": {
+  "median": 2.338,
+  "max": 9.722,
+  "max_centre": 90,
+  "total": 3915.6
+ },
+ "worker_cpu_seconds": 5073.6,
+ "worker_peak_rss_gb": 0.451,
+ "parent_peak_rss_gb": 1.502,
+ "bars": 17335932,
+ "codomain_bars": 537897,
+ "npz_bytes": 361559598,
+ "versions": {
+  "python": "3.13.9",
+  "numpy": "2.5.5",
+  "scipy": "1.18.1",
+  "numba": "0.68.1",
+  "gudhi": "3.13.0",
+  "phimaker": "0.5.0",
+  "h5py": "3.16.0",
+  "pandas": "3.1.1"
+ },
+ "topocyte_commit": "18e3aa5",
+ "started": "2026-11-22T13:49:55",
+ "finished": "2026-11-22T13:58:47",
+ "write_seconds": 0.3
+}

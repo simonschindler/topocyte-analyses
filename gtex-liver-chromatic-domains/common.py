@@ -1,4 +1,4 @@
-"""Constants, readers, checks and seeded draws of the chromatic-domains pilot.
+"""Constants, readers, checks, seeded draws and the bars' owner code of the chromatic-domains pilot.
 
 The readers open the cohort read only (h5py mode "r") and write nothing. The
 draws need numpy and pandas only and are unit-tested in ``test_common.py`` on
@@ -186,8 +186,37 @@ def labelling(cls: np.ndarray, slide_index: int, centre_index: int, r: int) -> n
     """Labelling ``r`` of a centre's ball: the observed classes ``cls`` themselves for r = 0, else a seeded permutation.
 
     A permutation keeps the positions and the count per class. Labelling r of
-    a centre comes from its stream r.
+    a centre comes from its stream r, 1..R; any other r is refused, since
+    stream R + 1 is the slide's centre draw.
     """
     if r == 0:
         return cls
+    if not 1 <= r <= R:
+        raise ValueError(f"labelling r must be 0 (observed) or 1..{R} (shuffles), got {r}")
     return _generator(slide_index, centre_index, r).permutation(cls)
+
+
+def encode_owner(centre: int | np.ndarray, labelling: int | np.ndarray, block: int | np.ndarray) -> np.ndarray:
+    """The owner code of a block's bars in ``results/bars/*.npz``: ``(centre·(R + 1) + labelling)·len(BLOCKS) + block``.
+
+    ``labelling`` is 0..R and ``block`` the index into ``BLOCKS``. Codes run
+    through 0..N_CENTRES·(R + 1)·len(BLOCKS) − 1 in (centre, labelling, block)
+    order, as int32; ``ValueError`` for an argument out of range.
+    """
+    centre, labelling, block = (np.asarray(v, dtype=np.int64) for v in (centre, labelling, block))
+    if np.any(centre < 0) or np.any((labelling < 0) | (labelling > R)) or np.any((block < 0) | (block >= len(BLOCKS))):
+        raise ValueError(f"owner needs centre >= 0, labelling in 0..{R} and block in 0..{len(BLOCKS) - 1}")
+    code = (centre * (R + 1) + labelling) * len(BLOCKS) + block
+    if np.any(code > np.iinfo(np.int32).max):
+        raise ValueError("owner code beyond int32")
+    return code.astype(np.int32)
+
+
+def decode_owner(code: int | np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """``(centre, labelling, block)`` of owner codes from ``encode_owner``, as int64."""
+    code = np.asarray(code, dtype=np.int64)
+    if np.any(code < 0):
+        raise ValueError("owner codes are >= 0")
+    rest, block = np.divmod(code, len(BLOCKS))
+    centre, labelling = np.divmod(rest, R + 1)
+    return centre, labelling, block
