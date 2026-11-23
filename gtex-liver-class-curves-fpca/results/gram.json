@@ -1,0 +1,51 @@
+{
+ "description": "each class's exact Gram matrix of the class curves over the 594 slides",
+ "n_slides": 594,
+ "classes": {
+  "epithelial": {
+   "bars": 89633804,
+   "min_bars_per_slide": 13386,
+   "build_seconds": 3.1,
+   "gram_seconds": 421.4
+  },
+  "stromal": {
+   "bars": 18853368,
+   "min_bars_per_slide": 2140,
+   "build_seconds": 0.8,
+   "gram_seconds": 86.8
+  },
+  "immune": {
+   "bars": 8202328,
+   "min_bars_per_slide": 1642,
+   "build_seconds": 0.4,
+   "gram_seconds": 47.6
+  },
+  "other": {
+   "bars": 9529624,
+   "min_bars_per_slide": 668,
+   "build_seconds": 0.4,
+   "gram_seconds": 51.9
+  }
+ },
+ "decile_gate": {
+  "equal": true,
+  "shape": [
+   10,
+   594,
+   4
+  ],
+  "cells": 126219124,
+  "seconds": 3.7
+ },
+ "seconds": 616.7,
+ "peak_rss_gb": 3.25,
+ "workers": 10,
+ "script_md5": "e014819eb1ac14bec1c463b90f12e46e",
+ "topocyte_commit": "18e3aa5",
+ "versions": {
+  "python": "3.14.0",
+  "numpy": "2.5.1",
+  "h5py": "3.16.0"
+ },
+ "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+}

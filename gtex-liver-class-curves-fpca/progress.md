@@ -51,3 +51,13 @@ classification." Then: "cohort means pathology group. i want to know if it beats
     (`decile_counts` in 3.6 s); `rho`'s minimum equals decile 0 exactly, so `rho >= d_0` keeps every cell, as the
     cell-type study's slice 0 does; every slide has at least 668 cells of every class (no zero curve); and on four
     slides per class every Gram entry equals `sum_of_minima` within a relative 5.1e-15.
+- 2026-11-23: `curves.py gram`, run by the controller in the background (`caffeinate -is /usr/bin/time -l`,
+  `logs/gram.log`): 617.6 s wall (10.3 min, against the spike's 0.20 h), 4,645 s user CPU, peak RSS 3.25 GB, peak
+  memory footprint 3.83 GB. The decile gate passed: the 10 × 594 × 4 counts equal `kept_by_group` (126,219,124 cells
+  at decile 0; 3.7 s). Gram seconds per class (10 threads): epithelial 421.4 (89,633,804 bars), stromal 86.8
+  (18,853,368), immune 47.6 (8,202,328), other 51.9 (9,529,624); building each class's curves took 0.4–3.1 s.
+  `results/gram.json` names curves.py md5 e014819e…, the committed file.
+  - Checked after the run (a scratch script, not kept): `results/gram.npz` (11 MB, gitignored) holds four float64
+    594 × 594 matrices, finite and exactly symmetric, with positive diagonals (the smallest, other's, 5.6e8), and
+    `slide_ids` in the spaces.npz order. Each matrix's smallest eigenvalue is positive (1.2e-12 to 6.5e-12 of its
+    largest). Five random entries per class equal `sum_of_minima` within a relative 3.4e-15.
