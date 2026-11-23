@@ -111,6 +111,15 @@ The scale bar in µm (1, 2 or 5 × 10^k) uses the slide file's pixel size where
 there is one, else the cohort's assumed 0.4942 µm per pixel; the status line
 says which.
 
+"10-NN density" colours every cell by its 10-nearest-neighbour density from the
+pathology study's `density.npz` (cells per mm², at the assumed 0.4942 µm per
+pixel), binned at the cohort's ten deciles. The deciles are the density slices'
+thresholds, so a cell in the bin that starts at decile j is kept in slices 0 to
+j. The legend gives each bin's range and its cells on the slide. The blue scale
+runs light to dark (dark to light on the dark canvas), so low densities fade
+into the background. The densities are memory-mapped from the uncompressed
+`density.npz` rather than loaded (1 GB for the cohort).
+
 "Composition clusters on this slide" runs k-means with the chosen k (2 to 10)
 on every cell of the shown slide: the pilot's level-1 features of the cell's
 ball (log10 cells, unless "with density" is off, and the four class fractions;

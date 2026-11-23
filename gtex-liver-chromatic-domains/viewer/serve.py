@@ -4,6 +4,7 @@ or by the study's four classes, with the slides filtered by pathology group. On 
 clusters every cell by the composition of its ball (the pilot's level-1 features) with a chosen k and radius,
 or, on the 30 pilot slides, the 1,500 sampled centres by their saved chromatic TDA features (level 2), or
 colours every cell by its saved cohort-wide e-means cluster (the sibling study gtex-liver-emeans-neighbourhoods).
+Every cell can also be coloured by its 10-nearest-neighbour density, binned at the cohort's deciles.
 
 Adapted from ``tissuegeometry/web/cosine_viewer`` (its DeepZoom tile serving and WebGL point overlay) without
 its local-homology endpoints, its FastAPI backend or its tissuegraphs and Rust imports.
@@ -17,7 +18,7 @@ then open the printed address. A slide is shown on its H&E when DIR holds a file
 with a suffix OpenSlide reads (``.svs`` for GTEx); the cells' coordinates are level-0 pixels of that slide.
 
 Read only: the cohort ``.h5ad`` (h5py mode "r"), the pathology study's ``density.npz`` (each slide's cohort
-rows) and ``pathology.csv`` (each slide's group), this study's ``results/pilot.csv`` and ``results/features.npz``,
+rows, and every cell's density, memory-mapped) and ``pathology.csv`` (each slide's group), this study's ``results/pilot.csv`` and ``results/features.npz``,
 the e-means study's ``results/labels_<set>.npz``, ``clusters.json``, ``gap.json`` and ``kmeans_check.json``
 (the e-means option is off when they are not there), and the slide files.
 Nothing is written.
@@ -68,6 +69,7 @@ EMEANS = HERE.parents[1] / "gtex-liver-emeans-neighbourhoods" / "results"
 EMEANS_SETS = ("composition", "density", "composition+density")
 WORSE = 0.002  # log ratio of W_k above which a fit is named worse than k-means++'s (the e-means study's report)
 PACKED = 3  # (set, k) whose packed labels of every cohort cell (63 MB each) stay in memory
+DENSITY_BINS = 10  # the density layer's bins: the cohort's deciles of the 10-NN density, the density slices
 STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css"}
 
 
@@ -101,6 +103,45 @@ def load_slide_table() -> pd.DataFrame:
         bounds = np.asarray(density["bounds"], dtype=np.int64)
     pilot = set(pd.read_csv(c.RESULTS / "pilot.csv")["slide_id"])
     return slide_table(pathology, slide_ids, bounds, pilot)
+
+
+def npz_memmap(path: Path, name: str) -> np.memmap:
+    """A member of an uncompressed ``.npz`` file, memory-mapped read only.
+
+    ``np.load`` reads a whole member into memory, and the density of every cohort cell is 1 GB of which a slide
+    needs a few MB. ``ValueError`` if the member is compressed or its headers are not where the zip says.
+    """
+    import zipfile
+
+    with zipfile.ZipFile(path) as archive:
+        info = archive.getinfo(f"{name}.npy")
+    if info.compress_type != zipfile.ZIP_STORED:
+        raise ValueError(f"{path.name}: {name} is compressed and cannot be memory-mapped")
+    with open(path, "rb") as f:
+        f.seek(info.header_offset)
+        local = f.read(30)
+        if local[:4] != b"PK\x03\x04":
+            raise ValueError(f"{path.name}: no zip header where {name} should start")
+        name_length, extra_length = struct.unpack("<HH", local[26:30])
+        f.seek(info.header_offset + 30 + name_length + extra_length)
+        version = np.lib.format.read_magic(f)
+        if version == (1, 0):
+            shape, fortran, dtype = np.lib.format.read_array_header_1_0(f)
+        elif version == (2, 0):
+            shape, fortran, dtype = np.lib.format.read_array_header_2_0(f)
+        else:
+            raise ValueError(f"{path.name}: {name} has .npy format {version}")
+        offset = f.tell()
+    return np.memmap(path, dtype=dtype, mode="r", offset=offset, shape=shape, order="F" if fortran else "C")
+
+
+def density_codes(rho: np.ndarray, deciles: np.ndarray) -> np.ndarray:
+    """Each cell's density bin (uint8): j where d_j <= rho < d_(j+1), and the last bin from the top decile on.
+
+    That is the last density slice that keeps the cell: the pathology study keeps a cell at threshold j when
+    rho >= d_j, and d_0 is the cohort's minimum.
+    """
+    return np.searchsorted(deciles[1:], rho, side="right").astype(np.uint8)
 
 
 def cell_types() -> list[str]:
@@ -384,7 +425,16 @@ class Cohort:
         self._pilot: dict | None = None  # slide ID -> the pilot's saved centres, loaded on the first TDA request
         self.emeans_sets = load_emeans(EMEANS)  # None without the e-means study's results
         self._packed: OrderedDict[tuple, np.ndarray] = OrderedDict()  # (set, k) -> packed labels of every cell
+        self._density: OrderedDict[str, dict] = OrderedDict()  # slide ID -> its cells' density bins
         n_cohort = int(self.slides["end"].max())
+        self.rho = npz_memmap(c.SIB / "density.npz", "rho")  # every cohort cell's 10-NN density, cells per mm²
+        with np.load(c.SIB / "density.npz", allow_pickle=False) as density:
+            self.deciles = np.asarray(density["deciles"], dtype=np.float64)
+            self.k_nn, self.density_um_per_px = int(density["k_nn"]), float(density["pixel_um"])
+        if self.rho.shape != (n_cohort,) or self.rho.dtype != np.float64:
+            raise ValueError(f"density.npz's rho is {self.rho.dtype} {self.rho.shape}, not {n_cohort:,} densities")
+        if len(self.deciles) != DENSITY_BINS or not np.all(np.diff(self.deciles) > 0):
+            raise ValueError(f"density.npz's deciles are not {DENSITY_BINS} rising thresholds: {self.deciles}")
         for name, s in (self.emeans_sets or {}).items():
             if s["n_cells"] != n_cohort:
                 raise ValueError(f"the e-means set {name} has {s['n_cells']:,} cells, the cohort {n_cohort:,}")
@@ -407,6 +457,11 @@ class Cohort:
                 "tda_radius_um": c.DELTA_UM,
                 "tda_labellings": c.R,
                 "tda_centres": c.N_CENTRES,
+            },
+            "density": {
+                "deciles": self.deciles.tolist(),
+                "k_nn": self.k_nn,
+                "um_per_px": self.density_um_per_px,
             },
             "emeans": None
             if self.emeans_sets is None
@@ -560,6 +615,21 @@ class Cohort:
         with self._lock:
             return remember(self._clusters, key, result, 8)
 
+    def density(self, slide_id: str) -> dict:
+        """The density bin of every cell of the slide (``density_codes``), as JSON-ready data."""
+        with self._lock:
+            if slide_id in self._density:
+                self._density.move_to_end(slide_id)
+                return self._density[slide_id]
+        row = self.by_id[slide_id]
+        rho = np.asarray(self.rho[int(row.start) : int(row.end)])
+        if not np.all(np.isfinite(rho) & (rho > 0)):
+            raise RuntimeError(f"{slide_id}: a cell has no positive, finite density")
+        codes = density_codes(rho, self.deciles)
+        result = {"slide_id": slide_id, "codes": base64.b64encode(codes.tobytes()).decode("ascii")}
+        with self._lock:
+            return remember(self._density, slide_id, result, CACHE)
+
     def packed(self, name: str, k: int) -> np.ndarray:
         """The e-means study's packed labels of every cohort cell for one set and k."""
         key = (name, k)
@@ -669,6 +739,8 @@ def make_handler(cohort: Cohort) -> type[BaseHTTPRequestHandler]:
             elif len(parts) == 3 and parts[:2] == ["api", "tda"] and parts[2] in cohort.by_id:
                 k = cluster_request({"k": query.get("k", [""])})[0]
                 self.send(HTTPStatus.OK, json.dumps(cohort.tda(parts[2], k)).encode(), "application/json")
+            elif len(parts) == 3 and parts[:2] == ["api", "density"] and parts[2] in cohort.by_id:
+                self.send(HTTPStatus.OK, json.dumps(cohort.density(parts[2])).encode(), "application/json")
             elif len(parts) == 3 and parts[:2] == ["api", "emeans"] and parts[2] in cohort.by_id:
                 name, k = emeans_request(query)
                 self.send(HTTPStatus.OK, json.dumps(cohort.emeans(parts[2], name, k)).encode(), "application/json")

@@ -42,6 +42,14 @@ export const CLUSTERS = {
   dark: ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#0ca30c", "#9085e9", "#e66767", "#86b6ef", "#fe9068"],
 };
 
+// 10-NN density, the cohort's ten deciles from low to high: a sequential scale (magnitude, so one hue). The
+// dataviz reference palette's blue ramp, steps 100 to 700, resampled in OKLab at ten equal steps of lightness:
+// adjacent steps differ by ΔL 0.063 (validate_palette.js --ordinal: monotone, every gap >= 0.06, one hue).
+// Light to dark on the light theme and on H&E, flipped on the dark canvas, so that low densities fade into the
+// background; the faintest step is below 2:1 against the surface by design.
+const DENSITY_RAMP = ["#cde2fb", "#aecef5", "#8ebbf1", "#6da7ec", "#4b92e6", "#2f7ddb", "#256abf", "#1b58a4", "#134688", "#0d366b"];
+export const DENSITY = { light: DENSITY_RAMP, dark: [...DENSITY_RAMP].reverse() };
+
 export function rgb(hex) {
   const v = parseInt(hex.slice(1), 16);
   return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255];

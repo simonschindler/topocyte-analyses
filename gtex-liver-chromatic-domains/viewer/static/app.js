@@ -1,7 +1,7 @@
 // The viewer's page: the slide list filtered by pathology group, an OpenSeadragon canvas (the slide's H&E
 // tiles, or a blank canvas of the cloud's size) and the WebGL layer of the slide's cells.
 import { PointsOverlay } from "/static/overlay.js";
-import { CLUSTERS, PALETTE, rgb } from "/static/palette.js";
+import { CLUSTERS, DENSITY, PALETTE, rgb } from "/static/palette.js";
 
 const BLANK = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 const CELL_UM = 10; // a cell's drawn diameter once zoomed in far enough
@@ -19,8 +19,10 @@ const state = {
   counts: null, // cells per type code on the shown slide
   types: null, // the shown slide's type code per cell
   clusters: null, // /api/cluster/<id> of the shown slide, with its labels decoded
-  layer: "types", // "types" | "classes" | "clusters"
-  hidden: { types: new Set(), classes: new Set(), clusters: new Set() },
+  density: null, // the shown slide's density bin per cell (/api/density/<id>)
+  densityCounts: null, // cells per density bin on the shown slide
+  layer: "types", // "types" | "classes" | "clusters" | "density"
+  hidden: { types: new Set(), classes: new Set(), clusters: new Set(), density: new Set() },
 };
 let viewer = null;
 let overlay = null;
@@ -54,10 +56,33 @@ function paletteMode() {
   return onSlide || document.documentElement.dataset.theme === "light" ? "light" : "dark";
 }
 
+// A density bin's range in cells per mm²: below the second decile, between two deciles, or from the top one on.
+function densityRange(j, joiner = "–") {
+  const d = state.meta.density.deciles;
+  const per = (v) => fmt(Math.round(v));
+  if (j === 0) return `< ${per(d[1])}`;
+  if (j === d.length - 1) return `≥ ${per(d[j])}`;
+  return `${per(d[j])}${joiner}${per(d[j + 1])}`;
+}
+
+function densityTitle(j) {
+  const kept = j === 0 ? "kept only in density slice 0, every cell" : `kept in density slices 0 to ${j}`;
+  return `Cohort decile ${j + 1} of the 10-NN density: ${densityRange(j, " to ")} cells per mm²; ${kept}.`;
+}
+
 function legendEntries() {
   const { types, type_class: typeClass, classes } = state.meta;
   const mode = paletteMode();
   const count = (t) => (state.counts ? state.counts[t] : 0);
+  if (state.layer === "density") {
+    return DENSITY[mode].map((hex, j) => ({
+      key: j,
+      label: densityRange(j),
+      hex,
+      n: state.densityCounts ? state.densityCounts[j] : 0,
+      title: densityTitle(j),
+    }));
+  }
   if (state.layer === "clusters") {
     const { emeans } = state.clusters;
     const entries = state.clusters.clusters.map((cluster, j) => ({
@@ -105,6 +130,12 @@ function applyColors() {
   const { types, type_class: typeClass, classes } = state.meta;
   const mode = paletteMode();
   const table = new Float32Array(16 * 4);
+  if (state.layer === "density") {
+    DENSITY[mode].forEach((hex, j) => table.set([...rgb(hex), state.hidden.density.has(j) ? 0 : 1], j * 4));
+    overlay?.setColors(table);
+    renderLegend();
+    return;
+  }
   if (state.layer === "clusters") {
     const sizes = new Float32Array(16).fill(1);
     state.clusters.clusters.forEach((_, j) => {
@@ -155,6 +186,7 @@ function renderLegend() {
     const share = total ? ((100 * e.n) / total).toFixed(1) : "0.0";
     n.textContent = !state.counts ? "" : e.background ? fmt(e.n) : `${fmt(e.n)} · ${share}%`;
     label.append(box, swatch, name, n);
+    if (e.title) label.title = e.title;
     if (e.mix) {
       const mix = document.createElement("span");
       mix.className = "mix";
@@ -165,7 +197,6 @@ function renderLegend() {
         return part;
       }));
       label.append(mix);
-      label.title = e.title;
     }
     const only = document.createElement("button");
     only.type = "button";
@@ -181,6 +212,14 @@ function renderLegend() {
     row.append(label, only);
     return row;
   }));
+  const note = $("legend-note");
+  note.hidden = state.layer !== "density";
+  if (!note.hidden) {
+    const { k_nn: k, um_per_px: um } = state.meta.density;
+    note.textContent = `Each cell's ${k}-nearest-neighbour density in cells per mm² (the pathology study's `
+      + `density.npz, at ${um} µm per pixel), in the cohort's ten deciles: the thresholds of the density slices. `
+      + "Low densities fade into the background.";
+  }
 }
 
 // --- slide list -------------------------------------------------------------------------------------------
@@ -226,14 +265,19 @@ function renderSlides() {
   }
 }
 
-// The per-cell codes follow the layer: cluster labels for "clusters", type codes otherwise.
+// The per-cell codes of a layer: cluster labels, density bins, or type codes for types and classes.
+function codesOf(layer) {
+  if (layer === "clusters") return state.clusters?.labels ?? null;
+  if (layer === "density") return state.density;
+  return state.types;
+}
+
 function setLayer(layer) {
-  const codesChange = (layer === "clusters") !== (state.layer === "clusters");
+  const before = codesOf(state.layer);
   state.layer = layer;
   document.querySelector(`input[name=layer][value=${layer}]`).checked = true;
-  if (codesChange && overlay && state.types) {
-    overlay.setCodes(layer === "clusters" ? state.clusters.labels : state.types);
-  }
+  const codes = codesOf(layer);
+  if (overlay && codes && codes !== before) overlay.setCodes(codes);
   applyColors();
 }
 
@@ -396,9 +440,10 @@ async function loadSlide(id) {
   state.slide = id;
   setStatus(`Loading ${id} …`);
   try {
-    const [info, buffer] = await Promise.all([
+    const [info, buffer, density] = await Promise.all([
       fetchOk(`/api/slide/${encodeURIComponent(id)}`).then((r) => r.json()),
       fetchOk(`/api/cells/${encodeURIComponent(id)}`).then((r) => r.arrayBuffer()),
+      fetchOk(`/api/density/${encodeURIComponent(id)}`).then((r) => r.json()),
     ]);
     if (state.slide !== id) return; // a later choice won
     const n = new DataView(buffer).getUint32(0, true);
@@ -406,6 +451,10 @@ async function loadSlide(id) {
     const types = new Uint8Array(buffer, 4 + 8 * n, n);
     const counts = new Array(state.meta.types.length).fill(0);
     for (let i = 0; i < n; i++) counts[types[i]] += 1;
+    const bins = decode(density.codes);
+    if (bins.length !== n) throw new Error(`${bins.length} density bins for ${n} cells`);
+    const binCounts = new Array(DENSITY.light.length).fill(0);
+    for (let i = 0; i < n; i++) binCounts[bins[i]] += 1;
     const source = info.wsi
       ? {
         width: info.width, height: info.height, tileSize: info.tile_size, tileOverlap: 0,
@@ -418,11 +467,13 @@ async function loadSlide(id) {
       state.info = info;
       state.counts = counts;
       state.types = types;
+      state.density = bins;
+      state.densityCounts = binCounts;
       updateMethod();
       clearClusters();
       overlay ??= new PointsOverlay(viewer, CELL_UM / info.um_per_px);
       overlay.cellPx = CELL_UM / info.um_per_px;
-      overlay.setPoints(xy, types);
+      overlay.setPoints(xy, codesOf(state.layer));
       $("hne").disabled = !info.wsi;
       applyHne();
       applyColors();

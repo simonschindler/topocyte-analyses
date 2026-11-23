@@ -193,3 +193,19 @@ def test_load_emeans_reads_each_sets_summary_and_its_worse_fits(tmp_path):
     out = serve.load_emeans(tmp_path)
     assert list(out) == list(serve.EMEANS_SETS)
     assert out["density"]["worse"] == {2: 0.0431} and out["density"]["k_tibshirani"] == 3
+
+
+def test_npz_memmap_maps_a_stored_member_and_refuses_a_compressed_one(tmp_path):
+    rho = np.linspace(0.5, 9.5, 1001)
+    np.savez(tmp_path / "stored.npz", other=np.arange(3), rho=rho)
+    mapped = serve.npz_memmap(tmp_path / "stored.npz", "rho")
+    assert isinstance(mapped, np.memmap) and mapped.dtype == rho.dtype and np.array_equal(mapped, rho)
+    np.savez_compressed(tmp_path / "compressed.npz", rho=rho)
+    with pytest.raises(ValueError, match="compressed"):
+        serve.npz_memmap(tmp_path / "compressed.npz", "rho")
+
+
+def test_density_codes_are_the_last_density_slice_that_keeps_the_cell():
+    deciles = np.array([0.0, 10, 20, 30, 40, 50, 60, 70, 80, 90])
+    rho = np.array([0.0, 9.99, 10.0, 55.0, 89.9, 90.0, 1e6])
+    assert serve.density_codes(rho, deciles).tolist() == [0, 0, 1, 5, 8, 9, 9]

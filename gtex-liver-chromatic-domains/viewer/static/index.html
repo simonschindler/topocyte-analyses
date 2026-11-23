@@ -38,7 +38,7 @@
   #slides option { color: var(--ink); }
   .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--ink2); font-size: 12px; }
   .check { display: flex; align-items: center; gap: 6px; color: var(--ink2); font-size: 12px; }
-  fieldset { border: 0; margin: 0; padding: 0; display: flex; gap: 10px; }
+  fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; }
   fieldset legend { padding: 0; margin-bottom: 4px; color: var(--ink2); font-size: 12px; }
   fieldset label { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
   #legend { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
@@ -92,8 +92,10 @@
     <label><input type="radio" name="layer" value="types" checked> HistoPLUS type</label>
     <label><input type="radio" name="layer" value="classes"> Class</label>
     <label><input type="radio" name="layer" value="clusters" id="layer-clusters" disabled> Clusters</label>
+    <label><input type="radio" name="layer" value="density"> 10-NN density</label>
   </fieldset>
   <ul id="legend"></ul>
+  <p class="note" id="legend-note" hidden></p>
   <section class="clusters">
     <div class="head">Clusters on this slide</div>
     <label class="field">Features <select id="method">

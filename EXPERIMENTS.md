@@ -443,6 +443,7 @@ the browser, on the H&E where the slide file is available. Cells can be
 coloured by:
 
 - HistoPLUS type or class, with slides filtered by pathology group;
+- each cell's 10-NN density, in the cohort's ten deciles (the density slices);
 - composition clusters computed on the fly for one slide;
 - the chromatic-domains pilot's TDA features;
 - the saved e-means clusters of study 6.
