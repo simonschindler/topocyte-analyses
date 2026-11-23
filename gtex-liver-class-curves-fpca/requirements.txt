@@ -1,0 +1,13 @@
+# A record, not an install list: the study installs nothing. Like the cell-type
+# study's readouts, it runs in topocyte's main-checkout venv
+# (/Users/simon/rep/lbi/reindero/topocyte/.venv, Python 3.14.0), with the
+# pinned checkout /Users/simon/rep/lbi/reindero/topocyte-18e3aa5 first on
+# PYTHONPATH. These are that venv's versions of the packages the study uses
+# (2026-11-23).
+numpy==2.5.1
+scipy==1.18.0
+scikit-learn==1.9.0
+h5py==3.16.0
+pandas==3.0.5
+matplotlib==3.11.1
+pytest==9.1.1
