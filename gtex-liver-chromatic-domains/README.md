@@ -96,8 +96,8 @@ pathology group (pathology.csv's eight groups). It is adapted from
 `tissuegeometry/web/cosine_viewer`: OpenSeadragon with a WebGL point layer, served
 by the Python standard library. With `--wsi-dir`, a slide whose file
 `<slide_id>.svs` (or another OpenSlide format) is in that folder is shown on its
-H&E; the cells' coordinates are its level-0 pixels. It reads the cohort and the
-slide files read only and writes nothing.
+H&E; the cells' coordinates are its level-0 pixels. It reads the cohort, the
+slide files and the e-means study's results read only and writes nothing.
 
 ```bash
 .venv/bin/python viewer/serve.py                        # point clouds only
@@ -129,6 +129,20 @@ Betti curves, 150 µm balls, 19 random labellings), with `domains.py`'s k-means
 cells in grey, and the legend shows each cluster's mean ball composition. The
 pilot found no subdomains that recur across the slide halves, so these clusters
 are exploratory.
+
+With the results of the sibling study
+[gtex-liver-emeans-neighbourhoods](../gtex-liver-emeans-neighbourhoods/README.md)
+in place, "Cohort e-means clusters (saved)" colours every cell of the shown
+slide by its saved e-means label for the chosen feature set (composition,
+density or both) and k (2 to 10): that study's `results/labels_<set>.npz`,
+fitted to the 150 µm balls of all 126,219,124 cohort cells, nothing refitted.
+The legend's `#j` is the saved label (as in that study's report), the colours go
+to the largest clusters over the cohort first, and each entry's tooltip gives
+the cluster's cohort profile (share of cells, cells per ball, class fractions,
+share of the ball's cells at or above the cohort's median density). The set
+menu shows Tibshirani's k̂; at the four (set, k) whose e-means fit is worse than
+k-means++'s (`kmeans_check.json`) the note says by how much. A set and k is read
+from its file on first use; the last three stay in memory (63 MB each).
 
 ## Outputs
 

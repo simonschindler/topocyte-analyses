@@ -2,7 +2,8 @@
 """Browser viewer of the GTEx liver cohort's cells: every slide's point cloud, coloured by HistoPLUS cell type
 or by the study's four classes, with the slides filtered by pathology group. On one slide at a time it also
 clusters every cell by the composition of its ball (the pilot's level-1 features) with a chosen k and radius,
-or, on the 30 pilot slides, the 1,500 sampled centres by their saved chromatic TDA features (level 2).
+or, on the 30 pilot slides, the 1,500 sampled centres by their saved chromatic TDA features (level 2), or
+colours every cell by its saved cohort-wide e-means cluster (the sibling study gtex-liver-emeans-neighbourhoods).
 
 Adapted from ``tissuegeometry/web/cosine_viewer`` (its DeepZoom tile serving and WebGL point overlay) without
 its local-homology endpoints, its FastAPI backend or its tissuegraphs and Rust imports.
@@ -17,7 +18,8 @@ with a suffix OpenSlide reads (``.svs`` for GTEx); the cells' coordinates are le
 
 Read only: the cohort ``.h5ad`` (h5py mode "r"), the pathology study's ``density.npz`` (each slide's cohort
 rows) and ``pathology.csv`` (each slide's group), this study's ``results/pilot.csv`` and ``results/features.npz``,
-and the slide files.
+the e-means study's ``results/labels_<set>.npz``, ``clusters.json``, ``gap.json`` and ``kmeans_check.json``
+(the e-means option is off when they are not there), and the slide files.
 Nothing is written.
 """
 
@@ -61,6 +63,11 @@ FEATURES = ("log10 cells", *(f"{name} fraction" for name in c.CLASSES))
 # Chromatic TDA clusters: domains.level2's features and k-means on one pilot slide's saved centres.
 TDA_KEY = "L2_obs_all"  # 20 MFA scores of the 16 blocks' fPCA scores of the residual Betti curves, all-slides basis
 BACKGROUND = 15  # the code of the cells that are not centres, in a TDA clustering
+# Cohort e-means clusters: the saved labels of every cohort cell, in the cohort's row order, k = 2..10 per set.
+EMEANS = HERE.parents[1] / "gtex-liver-emeans-neighbourhoods" / "results"
+EMEANS_SETS = ("composition", "density", "composition+density")
+WORSE = 0.002  # log ratio of W_k above which a fit is named worse than k-means++'s (the e-means study's report)
+PACKED = 3  # (set, k) whose packed labels of every cohort cell (63 MB each) stay in memory
 STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css"}
 
 
@@ -272,6 +279,85 @@ def load_pilot_centres() -> dict:
     return out
 
 
+def emeans_file(name: str) -> str:
+    """The e-means study's label file of one feature set."""
+    return f"labels_{name.replace('+', '_')}.npz"
+
+
+def load_emeans(folder: Path) -> dict | None:
+    """Per e-means set: its columns, Tibshirani's k̂, its cells, the cohort profile of every cluster at every k
+    (clusters.json) and the k whose fit is worse than k-means++'s, as a log ratio of W_k (kmeans_check.json).
+    None when the e-means study's results are not in ``folder``."""
+    names = ("gap.json", "clusters.json", "kmeans_check.json", *(emeans_file(name) for name in EMEANS_SETS))
+    if not all((folder / name).is_file() for name in names):
+        return None
+    gap_all = json.loads((folder / "gap.json").read_text())
+    gap = gap_all["sets"]
+    clusters = json.loads((folder / "clusters.json").read_text())
+    check = json.loads((folder / "kmeans_check.json").read_text())["sets"]
+    out = {}
+    for name in EMEANS_SETS:
+        ratios = dict(zip(check[name]["k"], check[name]["log_ratio_run_to_kmeans"], strict=True))
+        out[name] = {
+            "columns": gap[name]["features"]["columns"],
+            "k_tibshirani": int(gap[name]["k_tibshirani"]),
+            "n_cells": int(gap[name]["n_cells"]),
+            "radius_um": float(gap_all["settings"]["radius_um"]),
+            "profiles": clusters[name]["clusters"],
+            "worse": {k: ratio for k, ratio in ratios.items() if ratio > WORSE},
+        }
+    return out
+
+
+def unpack_rows(packed: np.ndarray, start: int, end: int) -> np.ndarray:
+    """The labels of rows ``start`` to ``end - 1`` of two labels per byte, the even rows in the high half (the
+    e-means study's ``cluster.pack``)."""
+    if not 0 <= start <= end <= 2 * len(packed):
+        raise ValueError(f"rows {start}:{end} of {2 * len(packed)} packed labels")
+    chunk = packed[start // 2 : (end + 1) // 2]
+    labels = np.empty(2 * len(chunk), np.uint8)
+    labels[0::2], labels[1::2] = chunk >> 4, chunk & 15
+    return labels[start % 2 : start % 2 + end - start]
+
+
+def emeans_request(query: dict[str, list[str]]) -> tuple[str, int]:
+    """The feature set and k of an e-means request's query; ``ValueError`` if invalid."""
+    name = query.get("set", [""])[0]
+    if name not in EMEANS_SETS:
+        raise ValueError(f"set must be one of {', '.join(EMEANS_SETS)}")
+    return name, cluster_request({"k": query.get("k", [""])})[0]
+
+
+def emeans_clusters(profiles: list[dict], labels: np.ndarray, k: int) -> tuple[np.ndarray, list[dict]]:
+    """The saved labels recoded by cohort cluster size, largest first (the viewer's other clusters' order, and
+    the palette's), and per code the cluster's saved label, its cells on this slide and its cohort profile."""
+    if len(profiles) != k:
+        raise ValueError(f"{len(profiles)} cluster profiles for k = {k}")
+    if labels.size and int(labels.max()) >= k:
+        raise RuntimeError(f"a saved label is {int(labels.max())}, not below k = {k}")
+    order = sorted(range(k), key=lambda j: -profiles[j]["n"])
+    rank = np.empty(k, np.uint8)
+    rank[order] = np.arange(k)
+    on_slide = np.bincount(labels, minlength=k)
+    entries = []
+    for j in order:
+        p = profiles[j]
+        if list(p["class_fractions"]) != list(c.CLASSES):
+            raise ValueError(f"cluster {j}'s classes are {list(p['class_fractions'])}, not {list(c.CLASSES)}")
+        entries.append(
+            {
+                "label": j,
+                "n": int(on_slide[j]),
+                "cohort_n": int(p["n"]),
+                "cohort_share": float(p["share"]),
+                "cells_per_ball": float(p["cells_per_ball"]),
+                "fractions": [float(p["class_fractions"][name]) for name in c.CLASSES],
+                "kept_fractions": [float(v) for v in p["kept_fractions"]],
+            }
+        )
+    return rank[labels], entries
+
+
 def remember(cache: OrderedDict, key, value, size: int):
     """Put ``value`` in the LRU ``cache`` under ``key``, dropping the oldest entries beyond ``size``."""
     cache[key] = value
@@ -296,6 +382,12 @@ class Cohort:
         self._features: OrderedDict[tuple, np.ndarray] = OrderedDict()  # (slide ID, µm/px, radius) -> features
         self._clusters: OrderedDict[tuple, dict] = OrderedDict()  # (slide ID, k, density, radius) -> clustering
         self._pilot: dict | None = None  # slide ID -> the pilot's saved centres, loaded on the first TDA request
+        self.emeans_sets = load_emeans(EMEANS)  # None without the e-means study's results
+        self._packed: OrderedDict[tuple, np.ndarray] = OrderedDict()  # (set, k) -> packed labels of every cell
+        n_cohort = int(self.slides["end"].max())
+        for name, s in (self.emeans_sets or {}).items():
+            if s["n_cells"] != n_cohort:
+                raise ValueError(f"the e-means set {name} has {s['n_cells']:,} cells, the cohort {n_cohort:,}")
 
     def meta(self) -> dict:
         counts = self.slides["group"].value_counts()
@@ -316,6 +408,12 @@ class Cohort:
                 "tda_labellings": c.R,
                 "tda_centres": c.N_CENTRES,
             },
+            "emeans": None
+            if self.emeans_sets is None
+            else [
+                {"name": name, "columns": len(s["columns"]), "k_tibshirani": s["k_tibshirani"]}
+                for name, s in self.emeans_sets.items()
+            ],
             "slides": [
                 {
                     "slide_id": r.slide_id,
@@ -462,6 +560,52 @@ class Cohort:
         with self._lock:
             return remember(self._clusters, key, result, 8)
 
+    def packed(self, name: str, k: int) -> np.ndarray:
+        """The e-means study's packed labels of every cohort cell for one set and k."""
+        key = (name, k)
+        with self._lock:
+            if key in self._packed:
+                self._packed.move_to_end(key)
+                return self._packed[key]
+        with np.load(EMEANS / emeans_file(name), allow_pickle=False) as z:
+            n, packed = int(z["n_cells"]), np.asarray(z[f"k{k}"])
+        if n != self.emeans_sets[name]["n_cells"] or len(packed) != (n + 1) // 2:
+            raise RuntimeError(f"{emeans_file(name)}: {len(packed):,} bytes of labels for {n:,} cells")
+        with self._lock:
+            return remember(self._packed, key, packed, PACKED)
+
+    def emeans(self, slide_id: str, name: str, k: int) -> dict:
+        """Every cell of the slide coloured by its saved e-means cluster, with each cluster's cohort profile, as
+        JSON-ready data."""
+        if self.emeans_sets is None:
+            raise KeyError(f"the e-means study's results are not in {EMEANS}")
+        key = ("emeans", slide_id, name, k)
+        with self._lock:
+            if key in self._clusters:
+                self._clusters.move_to_end(key)
+                return self._clusters[key]
+        started = time.perf_counter()
+        s = self.emeans_sets[name]
+        row = self.by_id[slide_id]
+        labels = unpack_rows(self.packed(name, k), int(row.start), int(row.end))
+        codes, clusters = emeans_clusters(s["profiles"][str(k)], labels, k)
+        result = {
+            "slide_id": slide_id,
+            "k": k,
+            "emeans": True,
+            "set": name,
+            "features": s["columns"],
+            "file": emeans_file(name),
+            "radius_um": s["radius_um"],
+            "k_tibshirani": s["k_tibshirani"],
+            "worse_than_kmeans": s["worse"].get(k),
+            "clusters": clusters,
+            "labels": base64.b64encode(codes.tobytes()).decode("ascii"),
+            "seconds": round(time.perf_counter() - started, 1),
+        }
+        with self._lock:
+            return remember(self._clusters, key, result, 8)
+
     def tile(self, slide_id: str, level: int, col: int, row: int) -> bytes:
         zoom = self.zoom(slide_id)
         if not 0 <= level < zoom.level_count:
@@ -525,6 +669,9 @@ def make_handler(cohort: Cohort) -> type[BaseHTTPRequestHandler]:
             elif len(parts) == 3 and parts[:2] == ["api", "tda"] and parts[2] in cohort.by_id:
                 k = cluster_request({"k": query.get("k", [""])})[0]
                 self.send(HTTPStatus.OK, json.dumps(cohort.tda(parts[2], k)).encode(), "application/json")
+            elif len(parts) == 3 and parts[:2] == ["api", "emeans"] and parts[2] in cohort.by_id:
+                name, k = emeans_request(query)
+                self.send(HTTPStatus.OK, json.dumps(cohort.emeans(parts[2], name, k)).encode(), "application/json")
             elif len(parts) == 5 and parts[:2] == ["api", "tile"] and parts[2] in cohort.wsis:
                 col, row = parts[4].removesuffix(".jpeg").split("_")
                 tile = cohort.tile(parts[2], int(parts[3]), int(col), int(row))
@@ -560,6 +707,8 @@ def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     cohort = Cohort(args.wsi_dir)
     print(f"{len(cohort.slides)} slides, {len(cohort.types)} cell types", flush=True)
+    if cohort.emeans_sets is None:
+        print(f"no e-means clusters: the e-means study's results are not in {EMEANS}", flush=True)
     if args.wsi_dir is not None:
         print(f"{len(cohort.wsis)} of them with a slide file in {args.wsi_dir}", flush=True)
     server = ThreadingHTTPServer((args.host, args.port), make_handler(cohort))

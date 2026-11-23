@@ -1,5 +1,7 @@
-"""Tests of the viewer's server: the slide table, the cells blob, the blank canvas and the slide-file lookup."""
+"""Tests of the viewer's server: the slide table, the cells blob, the blank canvas, the slide-file lookup, the
+clusterings and the saved e-means labels."""
 
+import json
 import struct
 
 import numpy as np
@@ -131,3 +133,63 @@ def test_kmeans_by_size_refuses_too_few_rows_and_numbers_by_size():
     assert serve.kmeans_by_size(X, 2).tolist() == [0, 0, 0, 1]
     with pytest.raises(ValueError, match="cannot form"):
         serve.kmeans_by_size(X[:1], 2)
+
+
+def pack(labels: np.ndarray) -> np.ndarray:
+    """The e-means study's ``cluster.pack``: two labels per byte, the even rows in the high half."""
+    padded = np.append(labels, np.uint8(0)) if len(labels) % 2 else labels
+    return (padded[0::2] << 4) | padded[1::2]
+
+
+def test_unpack_rows_reads_any_row_range_of_two_labels_per_byte():
+    labels = np.array([3, 15, 0, 9, 7, 1, 12], dtype=np.uint8)
+    packed = pack(labels)
+    for start, end in ((0, 7), (1, 6), (3, 4), (2, 2), (6, 7), (1, 2)):
+        assert serve.unpack_rows(packed, start, end).tolist() == labels[start:end].tolist()
+    with pytest.raises(ValueError, match="packed labels"):
+        serve.unpack_rows(packed, 5, 9)
+
+
+def test_emeans_request_reads_the_set_and_k():
+    assert serve.emeans_request({"set": ["composition+density"], "k": ["3"]}) == ("composition+density", 3)
+    with pytest.raises(ValueError, match="set must be one of"):
+        serve.emeans_request({"set": ["shape"], "k": ["3"]})
+    with pytest.raises(ValueError, match="k must be from"):
+        serve.emeans_request({"set": ["density"], "k": ["11"]})
+
+
+def test_emeans_clusters_code_by_cohort_size_and_keep_the_saved_labels():
+    def profile(n: int) -> dict:
+        fractions = dict(zip(c.CLASSES, (0.7, 0.1, 0.1, 0.1), strict=True))
+        return {
+            "n": n,
+            "share": n / 60,
+            "cells_per_ball": 100.0,
+            "class_fractions": fractions,
+            "kept_fractions": [1.0] * 10,
+        }
+
+    profiles = [profile(10), profile(30), profile(20)]
+    codes, entries = serve.emeans_clusters(profiles, np.array([0, 1, 2, 1], dtype=np.uint8), 3)
+    assert codes.tolist() == [2, 0, 1, 0]
+    assert [e["label"] for e in entries] == [1, 2, 0] and [e["n"] for e in entries] == [2, 1, 1]
+    assert [e["cohort_n"] for e in entries] == [30, 20, 10]
+    with pytest.raises(RuntimeError, match="not below k"):
+        serve.emeans_clusters(profiles, np.array([3], dtype=np.uint8), 3)
+    with pytest.raises(ValueError, match="profiles for k"):
+        serve.emeans_clusters(profiles[:2], np.array([0], dtype=np.uint8), 3)
+
+
+def test_load_emeans_reads_each_sets_summary_and_its_worse_fits(tmp_path):
+    assert serve.load_emeans(tmp_path) is None
+    gap, clusters, check = {"settings": {"radius_um": 150.0}, "sets": {}}, {}, {"sets": {}}
+    for name in serve.EMEANS_SETS:
+        gap["sets"][name] = {"features": {"columns": ["a", "b"]}, "k_tibshirani": 3, "n_cells": 5}
+        clusters[name] = {"clusters": {"2": []}}
+        check["sets"][name] = {"k": [1, 2, 3], "log_ratio_run_to_kmeans": [0.0, 0.0431, 0.0019]}
+        np.savez(tmp_path / serve.emeans_file(name), n_cells=np.int64(5))
+    for file, data in (("gap.json", gap), ("clusters.json", clusters), ("kmeans_check.json", check)):
+        (tmp_path / file).write_text(json.dumps(data))
+    out = serve.load_emeans(tmp_path)
+    assert list(out) == list(serve.EMEANS_SETS)
+    assert out["density"]["worse"] == {2: 0.0431} and out["density"]["k_tibshirani"] == 3

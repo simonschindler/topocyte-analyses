@@ -59,13 +59,14 @@ function legendEntries() {
   const mode = paletteMode();
   const count = (t) => (state.counts ? state.counts[t] : 0);
   if (state.layer === "clusters") {
+    const { emeans } = state.clusters;
     const entries = state.clusters.clusters.map((cluster, j) => ({
       key: j,
-      label: `C${j + 1}`,
+      label: emeans ? `#${cluster.label}` : `C${j + 1}`,
       hex: CLUSTERS[mode][j],
       n: cluster.n,
       mix: cluster.fractions.map((f, k) => ({ f, hex: PALETTE.classes[mode][classes[k]] })),
-      title: `${Math.round(cluster.cells_per_ball)} cells per ball on average; `
+      title: emeans ? emeansTitle(cluster) : `${Math.round(cluster.cells_per_ball)} cells per ball on average; `
         + cluster.fractions.map((f, k) => `${classes[k]} ${f.toFixed(2)}`).join(", "),
     }));
     if (state.clusters.tda) {
@@ -87,6 +88,16 @@ function legendEntries() {
     hex: PALETTE.classes[mode][name],
     n: types.reduce((sum, _, t) => sum + (typeClass[t] === k ? count(t) : 0), 0),
   }));
+}
+
+// A saved e-means cluster's profile over every cohort cell, which is what defines it.
+function emeansTitle(cluster) {
+  const { classes } = state.meta;
+  const median = cluster.kept_fractions[5]; // threshold 5 is the median of the cohort's 10-NN density
+  return `Saved label ${cluster.label}. Over the cohort: ${(100 * cluster.cohort_share).toFixed(1)}% of cells, `
+    + `${Math.round(cluster.cells_per_ball)} cells per ball; `
+    + cluster.fractions.map((f, k) => `${classes[k]} ${f.toFixed(2)}`).join(", ")
+    + `; ${(100 * median).toFixed(0)}% of the ball's cells at or above the cohort's median density.`;
 }
 
 function applyColors() {
@@ -229,6 +240,15 @@ function setLayer(layer) {
 // --- composition clusters ---------------------------------------------------------------------------------
 
 function clusterMethod(r) {
+  if (r.emeans) {
+    const worse = r.worse_than_kmeans == null ? ""
+      : ` At this k the fit's W_k is ${(100 * Math.expm1(r.worse_than_kmeans)).toFixed(2)}% above k-means++'s `
+        + "(kmeans_check.json): a worse partition than k-means++ finds.";
+    return `Saved e-means clusters (k = ${r.k}) of every cohort cell's ${r.radius_um} µm ball on ${r.set}: `
+      + `${r.features.length} columns z-scored over the whole cohort (${r.file}). #j is the saved label; the `
+      + `colours go to the largest clusters over the cohort first. Tibshirani's k̂ = ${r.k_tibshirani}.${worse} `
+      + `${r.seconds} s.`;
+  }
   if (r.tda) {
     return `k-means (k = ${r.k}, ${r.n_init} starts, seed ${r.seed}) of the slide's ${fmt(r.n_centres)} sampled `
       + `centres on the pilot's level-2 features: ${r.features} of their residual chromatic Betti curves `
@@ -251,6 +271,10 @@ function clearClusters() {
 
 function defaultNote() {
   const m = state.meta.cluster;
+  if ($("method").value === "emeans") {
+    return "Colours every cell by its saved cluster from e-means on every cohort cell's ball "
+      + "(gtex-liver-emeans-neighbourhoods); the gap statistic's k̂ is in brackets.";
+  }
   if ($("method").value === "tda") {
     return `Clusters the slide's ${fmt(m.tda_centres)} sampled centres by their saved chromatic TDA features `
       + `(${m.tda_radius_um} µm balls, ${m.tda_labellings} random labellings); pilot slides only.`;
@@ -259,14 +283,18 @@ function defaultNote() {
     + `pilot's level 1 (radius ${m.radius_um} µm there).`;
 }
 
-// TDA needs a pilot slide; the radius and density belong to composition clusters only.
+// TDA needs a pilot slide and e-means the e-means study's results; the radius and density belong to
+// composition clusters only.
 function updateMethod() {
   const pilot = Boolean(state.info?.pilot);
   $("method").querySelector("option[value=tda]").disabled = !pilot;
+  $("method").querySelector("option[value=emeans]").disabled = !state.meta.emeans;
   if (!pilot && $("method").value === "tda") $("method").value = "composition";
-  const tda = $("method").value === "tda";
-  $("radius").disabled = tda;
-  $("density").disabled = tda;
+  if (!state.meta.emeans && $("method").value === "emeans") $("method").value = "composition";
+  const method = $("method").value;
+  $("radius").disabled = method !== "composition";
+  $("density").disabled = method !== "composition";
+  $("emeans-field").hidden = method !== "emeans";
 }
 
 function decode(base64) {
@@ -286,20 +314,24 @@ async function runClusters() {
     $("cluster-note").textContent = `k must be a whole number from ${kMin} to ${kMax}.`;
     return;
   }
-  const tda = $("method").value === "tda";
-  if (!tda && (!Number.isFinite(radius) || radius < rMin || radius > rMax)) {
+  const method = $("method").value;
+  const tda = method === "tda";
+  if (method === "composition" && (!Number.isFinite(radius) || radius < rMin || radius > rMax)) {
     $("cluster-note").textContent = `The radius must be from ${rMin} to ${rMax} µm.`;
     return;
   }
   const density = $("density").checked;
+  const set = $("emeans-set").value;
   $("run").disabled = true;
-  $("cluster-note").textContent = tda
-    ? `Clustering ${fmt(state.meta.cluster.tda_centres)} centres with k = ${k} …`
-    : `Clustering ${fmt(state.info.n_cells)} cells with k = ${k} in ${radius} µm balls …`;
+  $("cluster-note").textContent = {
+    tda: `Clustering ${fmt(state.meta.cluster.tda_centres)} centres with k = ${k} …`,
+    emeans: `Reading the saved e-means labels of ${set}, k = ${k} …`,
+  }[method] ?? `Clustering ${fmt(state.info.n_cells)} cells with k = ${k} in ${radius} µm balls …`;
   try {
-    const url = tda
-      ? `/api/tda/${encodeURIComponent(id)}?k=${k}`
-      : `/api/cluster/${encodeURIComponent(id)}?k=${k}&radius=${radius}&density=${density ? 1 : 0}`;
+    const url = {
+      tda: `/api/tda/${encodeURIComponent(id)}?k=${k}`,
+      emeans: `/api/emeans/${encodeURIComponent(id)}?set=${encodeURIComponent(set)}&k=${k}`,
+    }[method] ?? `/api/cluster/${encodeURIComponent(id)}?k=${k}&radius=${radius}&density=${density ? 1 : 0}`;
     const result = await fetchOk(url).then((r) => r.json());
     if (state.slide !== id) return;
     let labels = decode(result.labels);
@@ -429,6 +461,9 @@ async function init() {
   document.querySelectorAll("input[name=layer]").forEach((radio) => radio.addEventListener("change", () => {
     setLayer(radio.value);
   }));
+  $("emeans-set").replaceChildren(...(state.meta.emeans ?? []).map((s) => new Option(
+    `${s.name} (${s.columns} columns, k̂ ${s.k_tibshirani})`, s.name,
+  )));
   $("k").min = String(state.meta.cluster.k_min);
   $("k").max = String(state.meta.cluster.k_max);
   $("radius").min = String(state.meta.cluster.radius_min_um);
