@@ -1,0 +1,389 @@
+{
+ "description": {
+  "compartment": "the level-1 composition strata: k-means clusters of the centres by their balls' z-scored log10 cell count and four class fractions; bins of a continuum of compositions that recur across the halves (design step 8; Simon, 2026-11-21)",
+  "subdomain": "the level-2 subdomain, an index within its composition stratum; -1 where the stratum has none",
+  "control_k": "the control's k per composition stratum (labelling 1 against labellings 2..19, in the observed bases); level 2 runs only if every one is 1",
+  "boot_{c}_stab_minus_pw_{AB,BA}": "domains.npz: the guard's 4000 bootstrap differences BA_stab - BA_pw in composition stratum c, training half first",
+  "boot_{c}_stab_minus_dom_{AB,BA}": "domains.npz: the same for BA_stab - BA_dom (descriptive)",
+  "gap_A, gap_B": "a half's gap curve and s at k = 1..k_max (entry k - 1), its k and largest gain Gap(k) - Gap(1)",
+  "ps": "prediction strength per direction at the smaller of the halves' k; empty when that is 1",
+  "ps_curve": "prediction strength per direction at k = 2..k_max (entry k - 2), descriptive",
+  "ari": "the cross-half adjusted Rand index per direction where k >= 2, descriptive"
+ },
+ "settings": {
+  "rule": {
+   "B": 20,
+   "min_gain": 0.03,
+   "ps_min": 0.8,
+   "n_init": 20,
+   "seed": 0,
+   "k_max_strata": 10,
+   "k_max_subdomains": 6,
+   "min_half": 500
+  },
+  "level1_features": [
+   "log10 cells",
+   "epithelial",
+   "stromal",
+   "immune",
+   "other"
+  ],
+  "zscore": "ddof 0: each half's own means and SDs for its gap statistic, the training half's in each prediction-strength direction, all centres' for the final fit",
+  "guard": {
+   "classifier": "HistGradientBoostingClassifier(random_state=0), scikit-learn's defaults otherwise",
+   "pairwise_features": [
+    "P epithelial-epithelial",
+    "P epithelial-stromal",
+    "P epithelial-immune",
+    "P epithelial-other",
+    "P stromal-stromal",
+    "P stromal-immune",
+    "P stromal-other",
+    "P immune-immune",
+    "P immune-other",
+    "P other-other",
+    "log10 cells",
+    "epithelial",
+    "stromal",
+    "immune",
+    "other"
+   ],
+   "domain_blocks": [
+    0,
+    1,
+    4,
+    5,
+    8,
+    9,
+    12,
+    13
+   ],
+   "balanced_accuracy": "the mean recall over the classes present in the true labels",
+   "n_draws": 4000,
+   "bootstrap": "a fresh default_rng(12345) per composition stratum and direction draws integers(0, n, size=(4000, n)) over the n slides holding the test half's centres of the stratum, in slide-index order; the predictions stay fixed",
+   "interval": [
+    2.5,
+    97.5
+   ],
+   "min_share": 0.1
+  },
+  "contiguity_k_nn": 5
+ },
+ "n_centres": 45000,
+ "level1": {
+  "k": 1,
+  "k_A": 10,
+  "k_B": 10,
+  "ps": [
+   0.3272645600090897,
+   0.276450763094765
+  ],
+  "gap_A": {
+   "k": 10,
+   "gap": [
+    -0.000334806489485473,
+    0.1017120080816536,
+    0.15143123502127054,
+    0.2120728031201491,
+    0.30007185674724113,
+    0.35172217175711573,
+    0.3722213935229455,
+    0.3924340009440126,
+    0.4248690043020886,
+    0.4568519452147317
+   ],
+   "s": [
+    0.006847543466758131,
+    0.00565063774755215,
+    0.005779700464596468,
+    0.00570332293157085,
+    0.006334488050001954,
+    0.005423446890154673,
+    0.00551099205381441,
+    0.005305626799189134,
+    0.005318493150254724,
+    0.005282038703960723
+   ],
+   "largest_gain": 0.4571867517042172
+  },
+  "gap_B": {
+   "k": 10,
+   "gap": [
+    -0.00031415679118751427,
+    0.04581628124608805,
+    0.05804369680572741,
+    0.08316808344503812,
+    0.154553581440954,
+    0.23324341638751456,
+    0.26204811463163935,
+    0.27351987206601613,
+    0.3036447061852847,
+    0.32380438944229617
+   ],
+   "s": [
+    0.006652365207619877,
+    0.005603719953005259,
+    0.00552485858367955,
+    0.005619973450753333,
+    0.00622234003991087,
+    0.005595963484289608,
+    0.005825185708090414,
+    0.005074414383823536,
+    0.005358442376782873,
+    0.005560252453319313
+   ],
+   "largest_gain": 0.3241185462334837
+  },
+  "ps_curve": {
+   "A->B": [
+    0.6500142004883681,
+    0.5162540007271154,
+    0.49935577969296435,
+    0.5092997913137578,
+    0.3652347883874895,
+    0.42688956877176176,
+    0.43616471943739943,
+    0.3123531286784787,
+    0.3272645600090897
+   ],
+   "B->A": [
+    0.926223079456694,
+    0.5160813683471263,
+    0.5122591537567573,
+    0.5712689686882447,
+    0.5655839584243889,
+    0.29849808600467453,
+    0.2998230889098022,
+    0.26373242511571043,
+    0.276450763094765
+   ]
+  },
+  "ari": null,
+  "zscore": {
+   "A": {
+    "mean": [
+     2.180043322194016,
+     0.7058403848400282,
+     0.15625744693749646,
+     0.07124664189444681,
+     0.06665552632802518
+    ],
+    "sd": [
+     0.14809922720266055,
+     0.215570404956486,
+     0.11130630407955813,
+     0.0962410746661147,
+     0.10727039065186038
+    ]
+   },
+   "B": {
+    "mean": [
+     2.1290854082585677,
+     0.7339978329001442,
+     0.14587058567086233,
+     0.06712230894878803,
+     0.05300927248019644
+    ],
+    "sd": [
+     0.1461263971039802,
+     0.18062000325184213,
+     0.09875136379982659,
+     0.08059438641826115,
+     0.07979340237169162
+    ]
+   },
+   "all": {
+    "mean": [
+     2.15456436522622,
+     0.7199191088700702,
+     0.15106401630417632,
+     0.06918447542161742,
+     0.05983239940411022
+    ],
+    "sd": [
+     0.1493061611671495,
+     0.19936224066812225,
+     0.10534436060763416,
+     0.08878711797368986,
+     0.0947814166772496
+    ]
+   }
+  }
+ },
+ "compartments": [
+  {
+   "compartment": 0,
+   "size": 45000,
+   "share": 1.0,
+   "size_A": 22500,
+   "slides_A": 15,
+   "size_B": 22500,
+   "slides_B": 15,
+   "mean_L1": {
+    "log10 cells": 2.15456436522622,
+    "epithelial": 0.7199191088700702,
+    "stromal": 0.15106401630417632,
+    "immune": 0.06918447542161742,
+    "other": 0.05983239940411022
+   },
+   "control": {
+    "k": 1,
+    "too_small": false,
+    "n_A": 22500,
+    "n_B": 22500,
+    "k_A": 1,
+    "k_B": 1,
+    "ps": [],
+    "gap_A": {
+     "k": 1,
+     "gap": [
+      -0.0009399161465530881,
+      -0.0059993323551807975,
+      -0.007493329319713027,
+      -0.006305501808263614,
+      -0.0032453469656452683,
+      0.0025909736485179025
+     ],
+     "s": [
+      0.0023984069471518375,
+      0.002435016774834438,
+      0.0023244466275666575,
+      0.002311877067972463,
+      0.0024612380438106987,
+      0.0022472579435190904
+     ],
+     "largest_gain": 0.0035308897950709905
+    },
+    "gap_B": {
+     "k": 1,
+     "gap": [
+      -0.0008372527106601524,
+      -0.00372131819030308,
+      -0.002531735480689079,
+      0.008260590878711227,
+      0.017462462669319834,
+      0.026219879714833638
+     ],
+     "s": [
+      0.0023247236967255773,
+      0.002375183318812667,
+      0.00228879807847888,
+      0.002307841528346949,
+      0.0024407661685587165,
+      0.002467226974385728
+     ],
+     "largest_gain": 0.02705713242549379
+    },
+    "ps_curve": {
+     "A->B": [
+      0.7896517132461158,
+      0.7287012239095318,
+      0.7211101104180933,
+      0.59109091281857,
+      0.6264519556306145
+     ],
+     "B->A": [
+      0.6912851882293133,
+      0.40109701259560776,
+      0.6005114300679221,
+      0.607957016922133,
+      0.44134612061605016
+     ]
+    }
+   },
+   "level2": {
+    "k": 1,
+    "too_small": false,
+    "n_A": 22500,
+    "n_B": 22500,
+    "k_A": 6,
+    "k_B": 6,
+    "ps": [
+     0.3377951444996132,
+     0.36061823356691225
+    ],
+    "gap_A": {
+     "k": 6,
+     "gap": [
+      -0.001197007826588603,
+      0.02461279691575058,
+      0.05401489351923949,
+      0.08571031562916254,
+      0.10493732203424777,
+      0.12210577486897556
+     ],
+     "s": [
+      0.002690276066954631,
+      0.002651719493393014,
+      0.0025431557392249595,
+      0.002431028030085186,
+      0.002426256847615555,
+      0.0023772567602964633
+     ],
+     "largest_gain": 0.12330278269556416
+    },
+    "gap_B": {
+     "k": 6,
+     "gap": [
+      -0.0011792337470151182,
+      0.018953382355114456,
+      0.03588254245140554,
+      0.046895152490520786,
+      0.06311369541045231,
+      0.074982276505283
+     ],
+     "s": [
+      0.002671925317250582,
+      0.0026429247220638255,
+      0.002454976277499004,
+      0.002332291267890306,
+      0.0023504587977081445,
+      0.002325405015596392
+     ],
+     "largest_gain": 0.07616151025229811
+    },
+    "ps_curve": {
+     "A->B": [
+      0.7370233333579072,
+      0.39993730863741445,
+      0.4150199681739007,
+      0.42544390996534104,
+      0.3377951444996132
+     ],
+     "B->A": [
+      0.9260949185508064,
+      0.8313509412868579,
+      0.5258365836793218,
+      0.4662878365053673,
+      0.36061823356691225
+     ]
+    },
+    "ari": null
+   },
+   "guard": null,
+   "contiguity": null
+  }
+ ],
+ "control_k": [
+  1
+ ],
+ "control_passed": true,
+ "verdict": {
+  "verdict": "does not add",
+  "reason": "no compartment with subdomains"
+ },
+ "versions": {
+  "python": "3.13.9",
+  "numpy": "2.5.5",
+  "scipy": "1.18.1",
+  "scikit-learn": "1.9.1"
+ },
+ "seconds": {
+  "level1": 116.7,
+  "control": 104.4,
+  "level2": 78.9,
+  "guard": 0.0,
+  "total": 300.1
+ },
+ "peak_rss_gb": 0.513
+}

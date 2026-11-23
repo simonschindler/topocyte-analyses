@@ -17,7 +17,12 @@ Subcommands
     first column is lognormal (σ = 0.6), and a 5-d one whose lognormal column
     carries the most variance (3). Two- and three-cluster mixtures of 5,000 ×
     20 must give k = 2 and 3. Writes ``results/preflight.json`` and exits 1 if
-    any case fails.
+    any case fails. After those cases, from the same generator, a cluster-free
+    composition null of the level-1 size is run and only reported, under
+    ``"descriptive"`` (design step 8): log10 of n = Poisson(120) + 1 cells
+    and the fractions of a multinomial(n, Dirichlet(6, 2, 1, 1)) draw,
+    22,500 × 5 per half, z-scored as level 1 (``domains.level1_inputs``),
+    k_max 10.
 ``bars [--slides SLIDE_ID ...] [--workers 8]``
     The six-packs of every centre (design steps 2–4) and its pair counts
     (step 11), for the pilot's slides in slide-index order (default all 30).
@@ -128,6 +133,20 @@ PREFLIGHT_CASES = (
     ),
 )
 
+# The composition null (Simon's ruling of 2026-11-21 that the level-1 compartments are composition strata): reported,
+# not gated, and drawn after the gated cases, so that they keep their draws.
+COMPOSITION_NULL = ("composition null, 22,500 x 5", 22_500, 10)  # (case, rows per half, k_max)
+COMPOSITION_CELLS = 120  # the Poisson mean of a ball's cells, before adding 1
+COMPOSITION_ALPHA = (6.0, 2.0, 1.0, 1.0)  # the Dirichlet of the four class fractions: one unimodal continuum
+
+
+def _composition(rng: np.random.Generator, n: int) -> np.ndarray:
+    """n rows of the cluster-free composition null: log10 of n_i = Poisson(120) + 1 cells, then the four fractions of
+    a multinomial(n_i, Dirichlet(6, 2, 1, 1)) draw. The cells, compositions and counts are drawn in that order."""
+    cells = rng.poisson(COMPOSITION_CELLS, n) + 1
+    counts = rng.multinomial(cells, rng.dirichlet(COMPOSITION_ALPHA, n))
+    return np.column_stack([np.log10(cells), counts / cells[:, None]])
+
 
 def cmd_pilot() -> None:
     eligible = c.eligible_slides(c.CT / "holdout.csv", c.SIB / "pathology.csv")
@@ -142,14 +161,11 @@ def cmd_pilot() -> None:
     print(f"pilot: {len(pilot)} slides, half A {halves['A']}, half B {halves['B']}; wrote {c.RESULTS / 'pilot.csv'}")
 
 
-def _half(result: dict) -> dict:
-    """One half's gap curves for the JSON, with its largest gain Gap(k) - Gap(1) over k >= 2."""
-    gap, s = result["gap"], result["s"]
-    return {"k": result["k"], "gap": gap.tolist(), "s": s.tolist(), "largest_gain": float(np.max(gap[1:] - gap[0]))}
-
-
 def cmd_preflight() -> bool:
-    """Run the full rule for k on each pre-flight case, write ``results/preflight.json``; True if every case passes."""
+    """Run the full rule for k on each pre-flight case, then the composition null, and write ``results/preflight.json``.
+
+    Returns True if every gated case passes; the composition null is only reported.
+    """
     rng = np.random.default_rng(PREFLIGHT_SEED)
     cases, start = [], time.perf_counter()
     for name, n, k_max, expected, draw in PREFLIGHT_CASES:
@@ -166,8 +182,8 @@ def cmd_preflight() -> bool:
             "k_A": result["k_A"],
             "k_B": result["k_B"],
             "ps": result["ps"],
-            "gap_A": _half(result["gap_A"]),
-            "gap_B": _half(result["gap_B"]),
+            "gap_A": domains.gap_summary(result["gap_A"]),
+            "gap_B": domains.gap_summary(result["gap_B"]),
             "seconds": round(time.perf_counter() - t, 1),
             "passed": result["k"] == expected,
         }
@@ -179,6 +195,34 @@ def cmd_preflight() -> bool:
             flush=True,
         )
     passed = all(case["passed"] for case in cases)
+    name, n, k_max = COMPOSITION_NULL
+    A, B = _composition(rng, n), _composition(rng, n)
+    t = time.perf_counter()
+    result = domains.choose_k(*domains.level1_inputs(A, B), k_max)
+    null = {
+        "case": name,
+        "construction": (
+            "log10 of n = Poisson(120) + 1 cells and the four fractions of a multinomial(n, Dirichlet(6, 2, 1, 1)) "
+            "draw; z-scored as level 1: each half with its own means and SDs for its gap statistic, both halves with "
+            "the training half's in each prediction-strength direction"
+        ),
+        "rows_per_half": n,
+        "columns": A.shape[1],
+        "k_max": k_max,
+        "k": result["k"],
+        "k_A": result["k_A"],
+        "k_B": result["k_B"],
+        "ps": result["ps"],
+        "gap_A": domains.gap_summary(result["gap_A"]),
+        "gap_B": domains.gap_summary(result["gap_B"]),
+        "seconds": round(time.perf_counter() - t, 1),
+    }
+    print(
+        f"{name} (composition strata check, reported, not gated): k {null['k']}, k_A {null['k_A']}, "
+        f"k_B {null['k_B']}, largest gain {null['gap_A']['largest_gain']:.4f} / {null['gap_B']['largest_gain']:.4f}, "
+        f"PS {[round(p, 3) for p in null['ps']]}, {null['seconds']} s",
+        flush=True,
+    )
     out = {
         "passed": passed,
         "rule": {
@@ -189,10 +233,14 @@ def cmd_preflight() -> bool:
             "n_init": domains.N_INIT,
             "seed": 0,
         },
-        "data": f"one default_rng({PREFLIGHT_SEED}) draws the cases in order, half A then half B",
+        "data": (
+            f"one default_rng({PREFLIGHT_SEED}) draws the cases in order, half A then half B, and then the "
+            "composition null's halves"
+        ),
         "versions": {"python": platform.python_version(), "numpy": np.__version__, "scikit-learn": sklearn.__version__},
         "seconds": round(time.perf_counter() - start, 1),
         "cases": cases,
+        "descriptive": [null],
     }
     (c.RESULTS / "preflight.json").write_text(json.dumps(out, indent=1) + "\n")
     print(f"pre-flight {'passed' if passed else 'FAILED'} in {out['seconds']} s; wrote {c.RESULTS / 'preflight.json'}")

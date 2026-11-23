@@ -629,3 +629,89 @@ Claude's calls:
 - **`pca` and `mfa` are copied** from the cell-type study's `common.py`, with their sign rule. `mfa` also returns its column means and loadings for the projection, and its `zip`s are strict.
 - **The npz is written to `features.tmp.npz` and renamed;** `*.npz` ignores that name (Task 5's deferred minor about `.npz.tmp`).
 - **One `BlockFit` outlives its block,** found while watching the run's memory. In `run`, the loop variable `fit` keeps the previous block's all-slides fit, with its component tables (up to 0.9 GB), through the next block. This is memory only and no result depends on it. It was left as it ran, so that the committed code is the code that wrote `features.npz`.
+
+## Task 7: composition strata, subdomains, control and guard (2026-11-23)
+
+- **Module:** `domains.py` gains its main, run as `domains.py` with no subcommand. It reads `results/features.npz` and writes `results/domains.npz` and `results/domains.json`, rows in the order of `features.npz`. Task 4's functions are unchanged.
+  - **Level 1, the composition strata (`level1`).** `level1_inputs` z-scores `L1` with ddof 0: each half with its own means and SDs for its gap statistic, both halves with the training half's in each prediction-strength direction. The rule runs with k_max 10. The strata are `kmeans_fit` of all centres z-scored with all centres' means and SDs, or all 0 when k = 1.
+  - **The control first (`level2` on `L2_ctl_*`).** Inside each stratum c, gap statistics on `L2_ctl_A[A∩c]` and `L2_ctl_B[B∩c]`, directions (`L2_ctl_A[A∩c]`, `L2_ctl_A[B∩c]`) and (`L2_ctl_B[B∩c]`, `L2_ctl_B[A∩c]`), k_max 6. A stratum with fewer than 500 centres in either half gets k = 1 without the rule, recorded as too small. Any control k > 1 stops level 2: no observed level-2 fit, `subdomain` −1 everywhere, no guard, and the verdict "not run: control failed".
+  - **Level 2 (`level2` on `L2_obs_*`).** The same index pattern; then `kmeans_fit(L2_obs_all[c], k_c)`, and −1 where k_c = 1.
+  - **The guard (`guard`),** in every stratum with k_c ≥ 2 and both directions:
+    - stability (`stability_prediction`): the training half's own k-means, in its own basis, assigns the test half's centres in that basis to the nearest centroid, and `match_labels` (the Hungarian matching on the training half's contingency table) maps them to final labels;
+    - pairwise (`classifier_prediction`): `HistGradientBoostingClassifier(random_state=0)` on [`P`, `L1`], raw;
+    - BA_dom, descriptive: the same classifier on the 8 domain blocks' 72 scores, in the training half's basis for both halves;
+    - balanced accuracy (`balanced_accuracy`): the mean recall over the classes present in the true labels, from confusion counts;
+    - the bootstrap (`bootstrap_draws`, `resampled_ba`): a fresh `default_rng(12345)` per stratum and direction draws `integers(0, n, size=(4000, n))` over the n slides holding the test half's centres of the stratum, in slide-index order. Each draw sums its slides' confusion counts; the predictions stay fixed. The interval is the 2.5 and 97.5 percentiles, and a direction passes when the difference and its lower bound are both above 0.
+  - **The verdict (`verdict`):** "adds", "does not add" or "not run: control failed", with a reason. "adds" needs a passing stratum holding at least 10% of all centres, compared exactly.
+  - **Descriptives:** the prediction-strength curves at k = 2..k_max of every rule application (`ps_curve`), the cross-half adjusted Rand index where k ≥ 2 (`cross_half_ari`), and the contiguity (`contiguity`, with `same_slide_neighbours`).
+  - **`results/domains.npz`:** `compartment`, `subdomain`, `control_k`, and the guard's 4000 bootstrap differences per stratum and direction, `boot_{c}_stab_minus_{pw,dom}_{AB,BA}` (none in this run). `*.npz` is ignored.
+  - **`results/domains.json`:** level 1 (k, k_A, k_B, PS, both halves' gap curves with s, the PS curves, the ARI and each fitting set's z-scoring); per stratum its size, share, sizes and slides per half, mean `L1`, the control's and the level-2 choice with their curves, the guard and the contiguity; `control_k`, `control_passed`, the verdict, the settings, versions and timings.
+- **`run_pilot.py`:** the composition null (`_composition`, Simon's strata ruling) runs after the gated cases, from the same generator, z-scored by `domains.level1_inputs`. It is recorded under `"descriptive"`, outside `"passed"`. `_half` became `domains.gap_summary`, which both JSON writers share.
+- **The controller's rulings, applied:** R3 (level-1 z-scoring), T7-a (the control first, and a failed control is a result), T7-b (the verdict and its reasons), T7-c (the bootstrap), T7-d (the two predictions), T7-e (BA_dom), T7-f (the cross-half ARI), T7-g (contiguity), T7-h (the composition null), T7-i (the strata wording), T7-j (the stored draws), and the curves in `domains.json`.
+- **Tests:** `test_domains.py`, 48 tests (18 new), and the study suite, 118 tests in 118 s, pass with warnings as errors.
+  - **The brief's six:** the Hungarian matching; the guard on subdomains that are a function of `P` (no pass) and on noise `P` with clear level-2 subdomains (a pass); each bootstrap draw holds whole slides; the contiguity expectation equals the mean over every reassignment on a six-centre toy whose observed counts range from 0 to 4; 499 centres in one half give k = 1 and `subdomain` −1, and 500 in each run the rule.
+  - **Beside them:**
+    - the level-1 z-scoring of each half and direction, and the final fit on all centres' z-scores;
+    - the balanced accuracy over the classes present, against scikit-learn's where every class is present;
+    - a direction passes only with its lower bound above 0: hand-made predictions with a positive difference and a lower bound below 0. Its draws come from a fresh generator per direction, and the interval is their percentiles;
+    - the final subdomains come from the all-slides basis;
+    - the cross-half ARI compares the partitions prediction strength compares;
+    - contiguity counts same-slide neighbours, whatever their stratum;
+    - the verdict's rules, 10% exactly included;
+    - the binding settings (k_max 10 and 6, 500 centres, 4000 draws, seed 12345, 10%, five neighbours, the domain blocks, the classifier's `random_state=0`);
+    - two end-to-end runs on synthetic features: one stratum, a passing control, two subdomains and a passing guard; and a control with clusters, which stops level 2 after exactly two calls of the rule;
+    - the composition null's construction, and its place in the pre-flight: after the gated cases, z-scored as level 1, outside `"passed"`.
+  - **Deliberate breaks:** 33 of 34 caught, on scratch copies of `domains.py` and `run_pilot.py`. The 34th fits k-means for k = 1 instead of writing zeros, which gives the same labels. The guard test's percentile check was added when a break to the 5th and 95th percentiles passed: the hand-made predictions' draws take few values, so those percentiles coincided.
+- **The pre-flight re-run** (`logs/preflight_task7.log`): 01:03–01:15 on 2026-11-23, on AC power inside `caffeinate -is`. **Passed**, 9 of 9 gated cases.
+  - Every gated case gives the same k, k_A, k_B and prediction strength as Task 4's run, and its gap curves and s agree to 1.8e-15.
+  - Time: 724 s of wall time, 2,714 s of user CPU; peak RSS 0.31 GB. The composition null took 151 s of it.
+  - **The composition null (reported, not gated):** 22,500 × 5 per half, k = 5 (k_A 5, k_B 5), prediction strength 0.930 / 0.948. The Task 4 reviewer's draw, z-scored on each half alone, gave k = 5 with 0.91 / 0.93.
+
+    | half | gains Gap(k) − Gap(1), k = 2..10 | stop at 1, margin |
+    |---|---|---|
+    | A | 0.0133, 0.0676, 0.1681, 0.2096, 0.2006, 0.1962, 0.2002, 0.2057, 0.2068 | −0.0080 |
+    | B | 0.0112, 0.0671, 0.1653, 0.2043, 0.1994, 0.1957, 0.1995, 0.2062, 0.2058 | −0.0058 |
+
+- **The run** (`logs/domains.log`): 01:15–01:20 on 2026-11-23, on AC power inside `caffeinate -is`, right after the pre-flight. `domains.py` had md5 `964d5082…` then and has not changed since.
+  - **Time:** 300 s of wall time (level 1 117 s, the control 104 s, level 2 79 s, the guard none), 1,486 s of user CPU. Peak RSS 0.51 GB.
+  - **Level 1: one composition stratum, k = 1.** Each half's gap rises at every k up to k_max, so k_A = k_B = 10. Prediction strength at k = 10 is 0.327 (A→B) and 0.276 (B→A), under 0.8, so k = 1: the stratum holds all 45,000 centres, 22,500 per half on 15 slides each. Its mean ball has log10 2.155 cells and fractions epithelial 0.720, stromal 0.151, immune 0.069 and other 0.060.
+  - **The control: k = 1, passed.** Both halves stop at k = 1 (margins +0.0075 and +0.0053), so level 2 ran.
+  - **Level 2: k = 1, no subdomains.** Each half's gap rises at every k up to k_max, so k_A = k_B = 6. Prediction strength at k = 6 is 0.338 (A→B) and 0.361 (B→A), so k = 1.
+  - **Verdict: does not add**, with the reason "no compartment with subdomains". The guard did not run, so there are no bootstrap draws, BA_dom, cross-half ARI or contiguity: those fields are null in `domains.json`.
+  - **The gap gains,** Gap(k) − Gap(1), and the margin Gap(1) − (Gap(2) − s_2) (positive: the gap stops at 1):
+
+    | rule application | half | gains, k = 2..k_max | margin |
+    |---|---|---|---|
+    | level 1 (k_max 10) | A | 0.1020, 0.1518, 0.2124, 0.3004, 0.3521, 0.3726, 0.3928, 0.4252, 0.4572 | −0.0964 |
+    | | B | 0.0461, 0.0584, 0.0835, 0.1549, 0.2336, 0.2624, 0.2738, 0.3040, 0.3241 | −0.0405 |
+    | control (k_max 6) | A | −0.0051, −0.0066, −0.0054, −0.0023, 0.0035 | +0.0075 |
+    | | B | −0.0029, −0.0017, 0.0091, 0.0183, 0.0271 | +0.0053 |
+    | level 2 (k_max 6) | A | 0.0258, 0.0552, 0.0869, 0.1061, 0.1233 | −0.0232 |
+    | | B | 0.0201, 0.0371, 0.0481, 0.0643, 0.0762 | −0.0175 |
+
+  - **The prediction-strength curves (descriptive):**
+
+    | rule application | direction | PS at k = 2..k_max |
+    |---|---|---|
+    | level 1 | A→B | 0.650, 0.516, 0.499, 0.509, 0.365, 0.427, 0.436, 0.312, 0.327 |
+    | | B→A | 0.926, 0.516, 0.512, 0.571, 0.566, 0.298, 0.300, 0.264, 0.276 |
+    | control | A→B | 0.790, 0.729, 0.721, 0.591, 0.626 |
+    | | B→A | 0.691, 0.401, 0.601, 0.608, 0.441 |
+    | level 2 | A→B | 0.737, 0.400, 0.415, 0.425, 0.338 |
+    | | B→A | 0.926, 0.831, 0.526, 0.466, 0.361 |
+
+  - **What the curves add.** The rule checks prediction strength only at the smaller half's k, here k_max at both levels. At no k from 2 to k_max does it reach 0.8 in both directions, at either level: the best is k = 2, with 0.650 / 0.926 at level 1 and 0.737 / 0.926 at level 2. So checking prediction strength at another k would not have changed either k. No rule, parameter or seed was changed after the run.
+  - **The halves differ.** Half A's gains exceed half B's at both levels, and A→B is the weaker direction at k = 2 at both levels. Half A's balls hold more cells than half B's (mean log10 2.180 against 2.129) and more of class other (0.067 against 0.053).
+  - **Against the composition null.** The null's gap peaks at k = 5 (0.21) and the rule takes 5, confirmed in both directions. The real compositions' gap keeps rising to k = 10, but no split of them recurs across the halves.
+- **Checks after the run** (a scratch script): the strata recomputed from `L1` equal `compartment`; the JSON's sizes match; `subdomain` is −1 throughout; every saved array is finite.
+
+Claude's calls:
+- **The bootstrap resamples the slides holding the test half's centres of the stratum,** not all 15 slides of the test half. The two agree when a stratum covers every test slide. Over all 15, a draw of slides without the stratum would leave the balanced accuracy undefined, and the rulings give no rule for it. The JSON records the slides per direction. Cost: none in this run, where the guard did not run.
+- **Prediction-strength curves at k = 2..k_max for every rule application,** for the curves the ruling asks for. They come from Task 4's `prediction_strength` with seed 0; only the rule's own value, at the smaller half's k, decides. Cost: 20–36 more k-means fits per application, a few seconds each.
+- **The verdict's reason when every stratum has k = 1** is the ruling's wording, "no compartment with subdomains"; the other reasons name composition strata. Cost: one word.
+- **`match_labels` builds a square table** over labels 0..m−1, m the larger maximum plus one, so every own label maps to a final label even if the training half lacks a subdomain.
+- **The 10% share is compared exactly** (a `Fraction`), so a stratum of exactly 4,500 centres counts.
+- **Kept beside the brief's keys:** each stratum's mean `L1` and slides per half, each fitting set's z-scoring, and each direction's test slides, for the report and the verifier (Task 8). The strata keep k-means' own numbering.
+- **The composition null's multinomial is drawn in one vectorized call,** which equals the reviewer's loop draw for draw (checked on 50 rows).
+- **`zscore` refuses a constant column,** and `same_slide_neighbours` a slide with five centres or fewer; neither occurs here.
+- **The classifier's defaults include early stopping above 10,000 training rows** (scikit-learn's "auto"), with its validation split seeded by `random_state=0`. The design asks for default settings and a fixed seed.

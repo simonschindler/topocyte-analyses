@@ -57,6 +57,7 @@
   - a compartment passes if BA_stab − BA_pw has its 95% interval above 0 in both directions;
   - the study's verdict is "adds" if a compartment with at least 10% of all centres passes.
 - **Control:** labelling 1 against labellings 2..19, projected into the observed bases. It must give k = 1 in every compartment, or level 2 stops and the report says so.
+- **Level-1 compartments are composition strata** (Simon, 2026-11-21; design step 8). The rule is unchanged. The report never calls them modes. The pre-flight gains a cluster-free composition null (Dirichlet(6, 2, 1, 1) fractions, Poisson(120) counts, 22,500 × 5) that is reported, not gated; Task 7 adds it.
 - **Commits:**
   - local only, in topocyte-analyses, in the repository's message style with the Co-Authored-By line; never push;
   - per-task commits only if Simon agrees at hand-off;
@@ -369,7 +370,7 @@ def test_choose_k_min_of_halves_and_ps(monkeypatch): ...  # halves 3 and 2 -> 2;
   - `test_small_compartment_gets_no_subdomains`: 499 centres in one half give k = 1 and `subdomain == -1`.
 - [ ] **Step 2: Run:** FAIL.
 - [ ] **Step 3: Implement the main.**
-  - **Level 1:** z-score L1 per fitting set, then `choose_k` with k_max 10, then the final `kmeans_fit` on all centres.
+  - **Level 1:** z-score L1 per fitting set, then `choose_k` with k_max 10, then the final `kmeans_fit` on all centres. These are composition strata (Global Constraints).
   - **Level 2:** for each compartment, `choose_k` on `L2_obs_A[A]` and `L2_obs_B[B]`. The directions are (`L2_obs_A[A]`, `L2_obs_A[B]`) and (`L2_obs_B[B]`, `L2_obs_B[A]`), with k_max 6. Final fit on `L2_obs_all`.
   - **Control:** the same on `L2_ctl_*`.
   - **Guard:** only if `control_passed`.
