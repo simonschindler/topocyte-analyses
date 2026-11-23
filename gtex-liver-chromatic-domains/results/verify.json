@@ -1,6 +1,6 @@
 {
  "passed": true,
- "n_checks": 62,
+ "n_checks": 64,
  "checks": [
   {
    "check": "features.npz: every array finite",
@@ -59,14 +59,21 @@
    "sample": "45,000 rows \u00d7 10 pairs"
   },
   {
-   "check": "level 1: k, k_A and k_B recomputed",
+   "check": "domains.json: the rule's settings and the level-1 features are this file's",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "exact",
+   "sample": "8 settings"
+  },
+  {
+   "check": "level 1: k, k_A, k_B and each half's own k recomputed; the rule ran (not too small)",
    "passed": true,
    "measured": 0.0,
    "tolerance": "exact",
    "sample": "k 1, k_A 10, k_B 10"
   },
   {
-   "check": "level 1: both halves' gap and s curves",
+   "check": "level 1: both halves' gap and s curves and largest gains",
    "passed": true,
    "measured": 1.7763568394002505e-15,
    "tolerance": "1e-12",
@@ -101,16 +108,16 @@
    "sample": "1 stratum or strata, with the control's and level 2's sizes"
   },
   {
-   "check": "stratum 0, control: k, k_A and k_B recomputed",
+   "check": "stratum 0, control: k, k_A, k_B and each half's own k recomputed; the rule ran (not too small)",
    "passed": true,
    "measured": 0.0,
    "tolerance": "exact",
    "sample": "k 1, k_A 1, k_B 1"
   },
   {
-   "check": "stratum 0, control: both halves' gap and s curves",
+   "check": "stratum 0, control: both halves' gap and s curves and largest gains",
    "passed": true,
-   "measured": 1.1535911115245767e-16,
+   "measured": 2.2768245622195593e-16,
    "tolerance": "1e-12",
    "sample": "k = 1..k_max"
   },
@@ -122,14 +129,14 @@
    "sample": "k = 2..k_max, both directions"
   },
   {
-   "check": "stratum 0, level 2: k, k_A and k_B recomputed",
+   "check": "stratum 0, level 2: k, k_A, k_B and each half's own k recomputed; the rule ran (not too small)",
    "passed": true,
    "measured": 0.0,
    "tolerance": "exact",
    "sample": "k 1, k_A 6, k_B 6"
   },
   {
-   "check": "stratum 0, level 2: both halves' gap and s curves",
+   "check": "stratum 0, level 2: both halves' gap and s curves and largest gains",
    "passed": true,
    "measured": 8.109832250191573e-17,
    "tolerance": "1e-12",
@@ -162,6 +169,13 @@
    "measured": 0.0,
    "tolerance": "exact",
    "sample": "domains.npz and domains.json"
+  },
+  {
+   "check": "balls: the sampled balls and the bit-for-bit balls (one per slide) are disjoint",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "0 shared",
+   "sample": "200 sampled, 30 bit for bit"
   },
   {
    "check": "balls: cells by brute force equal the saved counts",
@@ -438,13 +452,13 @@
   }
  ],
  "seconds": {
-  "arrays": 5.4,
+  "arrays": 5.2,
   "clustering": 266.8,
-  "balls": 255.9,
-  "blocks": 3618.2,
-  "total": 4146.8
+  "balls": 253.8,
+  "blocks": 3511.1,
+  "total": 4041.4
  },
- "peak_rss_gb": 10.46,
+ "peak_rss_gb": 9.93,
  "topocyte_commit": "18e3aa5",
  "date": "2026-11-23",
  "versions": {
@@ -656,6 +670,75 @@
    41435,
    32514,
    31661
+  ],
+  "n_first": 20,
+  "bit_for_bit": [
+   526,
+   2783,
+   4098,
+   4558,
+   6795,
+   7736,
+   10430,
+   10798,
+   12736,
+   13942,
+   15287,
+   17389,
+   18542,
+   19540,
+   21176,
+   22682,
+   25467,
+   25572,
+   27858,
+   29408,
+   30979,
+   31997,
+   34173,
+   35448,
+   36718,
+   38461,
+   39737,
+   41577,
+   43138,
+   43933
   ]
+ },
+ "script_md5": "08b329dde1a12ac19e722a06e2e82141",
+ "inputs_sha256": {
+  "results/features.npz": "02054ab290390c45f8a2c0cfb017ca70e93034c2b71469b6d73d805379d05e41",
+  "results/domains.npz": "dc9e25283b8d2a74dcd253053cdbfa7702e36630737fce983ca8d98275377692",
+  "results/bars/GTEX-RTLS-1326.npz": "5351635b7957b64b08de9aaa94aadcb230cd44d839d66ea159ee04336e49873d",
+  "results/bars/GTEX-1HCU7-1726.npz": "8d2b2ab1d939f93fefff7cd5571850a54df7c00f563a0446d6cad139a6699d66",
+  "results/bars/GTEX-144GM-1326.npz": "73fe69bd6d685bac3eec7e5f60e6a6716baa4e3033495a8f87e063e0a2a7ee41",
+  "results/bars/GTEX-1HBPI-1026.npz": "79bcfc1fa6e55687a3a48b005521b60f1b4a06ac12004281ce336b6130591361",
+  "results/bars/GTEX-YJ89-1426.npz": "0606244ea166f8cc49bb39098ef2df95e1e4d7325fd945a918f96753b8c5b4dc",
+  "results/bars/GTEX-R55F-2026.npz": "52fd426ca6177bdbc1b57e1491bb30c0b0b007c22c499da766336803ae1ccf8d",
+  "results/bars/GTEX-12ZZW-1426.npz": "5f9401add010e3611627f1876eaa1a684debe994f57fad4cef93173e4c74b967",
+  "results/bars/GTEX-17F96-1226.npz": "cd76b862077fdeda4a056d885e213930ab79385803abbfc20a6c2985d1e90388",
+  "results/bars/GTEX-1B8L1-0726.npz": "f8b1f60c433d7e2f20d38e275f02094b2e11b739d5b68181aa8efa9edd92332e",
+  "results/bars/GTEX-15RJE-1126.npz": "33328ddc5656df87bb53cd536d288fe093c4bf77d12fbd7a24563b1e9e116659",
+  "results/bars/GTEX-PWOO-0826.npz": "301208efe6df64254a948d6b19cc63cd6f129763cd6ab7bf9d01feed712277a7",
+  "results/bars/GTEX-1399R-1226.npz": "96f92e3fe42331ae2f24f1eadf7e8c5fc970f2f0e2872b918001cbdf7318ba69",
+  "results/bars/GTEX-13NZ8-1826.npz": "e627e0d08dff1e853ecfbaf9d56909d7fb7aa7874da708f0bd75af766365dd7a",
+  "results/bars/GTEX-RM2N-1926.npz": "eb0f08069ff3fccd9f422df7c9bf146a9610763813264416b72ffd40ee7815bb",
+  "results/bars/GTEX-13FTY-0826.npz": "8316b715bfb58534ecb60ab3520e1e4a8f341754c657a0d49572b85ccc87e307",
+  "results/bars/GTEX-145MF-0826.npz": "9113f50487cc54460d5c1be37196386d2e3503e834a8e372b18969b7752d4c29",
+  "results/bars/GTEX-139TS-1426.npz": "4f7260a048f87cf86cf0a82321e5eec0fd7ef946b87285c9f79deab8feb7d5c6",
+  "results/bars/GTEX-Y3IK-0326.npz": "836e1f7b0b8cbaedd23caa84f0edb74dc00a10907fc2c2aa2267fe036871704b",
+  "results/bars/GTEX-1LGRB-0626.npz": "a5c7e12d05a27f7e4c50fb549846f5a53492cf6aca8b33aa73354b69ea427876",
+  "results/bars/GTEX-ZPU1-0826.npz": "fac7aaa4c72828a80939ab166b7b8f381a8cd01883aa6ed378c480bd42115463",
+  "results/bars/GTEX-1HT8W-0826.npz": "2da54823620adf81d898b1214c1f594e7acaa9805044905da6fd52dafc06b6f1",
+  "results/bars/GTEX-U8XE-1526.npz": "e6c8e0129df697b042374f7948104207bfb1a97652fb200c7ea74251bc336112",
+  "results/bars/GTEX-PWO3-1826.npz": "780ec72e7a354a24c655116d1e7a4eb6df302164736cf453f5899dcf525edd89",
+  "results/bars/GTEX-132AR-0426.npz": "ab2da40c62e53b0e8f897b186dc2b542291d74de3addf442e81e7117965c11a9",
+  "results/bars/GTEX-111VG-0826.npz": "2e58fa2cdb754e4f6e87f551ecabdb07ca5bb4a2639d234fe925ab28031e51f4",
+  "results/bars/GTEX-1IL2U-2026.npz": "622a31c17b4363e6c851120018b5329e66f30edbaef91701b50d2cf561823683",
+  "results/bars/GTEX-ZTTD-1526.npz": "3f3bb1ad887d534274ae016722d9b05b55f4fe56619421a7879349b748a51c84",
+  "results/bars/GTEX-13YAN-1626.npz": "4cdef0cca42b3962b12b8e985778a8a1e086170a8f0ba640c94e47f2e0c94cc7",
+  "results/bars/GTEX-1EX96-0326.npz": "24443c35db46c76d0a29b389f1f91242e38c97fe53b9c3842a3c70ca1d719e9b",
+  "results/bars/GTEX-ZZPT-1726.npz": "dcfa09452d62ecc4580212edcff6ded3bd3ac7f6d54a0090f683d28907619ab2",
+  "../gtex-liver-pathology-slices/results/density.npz": "0003da4c4dea0f482884cbcf8514849e0d67e8b23ed2fb755a6c4a5f8fdec87a"
  }
 }

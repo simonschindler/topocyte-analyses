@@ -62,7 +62,7 @@ uv pip install --python .venv/bin/python -r requirements.txt
 | `run_pilot.py bars` | `e8db8a4` | `18e3aa5` | 2026-11-22 |
 | `features.py` | blob `f7ae634` at `da7e578` | `18e3aa5` | 2026-11-22 |
 | `domains.py` | `381d0ce` | `18e3aa5` | 2026-11-23 |
-| `verify_results.py`, `build_report.py` | `f62ff28` and the task review's fixes after it | `18e3aa5` | 2026-11-23 |
+| `verify_results.py`, `build_report.py` | `31b0814` | `18e3aa5` | 2026-11-23 |
 
 The run order, from this folder. The long runs went on AC power inside
 `caffeinate -is`, with `/usr/bin/time -l` and their logs in `logs/` (gitignored,
