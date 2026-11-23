@@ -121,6 +121,15 @@ the legend shows each cluster's mean composition. The first run at a radius
 counts the balls; on the largest slide (725,038 cells) k = 10 at 150 µm took
 13 s, and k = 4 took 4.6 s at 500 µm and 3.0 s at 50 µm.
 
+On the 30 pilot slides, "Chromatic TDA of the pilot's centres" clusters the
+slide's 1,500 sampled centres instead, by their saved level-2 features
+(`results/features.npz`'s `L2_obs_all`: 20 MFA scores of the residual chromatic
+Betti curves, 150 µm balls, 19 random labellings), with `domains.py`'s k-means
+(`kmeans_fit(L2_obs_all[c], k)`). The centres are drawn larger over the other
+cells in grey, and the legend shows each cluster's mean ball composition. The
+pilot found no subdomains that recur across the slide halves, so these clusters
+are exploratory.
+
 ## Outputs
 
 Tracked: `results/pilot.csv` (the 30 slides with their condition, half and

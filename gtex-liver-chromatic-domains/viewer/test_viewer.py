@@ -124,3 +124,10 @@ def test_cluster_request_reads_k_density_and_radius():
     ):
         with pytest.raises(ValueError, match=message):
             serve.cluster_request(query)
+
+
+def test_kmeans_by_size_refuses_too_few_rows_and_numbers_by_size():
+    X = np.array([[0.0], [0.1], [0.2], [9.0]])
+    assert serve.kmeans_by_size(X, 2).tolist() == [0, 0, 0, 1]
+    with pytest.raises(ValueError, match="cannot form"):
+        serve.kmeans_by_size(X[:1], 2)

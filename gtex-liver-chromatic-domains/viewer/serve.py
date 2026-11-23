@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 """Browser viewer of the GTEx liver cohort's cells: every slide's point cloud, coloured by HistoPLUS cell type
 or by the study's four classes, with the slides filtered by pathology group. On one slide at a time it also
-clusters every cell by the composition of its 150 µm ball (the pilot's level-1 features) with a chosen k.
+clusters every cell by the composition of its ball (the pilot's level-1 features) with a chosen k and radius,
+or, on the 30 pilot slides, the 1,500 sampled centres by their saved chromatic TDA features (level 2).
 
 Adapted from ``tissuegeometry/web/cosine_viewer`` (its DeepZoom tile serving and WebGL point overlay) without
 its local-homology endpoints, its FastAPI backend or its tissuegraphs and Rust imports.
@@ -15,7 +16,8 @@ then open the printed address. A slide is shown on its H&E when DIR holds a file
 with a suffix OpenSlide reads (``.svs`` for GTEx); the cells' coordinates are level-0 pixels of that slide.
 
 Read only: the cohort ``.h5ad`` (h5py mode "r"), the pathology study's ``density.npz`` (each slide's cohort
-rows) and ``pathology.csv`` (each slide's group), this study's ``results/pilot.csv`` and the slide files.
+rows) and ``pathology.csv`` (each slide's group), this study's ``results/pilot.csv`` and ``results/features.npz``,
+and the slide files.
 Nothing is written.
 """
 
@@ -56,6 +58,9 @@ K_MIN, K_MAX = 2, 10
 RADIUS_MIN_UM, RADIUS_MAX_UM = 10.0, 500.0  # the ball's radius; the pilot's is c.DELTA_UM (150 µm)
 N_INIT, KMEANS_SEED = 20, 0
 FEATURES = ("log10 cells", *(f"{name} fraction" for name in c.CLASSES))
+# Chromatic TDA clusters: domains.level2's features and k-means on one pilot slide's saved centres.
+TDA_KEY = "L2_obs_all"  # 20 MFA scores of the 16 blocks' fPCA scores of the residual Betti curves, all-slides basis
+BACKGROUND = 15  # the code of the cells that are not centres, in a TDA clustering
 STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css"}
 
 
@@ -198,8 +203,6 @@ def composition_clusters(features: np.ndarray, k: int) -> tuple[np.ndarray, list
     Columns that are constant on the slide carry nothing and are left out. The labels are renumbered by cluster
     size, largest first. Returns the labels (uint8) and the indices of the columns used.
     """
-    from sklearn.cluster import KMeans
-
     if not K_MIN <= k <= K_MAX:
         raise ValueError(f"k must be from {K_MIN} to {K_MAX}")
     sd = features.std(axis=0)
@@ -207,11 +210,22 @@ def composition_clusters(features: np.ndarray, k: int) -> tuple[np.ndarray, list
     if not used:
         raise ValueError("every feature is constant on this slide")
     z = (features[:, used] - features[:, used].mean(axis=0)) / sd[used]
-    labels = KMeans(n_clusters=k, n_init=N_INIT, random_state=KMEANS_SEED).fit_predict(z)
+    return kmeans_by_size(z, k), used
+
+
+def kmeans_by_size(X: np.ndarray, k: int) -> np.ndarray:
+    """``KMeans(k, n_init=20, random_state=0)`` labels of the rows of ``X`` (uint8), numbered by size, largest first."""
+    from sklearn.cluster import KMeans
+
+    if not K_MIN <= k <= K_MAX:
+        raise ValueError(f"k must be from {K_MIN} to {K_MAX}")
+    if len(X) < k:
+        raise ValueError(f"{len(X)} rows cannot form {k} clusters")
+    labels = KMeans(n_clusters=k, n_init=N_INIT, random_state=KMEANS_SEED).fit_predict(X)
     order = np.argsort(-np.bincount(labels, minlength=k), kind="stable")
     rank = np.empty(k, np.int64)
     rank[order] = np.arange(k)
-    return rank[labels].astype(np.uint8), used
+    return rank[labels].astype(np.uint8)
 
 
 def cluster_request(query: dict[str, list[str]]) -> tuple[int, bool, float]:
@@ -243,6 +257,21 @@ def cluster_profiles(features: np.ndarray, labels: np.ndarray, k: int) -> list[d
     return profiles
 
 
+def load_pilot_centres() -> dict:
+    """The pilot's sampled centres from ``results/features.npz`` and ``results/pilot.csv``: per slide ID, the
+    centres' slide rows, positions, level-1 features and level-2 scores (``TDA_KEY``)."""
+    pilot = pd.read_csv(c.RESULTS / "pilot.csv")
+    with np.load(c.RESULTS / "features.npz", allow_pickle=False) as f:
+        index, rows, xy, l1, l2 = (f[key] for key in ("slide_index", "centre_row", "xy", "L1", TDA_KEY))
+    out = {}
+    for slide in pilot.itertuples(index=False):
+        mine = index == slide.slide_index
+        out[slide.slide_id] = {"rows": rows[mine], "xy": xy[mine], "L1": l1[mine], "L2": l2[mine]}
+    if sum(len(v["rows"]) for v in out.values()) != len(index):
+        raise ValueError("features.npz holds centres of slides that pilot.csv does not list")
+    return out
+
+
 def remember(cache: OrderedDict, key, value, size: int):
     """Put ``value`` in the LRU ``cache`` under ``key``, dropping the oldest entries beyond ``size``."""
     cache[key] = value
@@ -266,6 +295,7 @@ class Cohort:
         self._zooms: OrderedDict[str, tuple] = OrderedDict()  # slide ID -> (OpenSlide, DeepZoomGenerator)
         self._features: OrderedDict[tuple, np.ndarray] = OrderedDict()  # (slide ID, µm/px, radius) -> features
         self._clusters: OrderedDict[tuple, dict] = OrderedDict()  # (slide ID, k, density, radius) -> clustering
+        self._pilot: dict | None = None  # slide ID -> the pilot's saved centres, loaded on the first TDA request
 
     def meta(self) -> dict:
         counts = self.slides["group"].value_counts()
@@ -282,6 +312,9 @@ class Cohort:
                 "radius_min_um": RADIUS_MIN_UM,
                 "radius_max_um": RADIUS_MAX_UM,
                 "n_init": N_INIT,
+                "tda_radius_um": c.DELTA_UM,
+                "tda_labellings": c.R,
+                "tda_centres": c.N_CENTRES,
             },
             "slides": [
                 {
@@ -392,6 +425,43 @@ class Cohort:
         out["um_per_px"], out["um_source"] = self.um_per_px(slide_id)
         return out
 
+    def tda(self, slide_id: str, k: int) -> dict:
+        """k-means of a pilot slide's saved centres on their level-2 scores (domains.level2's features and k-means),
+        with each cluster's mean ball composition, as JSON-ready data."""
+        key = ("tda", slide_id, k)
+        with self._lock:
+            if key in self._clusters:
+                self._clusters.move_to_end(key)
+                return self._clusters[key]
+            if self._pilot is None:
+                self._pilot = load_pilot_centres()
+            centres = self._pilot.get(slide_id)
+        if centres is None:
+            raise KeyError(f"{slide_id} is not a pilot slide, so it has no saved chromatic features")
+        started = time.perf_counter()
+        xy = self.cells(slide_id)["xy"]
+        rows = centres["rows"]
+        if rows.min() < 0 or rows.max() >= len(xy) or not np.array_equal(xy[rows], centres["xy"]):
+            raise RuntimeError(f"{slide_id}: the saved centres are not at the positions of their slide rows")
+        labels = kmeans_by_size(centres["L2"], k)
+        result = {
+            "slide_id": slide_id,
+            "k": k,
+            "tda": True,
+            "n_centres": len(rows),
+            "radius_um": c.DELTA_UM,
+            "n_labellings": c.R,
+            "features": f"{centres['L2'].shape[1]} MFA scores ({TDA_KEY})",
+            "n_init": N_INIT,
+            "seed": KMEANS_SEED,
+            "clusters": cluster_profiles(centres["L1"], labels, k),
+            "centre_rows": base64.b64encode(rows.astype("<u4").tobytes()).decode("ascii"),
+            "labels": base64.b64encode(labels.tobytes()).decode("ascii"),
+            "seconds": round(time.perf_counter() - started, 1),
+        }
+        with self._lock:
+            return remember(self._clusters, key, result, 8)
+
     def tile(self, slide_id: str, level: int, col: int, row: int) -> bytes:
         zoom = self.zoom(slide_id)
         if not 0 <= level < zoom.level_count:
@@ -452,6 +522,9 @@ def make_handler(cohort: Cohort) -> type[BaseHTTPRequestHandler]:
                 k, density, radius = cluster_request(query)
                 result = cohort.cluster(parts[2], k, density, radius)
                 self.send(HTTPStatus.OK, json.dumps(result).encode(), "application/json")
+            elif len(parts) == 3 and parts[:2] == ["api", "tda"] and parts[2] in cohort.by_id:
+                k = cluster_request({"k": query.get("k", [""])})[0]
+                self.send(HTTPStatus.OK, json.dumps(cohort.tda(parts[2], k)).encode(), "application/json")
             elif len(parts) == 5 and parts[:2] == ["api", "tile"] and parts[2] in cohort.wsis:
                 col, row = parts[4].removesuffix(".jpeg").split("_")
                 tile = cohort.tile(parts[2], int(parts[3]), int(col), int(row))

@@ -94,7 +94,11 @@
   </fieldset>
   <ul id="legend"></ul>
   <section class="clusters">
-    <div class="head">Composition clusters on this slide</div>
+    <div class="head">Clusters on this slide</div>
+    <label class="field">Features <select id="method">
+      <option value="composition">Composition of every cell's ball</option>
+      <option value="tda">Chromatic TDA of the pilot's centres</option>
+    </select></label>
     <div class="controls">
       <label>k <input type="number" id="k" min="2" max="10" step="1" value="4"></label>
       <label>radius <input type="number" id="radius" min="10" max="500" step="10" value="150"> µm</label>

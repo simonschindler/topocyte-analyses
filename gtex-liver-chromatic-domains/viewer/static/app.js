@@ -6,6 +6,9 @@ import { CLUSTERS, PALETTE, rgb } from "/static/palette.js";
 const BLANK = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 const CELL_UM = 10; // a cell's drawn diameter once zoomed in far enough
 const SCALE_MAX_CSS = 150; // the scale bar's longest length on screen
+const BACKGROUND = 15; // the code of the cells that are not centres, in a TDA clustering
+const GREY = { light: "#c3c2b7", dark: "#52514e" }; // those cells, drawn behind the centres
+const CENTRE_SIZE = 2.5; // TDA centres are drawn this much larger than the cells
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => n.toLocaleString("en-US");
 
@@ -56,7 +59,7 @@ function legendEntries() {
   const mode = paletteMode();
   const count = (t) => (state.counts ? state.counts[t] : 0);
   if (state.layer === "clusters") {
-    return state.clusters.clusters.map((cluster, j) => ({
+    const entries = state.clusters.clusters.map((cluster, j) => ({
       key: j,
       label: `C${j + 1}`,
       hex: CLUSTERS[mode][j],
@@ -65,6 +68,11 @@ function legendEntries() {
       title: `${Math.round(cluster.cells_per_ball)} cells per ball on average; `
         + cluster.fractions.map((f, k) => `${classes[k]} ${f.toFixed(2)}`).join(", "),
     }));
+    if (state.clusters.tda) {
+      const others = state.types.length - state.clusters.n_centres;
+      entries.push({ key: BACKGROUND, label: "other cells", hex: GREY[mode], n: others, background: true });
+    }
+    return entries;
   }
   if (state.layer === "types") {
     return Object.keys(PALETTE.types[mode]).map((name) => {
@@ -87,10 +95,15 @@ function applyColors() {
   const mode = paletteMode();
   const table = new Float32Array(16 * 4);
   if (state.layer === "clusters") {
+    const sizes = new Float32Array(16).fill(1);
     state.clusters.clusters.forEach((_, j) => {
       table.set([...rgb(CLUSTERS[mode][j]), state.hidden.clusters.has(j) ? 0 : 1], j * 4);
+      if (state.clusters.tda) sizes[j] = CENTRE_SIZE;
     });
-    overlay?.setColors(table);
+    if (state.clusters.tda) {
+      table.set([...rgb(GREY[mode]), state.hidden.clusters.has(BACKGROUND) ? 0 : 2], BACKGROUND * 4);
+    }
+    overlay?.setColors(table, sizes);
     renderLegend();
     return;
   }
@@ -108,7 +121,7 @@ function applyColors() {
 function renderLegend() {
   const entries = legendEntries();
   const hidden = state.hidden[state.layer];
-  const total = entries.reduce((sum, e) => sum + e.n, 0);
+  const total = entries.reduce((sum, e) => sum + (e.background ? 0 : e.n), 0);
   const list = $("legend");
   list.replaceChildren(...entries.map((e) => {
     const row = document.createElement("li");
@@ -128,7 +141,8 @@ function renderLegend() {
     name.textContent = e.label;
     const n = document.createElement("span");
     n.className = "count";
-    n.textContent = state.counts ? `${fmt(e.n)} · ${total ? ((100 * e.n) / total).toFixed(1) : "0.0"}%` : "";
+    const share = total ? ((100 * e.n) / total).toFixed(1) : "0.0";
+    n.textContent = !state.counts ? "" : e.background ? fmt(e.n) : `${fmt(e.n)} · ${share}%`;
     label.append(box, swatch, name, n);
     if (e.mix) {
       const mix = document.createElement("span");
@@ -215,6 +229,12 @@ function setLayer(layer) {
 // --- composition clusters ---------------------------------------------------------------------------------
 
 function clusterMethod(r) {
+  if (r.tda) {
+    return `k-means (k = ${r.k}, ${r.n_init} starts, seed ${r.seed}) of the slide's ${fmt(r.n_centres)} sampled `
+      + `centres on the pilot's level-2 features: ${r.features} of their residual chromatic Betti curves `
+      + `(${r.radius_um} µm balls, ${r.n_labellings} random labellings). The pilot found no subdomains that `
+      + `recur across slides, so these clusters are exploratory; ${r.seconds} s.`;
+  }
   const scale = r.um_source === "assumed" ? `, ${r.um_per_px} µm/px assumed` : "";
   return `k-means (k = ${r.k}, ${r.n_init} starts, seed ${r.seed}) of ${r.features.join(", ")} in every cell's `
     + `${r.radius_um} µm ball, z-scored on this slide${scale}; ${r.seconds} s.`;
@@ -226,9 +246,34 @@ function clearClusters() {
   $("layer-clusters").disabled = true;
   if (state.layer === "clusters") state.layer = "types";
   document.querySelector(`input[name=layer][value=${state.layer}]`).checked = true;
-  const { radius_um: radius } = state.meta.cluster;
-  $("cluster-note").textContent = "Clusters every cell by its ball: log10 cells (with density) and the four class "
-    + `fractions, as the pilot's level 1 (radius ${radius} µm there).`;
+  $("cluster-note").textContent = defaultNote();
+}
+
+function defaultNote() {
+  const m = state.meta.cluster;
+  if ($("method").value === "tda") {
+    return `Clusters the slide's ${fmt(m.tda_centres)} sampled centres by their saved chromatic TDA features `
+      + `(${m.tda_radius_um} µm balls, ${m.tda_labellings} random labellings); pilot slides only.`;
+  }
+  return "Clusters every cell by its ball: log10 cells (with density) and the four class fractions, as the "
+    + `pilot's level 1 (radius ${m.radius_um} µm there).`;
+}
+
+// TDA needs a pilot slide; the radius and density belong to composition clusters only.
+function updateMethod() {
+  const pilot = Boolean(state.info?.pilot);
+  $("method").querySelector("option[value=tda]").disabled = !pilot;
+  if (!pilot && $("method").value === "tda") $("method").value = "composition";
+  const tda = $("method").value === "tda";
+  $("radius").disabled = tda;
+  $("density").disabled = tda;
+}
+
+function decode(base64) {
+  const text = atob(base64);
+  const bytes = new Uint8Array(text.length);
+  for (let i = 0; i < text.length; i++) bytes[i] = text.charCodeAt(i);
+  return bytes;
 }
 
 async function runClusters() {
@@ -241,20 +286,29 @@ async function runClusters() {
     $("cluster-note").textContent = `k must be a whole number from ${kMin} to ${kMax}.`;
     return;
   }
-  if (!Number.isFinite(radius) || radius < rMin || radius > rMax) {
+  const tda = $("method").value === "tda";
+  if (!tda && (!Number.isFinite(radius) || radius < rMin || radius > rMax)) {
     $("cluster-note").textContent = `The radius must be from ${rMin} to ${rMax} µm.`;
     return;
   }
   const density = $("density").checked;
   $("run").disabled = true;
-  $("cluster-note").textContent = `Clustering ${fmt(state.info.n_cells)} cells with k = ${k} in ${radius} µm balls …`;
+  $("cluster-note").textContent = tda
+    ? `Clustering ${fmt(state.meta.cluster.tda_centres)} centres with k = ${k} …`
+    : `Clustering ${fmt(state.info.n_cells)} cells with k = ${k} in ${radius} µm balls …`;
   try {
-    const result = await fetchOk(`/api/cluster/${encodeURIComponent(id)}?k=${k}&radius=${radius}&density=${density ? 1 : 0}`)
-      .then((r) => r.json());
+    const url = tda
+      ? `/api/tda/${encodeURIComponent(id)}?k=${k}`
+      : `/api/cluster/${encodeURIComponent(id)}?k=${k}&radius=${radius}&density=${density ? 1 : 0}`;
+    const result = await fetchOk(url).then((r) => r.json());
     if (state.slide !== id) return;
-    const bytes = atob(result.labels);
-    const labels = new Uint8Array(bytes.length);
-    for (let i = 0; i < bytes.length; i++) labels[i] = bytes.charCodeAt(i);
+    let labels = decode(result.labels);
+    if (result.tda) {
+      const rows = new DataView(decode(result.centre_rows).buffer);
+      const centres = labels;
+      labels = new Uint8Array(state.types.length).fill(BACKGROUND);
+      for (let i = 0; i < centres.length; i++) labels[rows.getUint32(4 * i, true)] = centres[i];
+    }
     if (labels.length !== state.types.length) throw new Error(`${labels.length} labels for ${state.types.length} cells`);
     if (state.layer === "clusters") overlay.setCodes(state.types); // the old labels leave before the new ones come
     state.layer = "types";
@@ -332,6 +386,7 @@ async function loadSlide(id) {
       state.info = info;
       state.counts = counts;
       state.types = types;
+      updateMethod();
       clearClusters();
       overlay ??= new PointsOverlay(viewer, CELL_UM / info.um_per_px);
       overlay.cellPx = CELL_UM / info.um_per_px;
@@ -381,6 +436,10 @@ async function init() {
   $("radius").value = String(state.meta.cluster.radius_um);
   $("radius").addEventListener("keydown", (event) => { if (event.key === "Enter") runClusters(); });
   $("run").addEventListener("click", runClusters);
+  $("method").addEventListener("change", () => {
+    updateMethod();
+    if (!state.clusters) $("cluster-note").textContent = defaultNote();
+  });
   $("k").addEventListener("keydown", (event) => { if (event.key === "Enter") runClusters(); });
   clearClusters();
   $("size").addEventListener("input", (event) => overlay?.setPointScale(Number(event.target.value)));

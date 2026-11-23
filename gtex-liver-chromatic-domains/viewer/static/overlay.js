@@ -1,6 +1,8 @@
 // The WebGL point layer over an OpenSeadragon viewer, adapted from cosine_viewer's WsiGLOverlay: every cell of
 // a slide in one draw call, at its level-0 px position; colour and visibility come from a table indexed by the
-// cell's HistoPLUS type code, so switching layers or hiding a type only changes a uniform.
+// cell's code (HistoPLUS type or cluster label), so switching layers or hiding a code only changes a uniform.
+// A code can be drawn in front (alpha 1) or behind (alpha 2: a first pass under everything else), and each
+// code has its own size factor, so a few highlighted cells stay visible over the rest.
 
 const MAX_TYPES = 16;
 
@@ -9,18 +11,21 @@ const VS = `
   attribute float a_type;       // HistoPLUS type code
   uniform vec4 u_bounds;        // visible image rectangle (x, y, width, height) in level-0 px
   uniform float u_pointSize;    // device px
-  uniform vec4 u_colors[${MAX_TYPES}];  // rgb, and 1 if the type is shown
+  uniform vec4 u_colors[${MAX_TYPES}];  // rgb, and 0 hidden, 1 in front, 2 behind
+  uniform float u_sizes[${MAX_TYPES}];  // size factor per code
+  uniform float u_pass;         // 2 draws the codes behind, 1 the codes in front
   varying vec3 v_color;
   void main() {
-    vec4 colour = u_colors[int(a_type + 0.5)];
-    if (colour.a < 0.5) {
+    int code = int(a_type + 0.5);
+    vec4 colour = u_colors[code];
+    if (colour.a < 0.5 || abs(colour.a - u_pass) > 0.5) {
       gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
       gl_PointSize = 0.0;
       return;
     }
     vec2 p = (a_position - u_bounds.xy) / u_bounds.zw;
     gl_Position = vec4(p.x * 2.0 - 1.0, 1.0 - p.y * 2.0, 0.0, 1.0);
-    gl_PointSize = u_pointSize;
+    gl_PointSize = u_pointSize * u_sizes[code];
     v_color = colour.rgb;
   }`;
 
@@ -53,12 +58,15 @@ export class PointsOverlay {
       bounds: gl.getUniformLocation(this.program, "u_bounds"),
       pointSize: gl.getUniformLocation(this.program, "u_pointSize"),
       colors: gl.getUniformLocation(this.program, "u_colors"),
+      sizes: gl.getUniformLocation(this.program, "u_sizes"),
+      pass: gl.getUniformLocation(this.program, "u_pass"),
       alpha: gl.getUniformLocation(this.program, "u_alpha"),
     };
     this.positions = gl.createBuffer();
     this.types = gl.createBuffer();
     this.count = 0;
     this.colors = new Float32Array(MAX_TYPES * 4);
+    this.sizes = new Float32Array(MAX_TYPES).fill(1);
     this.pointScale = 1;
     this.alpha = 0.85;
     this._draw = () => this.draw();
@@ -116,10 +124,13 @@ export class PointsOverlay {
     this.draw();
   }
 
-  // colors: Float32Array of MAX_TYPES × (r, g, b, shown), indexed by type code or cluster label.
-  setColors(colors) {
+  // colors: Float32Array of MAX_TYPES × (r, g, b, state), indexed by code; state 0 hidden, 1 front, 2 behind.
+  // sizes: optional Float32Array of MAX_TYPES size factors (1 when left out).
+  setColors(colors, sizes) {
     this.colors.fill(0);
     this.colors.set(colors.subarray(0, MAX_TYPES * 4));
+    this.sizes.fill(1);
+    if (sizes) this.sizes.set(sizes.subarray(0, MAX_TYPES));
     this.draw();
   }
 
@@ -142,12 +153,20 @@ export class PointsOverlay {
     gl.uniform1f(this.loc.pointSize, size);
     gl.uniform1f(this.loc.alpha, this.alpha);
     gl.uniform4fv(this.loc.colors, this.colors);
+    gl.uniform1fv(this.loc.sizes, this.sizes);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.positions);
     gl.enableVertexAttribArray(this.loc.position);
     gl.vertexAttribPointer(this.loc.position, 2, gl.FLOAT, false, 0, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.types);
     gl.enableVertexAttribArray(this.loc.type);
     gl.vertexAttribPointer(this.loc.type, 1, gl.UNSIGNED_BYTE, false, 0, 0);
+    let behind = false;
+    for (let i = 3; i < this.colors.length; i += 4) behind ||= this.colors[i] > 1.5;
+    if (behind) {
+      gl.uniform1f(this.loc.pass, 2);
+      gl.drawArrays(gl.POINTS, 0, this.count);
+    }
+    gl.uniform1f(this.loc.pass, 1);
     gl.drawArrays(gl.POINTS, 0, this.count);
   }
 }
