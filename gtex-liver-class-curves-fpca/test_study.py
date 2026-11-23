@@ -3,13 +3,17 @@
 Run them from this folder in topocyte's main-checkout venv, with the pinned
 checkout first on ``PYTHONPATH`` (``progress.md``, Rulings). The input tests
 read the sibling studies' saved results, read only; the fold and arm tests
-use synthetic curves.
+use synthetic curves, and the readout and holdout tests synthetic
+probabilities, scored against scikit-learn's ``roc_auc_score``.
 """
 
 from __future__ import annotations
 
+import json
+
 import numpy as np
 import pytest
+from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import StratifiedKFold
 from topocyte.ph import FPCA, betti_inner_product_matrix
 
@@ -418,3 +422,265 @@ def test_dc_gate_allows_an_absolute_difference_of_1e_12_only():
             rs.dc_gate(reference + gap, reference)
     with pytest.raises(RuntimeError, match="shape"):
         rs.dc_gate(reference[:2], reference)
+
+
+def _macro_auc_oracle(proba: np.ndarray, labels: np.ndarray) -> float:
+    """The macro AUC by scikit-learn: each of the seven conditions one-vs-rest among the condition slides."""
+    scored = labels < 7
+    return float(np.mean([roc_auc_score(labels[scored] == g, proba[scored, g]) for g in range(7)]))
+
+
+def _interval_oracle(a: np.ndarray, b: np.ndarray, labels: np.ndarray, draws: np.ndarray) -> list[float]:
+    """The 2.5 and 97.5 percentiles of the macro AUC difference ``a`` minus ``b`` over the bootstrap ``draws``."""
+    boot = [_macro_auc_oracle(a[i], labels[i]) - _macro_auc_oracle(b[i], labels[i]) for i in draws]
+    return np.percentile(boot, [2.5, 97.5]).tolist()
+
+
+@pytest.mark.parametrize(
+    ("dev_lo", "dev_hi", "holdout_diff", "expected"),
+    [
+        (0.01, 0.05, 0.02, "beats D+C"),
+        (0.01, 0.05, 0.0, "not confirmed"),
+        (0.01, 0.05, -0.03, "not confirmed"),
+        (-0.02, 0.03, 0.1, "level with D+C"),  # a positive holdout difference does not lift it
+        (0.0, 0.03, 0.1, "level with D+C"),  # the boundary: an interval that ends at 0 contains it
+        (-0.03, 0.0, 0.1, "level with D+C"),
+        (-0.05, -0.01, 0.1, "below D+C"),
+    ],
+)
+def test_verdict_follows_the_rule_fixed_in_advance(dev_lo, dev_hi, holdout_diff, expected):
+    assert rs.verdict(dev_lo, dev_hi, holdout_diff) == expected
+
+
+def test_verdict_refuses_what_the_rule_cannot_read():
+    for dev_lo, dev_hi, holdout_diff in [(0.05, 0.01, 0.02), (np.nan, 0.05, 0.02), (0.01, 0.05, np.nan)]:
+        with pytest.raises(ValueError):
+            rs.verdict(dev_lo, dev_hi, holdout_diff)
+
+
+def test_paired_interval_is_zero_for_identical_arms():
+    rng = np.random.default_rng(11)
+    labels = np.repeat(np.arange(8), 5)
+    proba = rng.dirichlet(np.ones(8), size=40)
+    draws = c.celltype.stratified_bootstrap(labels, 30, rng)
+    assert rs.paired_interval(proba, proba.copy(), labels, draws) == (0.0, 0.0, 0.0)
+
+
+def test_paired_interval_is_the_macro_auc_difference_with_its_percentiles():
+    rng = np.random.default_rng(12)
+    labels = np.repeat(np.arange(8), 5)
+    a, b = rng.dirichlet(np.ones(8), size=40), rng.dirichlet(np.ones(8), size=40)
+    a[np.arange(40), labels] += 0.3  # a leans towards each slide's own group
+    draws = c.celltype.stratified_bootstrap(labels, 30, rng)
+    diff, lo, hi = rs.paired_interval(a, b, labels, draws)
+    assert diff == pytest.approx(_macro_auc_oracle(a, labels) - _macro_auc_oracle(b, labels), abs=1e-12)
+    assert [lo, hi] == pytest.approx(_interval_oracle(a, b, labels, draws), abs=1e-12)
+
+
+def _readouts_study(tmp_path, monkeypatch) -> tuple[np.ndarray, dict[str, np.ndarray], dict]:
+    """A development run of 3 repeats on ``_development_inputs``, saved as the development stage saves it.
+
+    Returns the development labels, each arm's per-repeat probabilities and ``development.json``'s metadata. The
+    curves lean towards each slide's own group, D+C less, so that the arms differ.
+    """
+    inputs = _development_inputs()
+    dev = np.flatnonzero(inputs["dev"])
+    y = inputs["labels"][dev]
+    rng = np.random.default_rng(14)
+    proba = {arm: rng.dirichlet(np.ones(8), size=(3, dev.size)) for arm in rs.ARMS}
+    proba["curves"][:, np.arange(dev.size), y] += 0.5
+    proba["dc"][:, np.arange(dev.size), y] += 0.2
+    metadata = {"description": "every outer fold", "n_slides": int(dev.size), "md5": {"run_study.py": "0" * 32}}
+    (tmp_path / "development.json").write_text(json.dumps(metadata))
+    np.savez(tmp_path / "development.npz", **proba, slide_ids=np.array([inputs["slide_ids"][i] for i in dev]))
+    monkeypatch.setattr(c, "load_inputs", lambda: inputs)
+    monkeypatch.setattr(c, "RESULTS", tmp_path)
+    monkeypatch.setattr(c, "N_BOOT", 40)
+    monkeypatch.setattr(rs, "DEV_GATE_AUC", round(_macro_auc_oracle(proba["dc_unfiltered"].mean(axis=0), y), 3))
+    return y, proba, metadata
+
+
+def test_readouts_score_the_repeat_averaged_probabilities_beside_the_development_metadata(tmp_path, monkeypatch):
+    y, proba, metadata = _readouts_study(tmp_path, monkeypatch)
+    rs.main(["readouts"])
+    saved = json.loads((tmp_path / "development.json").read_text())
+    assert {key: saved[key] for key in metadata} == metadata  # the development run's metadata, kept
+    readouts = saved["readouts"]
+    mean = {arm: p.mean(axis=0) for arm, p in proba.items()}
+    scored = y < 7
+    for arm in rs.ARMS:
+        row = readouts["arms"][arm]
+        assert row["macro_auc"] == pytest.approx(_macro_auc_oracle(mean[arm], y), abs=1e-12)
+        assert row["auc_per_repeat"] == pytest.approx([_macro_auc_oracle(p, y) for p in proba[arm]], abs=1e-12)
+        assert list(row["auc_per_condition"]) == list(c.celltype.CONDITIONS)
+        per = [roc_auc_score(y[scored] == g, mean[arm][scored, g]) for g in range(7)]
+        assert list(row["auc_per_condition"].values()) == pytest.approx(per, abs=1e-12)
+    assert readouts["gate"]["macro_auc"] == pytest.approx(_macro_auc_oracle(mean["dc_unfiltered"], y), abs=1e-12)
+    # The paired differences against D+C fitted on the cleaned training slides, on the pre-registered draws.
+    draws = c.celltype.stratified_bootstrap(y, 40, np.random.default_rng(12345))
+    for arm in ("curves", "curves4"):
+        comparison = readouts["comparisons"][f"{arm} - dc"]
+        expected = _macro_auc_oracle(mean[arm], y) - _macro_auc_oracle(mean["dc"], y)
+        assert comparison["difference"] == pytest.approx(expected, abs=1e-12)
+        assert comparison["interval"] == pytest.approx(_interval_oracle(mean[arm], mean["dc"], y, draws), abs=1e-12)
+
+
+@pytest.mark.parametrize(("broken", "match"), [("gate", "macro AUC"), ("slides", "development slides")])
+def test_readouts_write_nothing_unless_dc_and_the_slides_agree(tmp_path, monkeypatch, broken, match):
+    y, proba, _ = _readouts_study(tmp_path, monkeypatch)
+    if broken == "gate":
+        monkeypatch.setattr(rs, "DEV_GATE_AUC", rs.DEV_GATE_AUC + 0.001)
+    else:
+        np.savez(tmp_path / "development.npz", **proba, slide_ids=np.array([f"x{i}" for i in range(y.size)]))
+    before = (tmp_path / "development.json").read_text()
+    with pytest.raises(RuntimeError, match=match):
+        rs.main(["readouts"])
+    assert (tmp_path / "development.json").read_text() == before
+
+
+def test_holdout_stage_refuses_a_second_run(tmp_path, monkeypatch):
+    scored = '{"verdict": {"verdict": "level with D+C"}}\n'
+    (tmp_path / "holdout.json").write_text(scored)
+    monkeypatch.setattr(c, "RESULTS", tmp_path)
+    monkeypatch.setattr(c, "load_inputs", lambda: pytest.fail("the holdout stage read its inputs"))
+    with pytest.raises(RuntimeError, match="scored once"):
+        rs.main(["holdout"])
+    assert (tmp_path / "holdout.json").read_text() == scored
+    assert [p.name for p in tmp_path.iterdir()] == ["holdout.json"]
+
+
+def _holdout_inputs() -> dict:
+    """64 synthetic slides, 8 per group; slides 8-15 and 40-47 (two per group) are holdout slides."""
+    labels = np.tile(np.arange(8), 8)
+    holdout = (np.arange(64) // 8) % 4 == 1
+    return {
+        "labels": labels,
+        "dev": ~holdout,
+        "holdout": holdout,
+        "DC": np.zeros((64, 51)),
+        "slide_ids": [f"s{i}" for i in range(64)],
+    }
+
+
+def _holdout_study(tmp_path, monkeypatch) -> tuple[dict, dict[str, np.ndarray], list[dict]]:
+    """A holdout stage ready to run on ``_holdout_inputs``; returns the inputs, the arms' holdout probabilities and
+    the outer folds called.
+
+    - The outer fold returns those probabilities, ``k = 6``, and drops the development slides at positions divisible
+      by 5. On the holdout, the curves separate the groups, ``k = 4`` inverts them, and D+C is random.
+    - The cell-type study's ``improve_holdout.npz`` holds the unfiltered D+C as its second entry (the third in the
+      real file), among others.
+    - ``development.json``'s readouts put the curves' development interval above 0, ``k = 4``'s below.
+    """
+    inputs = _holdout_inputs()
+    hold = np.flatnonzero(inputs["holdout"])
+    y = inputs["labels"][hold]
+    rng = np.random.default_rng(13)
+    proba = {arm: rng.dirichlet(np.ones(8), size=hold.size) for arm in rs.ARMS}
+    proba["curves"][np.arange(hold.size), y] += 1
+    proba["curves4"][np.arange(hold.size), y] = 0
+    calls = []
+
+    def outer_fold(grams, DC, labels, train, test, seed):
+        calls.append({"labels": labels.copy(), "train": train.copy(), "test": test.copy(), "seed": seed})
+        return {"keep": train % 5 != 0, "k": 6, **{arm: p.copy() for arm, p in proba.items()}}
+
+    results, celltype = tmp_path / "results", tmp_path / "celltype"
+    results.mkdir()
+    (celltype / "results").mkdir(parents=True)
+    np.savez(
+        celltype / "results/improve_holdout.npz",
+        names=np.array(["everything@4", "D+C features", "all-cell@4"]),
+        e0__proba=rng.dirichlet(np.ones(8), size=hold.size),
+        e1__proba=proba["dc_unfiltered"],
+        e2__proba=rng.dirichlet(np.ones(8), size=hold.size),
+        holdout_rows=hold,
+        y_holdout=y,
+    )
+    readouts = {
+        "comparisons": {
+            "curves - dc": {"difference": 0.03, "interval": [0.01, 0.05]},
+            "curves4 - dc": {"difference": -0.03, "interval": [-0.05, -0.01]},
+        }
+    }
+    (results / "development.json").write_text(json.dumps({"n_slides": 48, "readouts": readouts}))
+    monkeypatch.setattr(c, "load_inputs", lambda: inputs)
+    monkeypatch.setattr(c, "RESULTS", results)
+    monkeypatch.setattr(c, "CELLTYPE", celltype)
+    monkeypatch.setattr(c, "N_BOOT", 40)
+    monkeypatch.setattr(rs, "load_grams", lambda slide_ids: {})
+    monkeypatch.setattr(rs, "outer_fold", outer_fold)
+    monkeypatch.setattr(rs, "HOLDOUT_GATE_AUC", round(_macro_auc_oracle(proba["dc_unfiltered"], y), 3))
+    return inputs, proba, calls
+
+
+def test_holdout_stage_fits_on_the_development_slides_and_scores_the_holdout_once(tmp_path, monkeypatch):
+    inputs, proba, calls = _holdout_study(tmp_path, monkeypatch)
+    labels = inputs["labels"]
+    dev, hold = np.flatnonzero(inputs["dev"]), np.flatnonzero(inputs["holdout"])
+    y = labels[hold]
+    rs.main(["holdout"])
+    # One fit: the development slides train with seed 999, the holdout slides are predicted, their labels hidden.
+    assert len(calls) == 1
+    call = calls[0]
+    assert call["train"].tolist() == dev.tolist() and call["test"].tolist() == hold.tolist() and call["seed"] == 999
+    assert np.array_equal(call["labels"][dev], labels[dev]) and np.all(call["labels"][hold] < 0)
+    scored = json.loads((tmp_path / "results/holdout.json").read_text())
+    for arm in rs.ARMS:
+        assert scored["arms"][arm]["macro_auc"] == pytest.approx(_macro_auc_oracle(proba[arm], y), abs=1e-12)
+    draws = c.celltype.stratified_bootstrap(y, 40, np.random.default_rng(12345))
+    for arm in ("curves", "curves4"):
+        comparison = scored["comparisons"][f"{arm} - dc"]
+        expected = _macro_auc_oracle(proba[arm], y) - _macro_auc_oracle(proba["dc"], y)
+        assert comparison["difference"] == pytest.approx(expected, abs=1e-12)
+        assert comparison["interval"] == pytest.approx(_interval_oracle(proba[arm], proba["dc"], y, draws), abs=1e-12)
+    # The curves' development interval lies above 0 and they lead on the holdout; k = 4's numbers would not do.
+    assert scored["verdict"]["verdict"] == "beats D+C"
+    assert scored["verdict"]["development_interval"] == [0.01, 0.05]
+    assert scored["verdict"]["holdout_difference"] == scored["comparisons"]["curves - dc"]["difference"]
+    assert scored["fit"]["chosen_k"] == 6 and scored["fit"]["dropped"] == np.sum(dev % 5 == 0)
+    assert scored["gate"]["max_abs_difference"] == 0.0
+    with np.load(tmp_path / "results/holdout.npz") as saved:
+        for arm in rs.ARMS:
+            np.testing.assert_array_equal(saved[arm], proba[arm])
+        assert saved["k"] == 6
+        np.testing.assert_array_equal(saved["dropped"], dev % 5 == 0)
+        assert saved["slide_ids"].tolist() == [f"s{i}" for i in hold]
+        np.testing.assert_array_equal(saved["labels"], y)
+    # Once written, the holdout refuses a second run before any fit.
+    with pytest.raises(RuntimeError, match="scored once"):
+        rs.main(["holdout"])
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize(
+    ("broken", "match"),
+    [
+        ("probabilities", "D\\+C differs"),
+        ("slides", "holdout slides"),
+        ("labels", "holdout slides"),
+        ("auc", "macro AUC"),
+        ("readouts", "readouts"),
+    ],
+)
+def test_holdout_stage_writes_nothing_unless_every_gate_passes(tmp_path, monkeypatch, broken, match):
+    _, _, calls = _holdout_study(tmp_path, monkeypatch)
+    path = tmp_path / "celltype/results/improve_holdout.npz"
+    with np.load(path) as saved:
+        reference = dict(saved)
+    if broken == "probabilities":
+        reference["e1__proba"][4, 1] += 1e-7  # within np.allclose's default rtol: only the absolute tolerance refuses
+    elif broken == "slides":
+        reference["holdout_rows"] = reference["holdout_rows"][::-1]
+    elif broken == "labels":
+        reference["y_holdout"][0] = (reference["y_holdout"][0] + 1) % 8
+    elif broken == "auc":
+        monkeypatch.setattr(rs, "HOLDOUT_GATE_AUC", rs.HOLDOUT_GATE_AUC + 0.001)
+    else:
+        (tmp_path / "results/development.json").write_text(json.dumps({"n_slides": 48}))
+    np.savez(path, **reference)
+    with pytest.raises(RuntimeError, match=match):
+        rs.main(["holdout"])
+    assert [p.name for p in (tmp_path / "results").iterdir()] == ["development.json"]
+    if broken in ("slides", "labels", "readouts"):
+        assert calls == []  # refused before the fit
