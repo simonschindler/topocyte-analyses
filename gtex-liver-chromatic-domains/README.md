@@ -4,10 +4,13 @@
 Level 1 gives one composition stratum, the control passes, and level 2 gives no
 subdomains, so the verdict is "does not add" ("no compartment with subdomains")
 and the pairwise guard had nothing to test. `report.html` has the curves and the
-reasons, and `verify_results.py` checks every saved result by an independent
-route. The H&E atlas was planned for compartments and subdomains; with one
-stratum and no subdomains there are no groups to compare, and whether to build
-it is Simon's decision.
+reasons. `verify_results.py` recomputes the saved results by independent routes:
+the bars on 230 sampled balls, every fit's fPCA and MFA, every centre's spreads
+and level-1 and pairwise features, and the results of `domains.py`. It does not
+redo the pre-flight, the pilot draw (it checks its counts), the features run's
+gate diagnostics or the runs' timings. The H&E atlas was planned for
+compartments and subdomains; with one stratum and no subdomains there are no
+groups to compare, and whether to build it is Simon's decision.
 
 Around each cell of a GTEx liver slide, does the arrangement of cell types
 relative to each other define recurring microanatomical domains that density,
@@ -46,7 +49,7 @@ uv pip install --python .venv/bin/python -r requirements.txt
 | `run_pilot.py bars` | `e8db8a4` | `18e3aa5` | 2026-11-22 |
 | `features.py` | blob `f7ae634` at `da7e578` | `18e3aa5` | 2026-11-22 |
 | `domains.py` | `381d0ce` | `18e3aa5` | 2026-11-23 |
-| `verify_results.py`, `build_report.py` | the commit that adds them | `18e3aa5` | 2026-11-23 |
+| `verify_results.py`, `build_report.py` | `f62ff28` and the task review's fixes after it | `18e3aa5` | 2026-11-23 |
 
 The run order, from this folder. The long runs went on AC power inside
 `caffeinate -is`, with `/usr/bin/time -l` and their logs in `logs/`;
@@ -63,7 +66,7 @@ $PY run_pilot.py bars --workers 8               # about 3.3 h, 9.33 GB of bars
 { echo "started $(date '+%F %T'), features.py md5 $(md5 -q features.py), curves.py md5 $(md5 -q curves.py)"
   /usr/bin/time -l $PY features.py; } > logs/features.log 2>&1   # about 68 min, peak RSS about 10 GB
 $PY domains.py                                  # about 5 min
-$PY verify_results.py                           # about 31 min, peak RSS about 9 GB
+$PY verify_results.py                           # about 69 min, peak RSS about 10.5 GB
 $PY build_report.py                             # about 90 s, peak RSS about 7 GB
 ```
 

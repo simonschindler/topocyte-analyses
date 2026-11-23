@@ -719,7 +719,8 @@ Claude's calls:
 ## Task 8: verifier and report (2026-11-23)
 
 - **Verifier:** `verify_results.py`, run with no arguments. It writes `results/verify.json` (tracked): every check with its sample, tolerance and measured value, the run's time, peak RSS and versions, and the sampled rows.
-  - **The run** (`logs/verify.log`): 02:16–02:47 on 2026-11-23, on AC power inside `caffeinate -is`. **ALL CHECKS PASSED**: 59 checks and 1 descriptive count, in 1,833 s (arrays 5 s, clustering 274 s, balls 256 s, blocks 1,296 s). Peak RSS 9.17 GB, peak memory footprint 12.0 GB.
+  - **The run** (`logs/verify.log`): 03:29–04:38 on 2026-11-23, after fix round 1 (below), on AC power inside `caffeinate -is`, from the committed file (md5 `dc89f50f…`, unchanged through the run). **ALL CHECKS PASSED**: 61 checks and 1 descriptive count, in 4,147 s (arrays 5 s, clustering 267 s, balls 256 s, blocks 3,618 s). Peak RSS 10.46 GB, peak memory footprint 13.75 GB.
+  - **The first run,** 02:16–02:47, before the task review: 59 checks and 1 descriptive count passed in 1,833 s (peak RSS 9.17 GB), with the all-slides fPCA refitted for blocks 1 and 11 only and `L2_ctl_all` unchecked. The rerun replaces its `results/verify.json`.
   - **Trial runs before it,** on subsets: the arrays (6 s); the balls of two slides (14 s); blocks 7 (42 s) and 1 (353 s, peak RSS 8.52 GB, the heaviest block with its all-slides fit); the clustering (275 s). Every check passed in each.
   - **Independent routes** (the controller's rulings):
     - chalc 15.0.1 for the six-packs;
@@ -748,7 +749,8 @@ Claude's calls:
     | level 1, the control and level 2: gap and s curves | k = 1..k_max | 1e-12 | 1.8e-15 at most |
     | level 1, the control and level 2: prediction-strength curves and the rule's values | k = 2..k_max, both directions | 1e-12 | 0 |
     | level 1: z-scoring of each fitting set; the strata labels | means and SDs; 45,000 rows | 1e-12; exact | 0 |
-    | control k and passed; the verdict from the recomputed k's; the guard absent | `domains.json`, `domains.npz` | exact | 0 |
+    | level 1: each stratum's sizes, slides per half and mean level-1 features, with the control's and level 2's sizes | 1 stratum | exact; means 1e-12 | 0 |
+    | control k and passed; the verdict from the recomputed k's; the guard absent, and no contiguity or cross-half ARI where k = 1 | `domains.json`, `domains.npz` | exact | 0 |
     | balls by brute force against the saved cell and class counts | 200 sampled balls and one per slide | 0 | 0 |
     | saved labelling-0 domain, image and codomain bars against chalc 15.0.1 | 200 balls, 3,600 diagrams | equal counts, bottleneck ≤ 1e-9 of the ball's scale | 7.6e-16 |
     | the port, faces to dimension 3 and to dimension 2, every module, against chalc | 200 balls, 8,110 diagrams each | as above | 7.6e-16 |
@@ -761,17 +763,18 @@ Claude's calls:
     | s0 per block and fit, from every fit centre's s² by the integer-count sweep | 16 blocks × 3 fits | 1e-12 relative | 5.3e-16 |
     | zero-spread non-zero residuals over every centre | 16 blocks × 45,000 centres | exact | 0 |
     | s² by brute force (topocyte's 19 × 19 Gram) against `curves.spread2` and the sweep; s² = 0 exactly when the references are one diagram | first 20 sampled balls × 16 blocks, observed and control | 1e-10 of the mean squared reference norm; 0 | 1.5e-15; 0 |
-    | inner products: unit weights, cross matrices, composed scaled residuals, exact zeros | 10 sampled centres × 20 labellings × 16 blocks | 1e-10 | 2.5e-15, 2.4e-15, 1.4e-15, 0 |
+    | inner products: unit weights, cross matrices, composed scaled residuals, exact zeros | 10 sampled centres × 20 labellings × 16 blocks | 1e-10 | 2.5e-15, 2.3e-15, 1.4e-15, 0 |
     | fPCA A and B: fit-sample scores against `fpca_from_gram`; fractions of variance; 9 kept; the kernel route on the 200 sampled centres | 16 blocks each | 1e-9 of the largest score; 1e-9; 0 | 2.6e-13 (A), 2.2e-13 (B); 8.9e-16; 0; 9.8e-15 |
-    | fPCA all: the same | blocks 1 and 11 | as above | 5.9e-13; 1.9e-16; 0; 3.1e-15 |
+    | fPCA all: the same | 16 blocks | as above | 5.9e-13; 7.8e-16; 0; 4.4e-15 |
     | MFA A, B and all: every level-2 row and the fractions by eigendecomposition | 45,000 rows × 20 | 1e-9 | 1.1e-12 at most; 7.6e-16 |
-    | MFA A and B: the control's level-2 rows of the sampled centres (kernel route, then the MFA) | 200 centres × 16 blocks | 1e-9 | 7.4e-14 (A), 2.3e-13 (B) |
+    | MFA A, B and all: the control's level-2 rows of the sampled centres (kernel route, then the MFA) | 200 centres × 16 blocks | 1e-9 | 7.4e-14 (A), 2.3e-13 (B), 3.5e-13 (all) |
 
-  - **Subsets, stated:**
-    - the all-slides fPCA was refitted for blocks 1 (the most distinct endpoints) and 11 (the largest gate-2 error) only: a refit of all 16 takes about 40 min more, and the rule reads only the halves' bases;
-    - `L2_ctl_all` is not checked: no script reads it (`domains.py` reads the control in the halves' bases only), and the control's rows in those bases are checked on the 200 sampled centres;
+  - **Coverage** (as fix round 1 left it; the verifier's docstring, the README and the report's section 9 say the same):
+    - recomputed: the bars on 230 sampled balls (200 against chalc in labelling 0, one per slide in all 20 labellings; no ball is in both samples); the block scores of every fit sample in all 48 fits, every block's fractions of variance and kept count, and s0; every centre's spreads, `L1` and `P`; every level-2 row from the saved block scores; the results of `domains.py` in full;
+    - checked on the 200 sampled centres: the other rows of `blk_obs_*`, and the control's `L2_ctl_*` in all three bases;
+    - not recomputed: `results/preflight.json` (the pre-flight), the pilot draw (`results/pilot.csv`, whose counts per half and condition are checked), the features run's gate diagnostics (`gate_gram`, `gate_scores_*`) and the runs' timings, sizes and versions;
     - the guard's balanced accuracies reduce to asserting the guard is absent (ruling T8-c).
-- **Report:** `build_report.py` writes `report.html` (0.3 MB) in 80 s, peak RSS 6.52 GB, with no warning under `-W error` (`logs/build_report.log`). Sections follow ruling T8-a:
+- **Report:** `build_report.py` writes `report.html` (0.3 MB) in 79 s, peak RSS 6.92 GB, with no warning under `-W error` (`logs/build_report.log`; rebuilt after fix round 1). Sections follow ruling T8-a:
   1. question and rulings, with the k-rule correction, the 0.03 floor and the strata ruling dated;
   2. pilot slides and compute;
   3. the one composition stratum: its profile, both halves' gap and prediction-strength curves with the composition null for contrast, the halves' level-1 differences, the mechanism and the post-hoc random splits; no maps;
@@ -820,14 +823,30 @@ Claude's calls:
 Claude's calls:
 - **`results/verify.json` is tracked,** like the other small results; the report's verification table and methods read it. Cost: 15 kB.
 - **The spreads' independent route is an integer-count sweep.** On each interval between consecutive endpoints of a centre's 19 references, R·Σβ_r² − (Σβ_r)² is an exact integer, so s² is 0 exactly when the references agree, as with `curves.spread2` and unlike the inner-product form. It matched `spread2` to about 3e-15 on one slide's blocks before the run, with identical zero sets, and gives s0 for every block and fit and the zero-spread counts over all 45,000 centres. Cost: about a second per slide and block.
-- **The halves' fits are refitted with the Gram matrix of `curves.inner_matrix`,** itself checked against topocyte on 10 sampled centres per block; the components and scores come from `fpca_from_gram` alone. A topocyte Gram matrix of 6,000 weighted curves would need 120,000² unit-weight inner products.
+- **Every fit is refitted with the Gram matrix of `curves.inner_matrix`,** itself checked against topocyte on 10 sampled centres per block; the components and scores come from `fpca_from_gram` alone. A topocyte Gram matrix of 6,000 weighted curves would need 120,000² unit-weight inner products.
 - **The kernel route** scores the 200 sampled centres, observed and control, from `fpca_from_gram`'s eigenvectors and the cross inner products, apart from `curves.components` and `curves.score`.
 - **Balls by brute force** (squared distance ≤ δ²) rather than a KD-tree. The 20 pair-count balls are checked to hold no two cells at one position before Qhull triangulates them.
 - **Shuffles within 5 standard errors:** 200 tests, a false-alarm rate of about 1e-4; the seeded draws fix the result.
 - **ECDFs, not histograms, for the halves' level-1 features:** exact steps at the data, no bins.
 - **topocyte's private `_log_x_axis`** for the mean curves' logarithmic filtration axis: the topocyte figures' plain 1-2-5 labels (Simon's ruling for topocyte). The pinned checkout fixes it.
-- **Constants in `build_report.py` without a results file,** named as such and checked where they can be: the provenance (the md5 sums of `features.py` and `domains.py`, the git blob, the commits); the serial time per centre measured in Task 5 (0.50 s) and phimaker's 10 threads; the design's estimates (12 h serial, 2 h on 8 processes).
+- **Constants in `build_report.py` without a results file,** named as such and checked where they can be: the provenance (the md5 sums of `features.py` and `domains.py`, the git blob, the commits); the serial time per centre measured in Task 5 (0.50 s) and phimaker's 10 threads; the design's estimates (12 h serial, 2 h on 8 processes); and, since fix round 1, the k rule's first floor (0.02) and the rank ruling's threshold (1e-12 of the largest eigenvalue).
 - **`build_report.py` reads `logs/features.log`** for the features run's time, CPU and peak RSS, after checking that its first line names the md5 of this `features.py`. No results file holds them; the README says so.
 - **T8-e adds the slide halves in the all-slides basis** as a reference row (0.741 / 0.934), so the random splits and the slide halves are compared in one basis at level 2.
 - **T8-d adds the boundary offset,** which says on which side the crossings fall.
 - **The report's mean residual curves are recomputed at every build** (76 s): a cache of 670 MB served development only and went to the Trash.
+
+### Task 8, fix round 1: the task review (2026-11-23)
+
+The review found 2 Important issues; its Minor findings are deferred to the whole-study review. The controller's decisions: refit every all-slides block and check `L2_ctl_all`, and make every coverage statement true as written; assert the direction claim, fix the composition null's gains, format the typed numbers and assert the plurals.
+
+- **Important 1, coverage.**
+  - **Was:** the all-slides fPCA was refitted for blocks 1 and 11 only, `L2_ctl_all` was checked for finiteness only, and the README, the report's summary and section 9, and this section claimed every saved result or excused the gap with "no script reads it". That was wrong: the report's section 5 reads `L2_ctl_all`, and its random splits and per-block table read the all-slides fits.
+  - **Now:** `verify_results.py` refits all 48 fits (`ALL_FIT_BLOCKS` is gone) and checks the control's level-2 rows of the 200 sampled centres in every basis, `L2_ctl_all` included (3.5e-13). Two checks were added on the way: each stratum's sizes, slides per half and mean level-1 features against `domains.json`, and no cross-half ARI where k = 1 in the guard-absent check.
+  - **The statements:** the verifier's docstring has a Coverage paragraph, and the README, the report's summary and section 9, and the Coverage bullet above now say what is recomputed (the bars on 230 sampled balls, every fit, every centre's spreads, `L1` and `P`, every level-2 row, `domains.py`'s results) and name what is not: the pre-flight, the pilot draw, the features run's gate diagnostics, and the runs' timings, sizes and versions.
+- **Important 2, prose.**
+  - **The direction claim** is asserted (|cos| above 0.95 in both directions), and the summary now says "nearly the same direction".
+  - **The composition null's gains** are now the gains at each half's stopping k, Gap(5) − Gap(1) = 0.210 and 0.204, tied to `null["k"]` by an assertion. Before, the report printed the largest gains, and half B's (0.206) lies at k = 9.
+  - **Typed numbers** are now formatted from the saved files or the study's constants: the halves' 22,500 centres, the 12,000 fit-sample centres, the 30 slides with 5 per condition, the 3 + 2 split, alternating, with 15 per half, 150 µm, 303.52 px, 0.4942 µm/px, 144 columns, B = 20, `n_init`, the guard's 15 features, 95% interval and 10% share, the 5 neighbours, the composition null's construction (from `results/preflight.json`), the versions (from `results/venv_freeze.txt`), the face dimension, `fpca_from_gram`'s 1e-10, the outcome k's, and the table headers.
+  - **The plurals** are asserted for both halves (sizes and slides per half) and for both random halves (all 30 slides in each).
+- **The rerun:** `verify_results.py` ALL CHECKS PASSED (61 checks and 1 descriptive count, 4,147 s, peak RSS 10.46 GB; "The run" above). `build_report.py -W error` rebuilt `report.html` in 79 s with no warning. ruff check and `ruff format --check` are clean on both files. No study module changed, so the suite was not rerun.
+

@@ -1,6 +1,6 @@
 {
  "passed": true,
- "n_checks": 60,
+ "n_checks": 62,
  "checks": [
   {
    "check": "features.npz: every array finite",
@@ -94,6 +94,13 @@
    "sample": "45,000 rows, 1 stratum or strata"
   },
   {
+   "check": "level 1: each stratum's sizes, slides per half and mean level-1 features",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "exact; means 1e-12",
+   "sample": "1 stratum or strata, with the control's and level 2's sizes"
+  },
+  {
    "check": "stratum 0, control: k, k_A and k_B recomputed",
    "passed": true,
    "measured": 0.0,
@@ -124,7 +131,7 @@
   {
    "check": "stratum 0, level 2: both halves' gap and s curves",
    "passed": true,
-   "measured": 3.382710778154774e-17,
+   "measured": 8.109832250191573e-17,
    "tolerance": "1e-12",
    "sample": "k = 1..k_max"
   },
@@ -150,7 +157,7 @@
    "sample": "does not add (no compartment with subdomains)"
   },
   {
-   "check": "guard: absent, as the control passed and every stratum has k = 1 (no balanced accuracies to recompute)",
+   "check": "guard: absent, as the control passed and every stratum has k = 1 (no balanced accuracies to recompute); no contiguity and no cross-half ARI where k = 1",
    "passed": true,
    "measured": 0.0,
    "tolerance": "exact",
@@ -343,28 +350,28 @@
    "passed": true,
    "measured": 5.912415319221193e-13,
    "tolerance": "1e-9 of the largest score",
-   "sample": "2 blocks (1, 11; the others not refitted)"
+   "sample": "16 blocks"
   },
   {
    "check": "fPCA all: fractions of variance",
    "passed": true,
-   "measured": 1.942890293094024e-16,
+   "measured": 7.771561172376096e-16,
    "tolerance": "1e-9",
-   "sample": "2 blocks (1, 11; the others not refitted)"
+   "sample": "16 blocks"
   },
   {
    "check": "fPCA all: 9 components kept, no block dropped",
    "passed": true,
    "measured": 0.0,
    "tolerance": "0 blocks",
-   "sample": "2 blocks (1, 11; the others not refitted)"
+   "sample": "16 blocks"
   },
   {
    "check": "fPCA all: sampled centres' scores by the kernel route",
    "passed": true,
-   "measured": 3.0879036408404016e-15,
+   "measured": 4.357495775787223e-15,
    "tolerance": "1e-9 of the largest score",
-   "sample": "200 sampled centres, 2 blocks (1, 11; the others not refitted)"
+   "sample": "200 sampled centres, 16 blocks"
   },
   {
    "check": "MFA A: every level-2 row by eigendecomposition",
@@ -421,16 +428,23 @@
    "measured": 7.563394355258879e-16,
    "tolerance": "1e-9",
    "sample": "20 components"
+  },
+  {
+   "check": "MFA all: control level-2 rows of the sampled centres (kernel route, then the MFA)",
+   "passed": true,
+   "measured": 3.4744682070765245e-13,
+   "tolerance": "1e-9 of the largest observed score",
+   "sample": "200 sampled centres \u00d7 16 blocks"
   }
  ],
  "seconds": {
-  "arrays": 5.3,
-  "clustering": 274.5,
-  "balls": 256.1,
-  "blocks": 1296.5,
-  "total": 1832.9
+  "arrays": 5.4,
+  "clustering": 266.8,
+  "balls": 255.9,
+  "blocks": 3618.2,
+  "total": 4146.8
  },
- "peak_rss_gb": 9.17,
+ "peak_rss_gb": 10.46,
  "topocyte_commit": "18e3aa5",
  "date": "2026-11-23",
  "versions": {
@@ -642,10 +656,6 @@
    41435,
    32514,
    31661
-  ],
-  "all_fit_blocks": [
-   1,
-   11
   ]
  }
 }

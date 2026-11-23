@@ -8,12 +8,14 @@ mean residual curves, and ``logs/features.log`` for the features run's time and 
 writes ``report.html`` with every figure embedded as a 128-colour PNG (the sibling reports'
 palette). It writes nothing else. About 90 s, peak RSS about 7 GB (the mean residual curves).
 
-No number in the prose is typed by hand: each is formatted from those files, and every sentence
-that states a direction, a ranking or an outcome is asserted against the numbers it states. Three
-kinds of value have no results file and are constants below, named as such: the provenance of
-the saved results (commits and md5 sums, checked against the files and the git history), one
-measurement recorded in ``progress.md`` (the serial time per centre behind the speed-up of 8
-processes), and the design's estimates that the run is compared with.
+No number in the prose is typed by hand: each is formatted from those files or from the study's
+constants (``common``, ``features``, ``domains``), and every sentence that states a direction, a
+ranking or an outcome is asserted against the numbers it states. Four kinds of value have no
+results file and are constants below, named as such: the provenance of the saved results (commits
+and md5 sums, checked against the files and the git history), one measurement recorded in
+``progress.md`` (the serial time per centre behind the speed-up of 8 processes, and phimaker's
+threads), the design's estimates that the run is compared with, and two thresholds the rulings
+replaced or never applied (the k rule's first floor, and the rank ruling's threshold).
 
 Three things are computed here, all descriptive (the controller's rulings for Task 8):
 - the stratum's mean residual curve of each block (T8-b): the exact mean, every bar kept with
@@ -33,6 +35,7 @@ import base64
 import datetime as dt
 import hashlib
 import html
+import inspect
 import io
 import json
 import re
@@ -44,19 +47,20 @@ import pandas as pd
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
+import topocyte as tc  # noqa: E402
 
+import chromatic  # noqa: E402
 import common as c  # noqa: E402
 import curves  # noqa: E402
 import domains  # noqa: E402
 import features  # noqa: E402
 
 OUT = c.HERE / "report.html"
-N = 30 * c.N_CENTRES
 INK, INK2, MUTED, RULE, SURFACE, CONTEXT = "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#fcfcfb", "#c3c2b7"
 ACCENT = "#2a78d6"
 HALF = {"A": "#2a78d6", "B": "#eb6834"}  # the dataviz palette's first two slots, validated as a pair
 L1_NAMES = ("log10 cells", *c.CLASSES)
-SPLIT_MARK = 0x5B17  # T8-e: SeedSequence([SEED, 0x5B17, i, 1]), i = 1..3
+SPLIT_MARK, SPLIT_K = 0x5B17, 2  # T8-e: SeedSequence([SEED, 0x5B17, i, 1]), i = 1..3; prediction strength at k = 2
 # Provenance of the saved results (progress.md, Tasks 5-7, and the controller's ruling); check_provenance checks it.
 BARS_COMMIT, FEATURES_COMMIT, DOMAINS_COMMIT = "e8db8a4", "da7e578", "381d0ce"
 FEATURES_BLOB, FEATURES_MD5 = "f7ae634", "48ef03203e58aca9de7cfebfae1200d9"
@@ -66,6 +70,9 @@ DOMAINS_MD5 = "964d508240c2c32d9883e5f68e07dd34"
 SERIAL_SECONDS_PER_CENTRE, PHIMAKER_THREADS = 0.50, 10
 # The design's estimates (design.md, Compute): about 12 h serial, about 2 h on 8 processes.
 DESIGN_SERIAL_HOURS, DESIGN_HOURS = 12, 2
+# The k rule's first floor, raised to 0.03 on 2026-11-21 (design.md, Rulings), and the rank ruling's threshold, an
+# eigenvalue above 1e-12 of a block's largest (features.py's docstring), which never binds.
+FIRST_FLOOR, RANK_RULING = 0.02, 1e-12
 
 plt.rcParams.update(
     {
@@ -223,15 +230,17 @@ def load() -> dict:
 # ---------------------------------------------------------------- the descriptive analyses
 
 
-def mean_residual_curves(pilot: pd.DataFrame, s0_all: np.ndarray) -> dict[int, tuple[np.ndarray, np.ndarray]]:
-    """T8-b: per block, the exact mean of the all-slides fit sample's 12,000 scaled residual curves.
+def mean_residual_curves(
+    pilot: pd.DataFrame, s0_all: np.ndarray
+) -> tuple[dict[int, tuple[np.ndarray, np.ndarray]], int]:
+    """T8-b: per block, the exact mean of the all-slides fit sample's scaled residual curves, and their number.
 
     Each curve as ``features.py`` builds it: labelling 0 minus the mean of labellings 1..19,
     divided by sqrt(s² + s0_all²). Every bar is kept with weight 1/n (``curves.combine``), and the
     mean's step table (its breakpoints and the value from each to the next) comes from
     ``curves._steps``, with compensated sums. No curve is evaluated on a grid.
     """
-    out = {}
+    out, n_curves = {}, set()
     for block in range(len(c.BLOCKS)):
         pieces = []
         for _, slide in pilot.iterrows():
@@ -241,12 +250,14 @@ def mean_residual_curves(pilot: pd.DataFrame, s0_all: np.ndarray) -> dict[int, t
             residual = features.residual(fit, 0)
             pieces.append(features.scaled(residual, features.spread(fit, 0), float(s0_all[block]) ** 2))
         joined = features.concat(pieces)
+        n_curves.add(len(joined))
         one = curves.CurveSet(joined.b, joined.d, joined.w, np.array([0, joined.b.size]))
         mean = curves.combine([one], [1.0 / len(joined)])
         x, v, count = curves._steps(mean.b, mean.d, mean.w, mean.offsets)
         out[block] = (x[: count[0]].copy(), v[: count[0]].copy())
         print(f"  mean residual curve, block {block}: {len(joined):,} curves, {count[0]:,} breakpoints", flush=True)
-    return out
+    (n,) = n_curves  # every block averages the same fit sample
+    return out, n
 
 
 def split_mechanism(L1: np.ndarray, half: np.ndarray, ps_curve: dict) -> dict:
@@ -299,29 +310,29 @@ def split_mechanism(L1: np.ndarray, half: np.ndarray, ps_curve: dict) -> dict:
 def random_splits(L1: np.ndarray, L2_all: np.ndarray, half: np.ndarray) -> dict:
     """T8-e, post hoc: PS(2) both ways on three random half/half splits of all centres; the slide halves in the
     all-slides level-2 basis beside them."""
-    rows = []
+    rows, n = [], len(L1)
     for i in (1, 2, 3):
-        perm = np.random.default_rng(np.random.SeedSequence([c.SEED, SPLIT_MARK, i, 1])).permutation(N)
-        X = np.zeros(N, bool)
-        X[perm[: N // 2]] = True
+        perm = np.random.default_rng(np.random.SeedSequence([c.SEED, SPLIT_MARK, i, 1])).permutation(n)
+        X = np.zeros(n, bool)
+        X[perm[: n // 2]] = True
         _, _, directions = domains.level1_inputs(L1[X], L1[~X])
-        level1 = [domains.prediction_strength(train, test, 2) for train, test in directions]
+        level1 = [domains.prediction_strength(train, test, SPLIT_K) for train, test in directions]
         level2 = [
-            domains.prediction_strength(L2_all[X], L2_all[~X], 2),
-            domains.prediction_strength(L2_all[~X], L2_all[X], 2),
+            domains.prediction_strength(L2_all[X], L2_all[~X], SPLIT_K),
+            domains.prediction_strength(L2_all[~X], L2_all[X], SPLIT_K),
         ]
         rows.append(
             {
                 "split": i,
                 "level1": level1,
                 "level2": level2,
-                "slides": int(np.unique(np.flatnonzero(X) // c.N_CENTRES).size),
+                "slides": [int(np.unique(np.flatnonzero(rows_) // c.N_CENTRES).size) for rows_ in (X, ~X)],
             }
         )
     A, B = half == "A", half == "B"
     halves = [
-        domains.prediction_strength(L2_all[A], L2_all[B], 2),
-        domains.prediction_strength(L2_all[B], L2_all[A], 2),
+        domains.prediction_strength(L2_all[A], L2_all[B], SPLIT_K),
+        domains.prediction_strength(L2_all[B], L2_all[A], SPLIT_K),
     ]
     return {"rows": rows, "halves_level2_all": halves}
 
@@ -329,7 +340,7 @@ def random_splits(L1: np.ndarray, L2_all: np.ndarray, half: np.ndarray) -> dict:
 # ---------------------------------------------------------------- figures
 
 
-def fig_rule(choice: dict, title: str, null: dict | None = None) -> bytes:
+def fig_rule(choice: dict, title: str, refs: int, null: dict | None = None) -> bytes:
     """Both halves' gap curves with ±s_k, and the prediction strength of both directions at every k."""
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11.5, 3.9), constrained_layout=True)
     for h in "AB":
@@ -370,7 +381,7 @@ def fig_rule(choice: dict, title: str, null: dict | None = None) -> bytes:
     ax1.set_ylabel("Gap(k), ± s_k")
     ax1.grid(alpha=0.6)
     ax1.legend(frameon=False, fontsize=7.8, loc="upper left")
-    ax1.set_title("gap statistic against a matched Gaussian (B = 20)", loc="left", color=INK, fontsize=9)
+    ax1.set_title(f"gap statistic against a matched Gaussian (B = {refs})", loc="left", color=INK, fontsize=9)
     for direction, h in (("A->B", "A"), ("B->A", "B")):
         ps = choice["ps_curve"][direction]
         ax2.plot(
@@ -439,7 +450,7 @@ def fig_l1_ecdf(L1: np.ndarray, half: np.ndarray) -> bytes:
     return png_bytes(fig)
 
 
-def fig_mean_residuals(mean_curves: dict) -> bytes:
+def fig_mean_residuals(mean_curves: dict, n_curves: int) -> bytes:
     """The stratum's mean scaled residual curve of each block, drawn as exact steps on topocyte's logarithmic
     filtration axis (plain 1-2-5 labels)."""
     from topocyte.pl.diagram import _log_x_axis
@@ -461,8 +472,8 @@ def fig_mean_residuals(mean_curves: dict) -> bytes:
         if module == "domain" and p == 0:
             ax.set_ylabel(f"{c.CLASSES[t]}\nmean scaled residual", fontsize=8)
     fig.suptitle(
-        "Mean scaled residual curve of each block over the 12,000 fit-sample centres (observed minus the "
-        "mean of 19 random labellings, over sqrt(s² + s0²))",
+        f"Mean scaled residual curve of each block over the {n_curves:,} fit-sample centres (observed minus the "
+        f"mean of {c.R} random labellings, over sqrt(s² + s0²))",
         x=0.01,
         ha="left",
         fontsize=10,
@@ -521,8 +532,24 @@ def main() -> None:
     control, level2 = stratum["control"], stratum["level2"]
     null = PF["descriptive"][0]
     assert null["case"].startswith("composition null") and PF["passed"]
-    rule = S["settings"]["rule"]
+    rule, guard_settings = S["settings"]["rule"], S["settings"]["guard"]
     k_max1, k_max2, min_gain = rule["k_max_strata"], rule["k_max_subdomains"], rule["min_gain"]
+    n_rows, n_slides, n_fit = len(half), len(pilot), int(F["fit"].sum())
+    n_half = {h: int(np.count_nonzero(half == h)) for h in "AB"}
+    assert n_half["A"] == n_half["B"] and n_rows == n_slides * c.N_CENTRES
+    per_condition = pilot["condition"].value_counts()
+    a_per_condition = pilot.groupby("condition", sort=False)["half"].agg(lambda h: int((h == "A").sum())).tolist()
+    per = int(per_condition.iloc[0])
+    big = max(a_per_condition)
+    assert per_condition.nunique() == 1 and per == c.PER_CONDITION and set(a_per_condition) == {big, per - big}
+    assert all(a != b for a, b in zip(a_per_condition, a_per_condition[1:], strict=False))  # alternating
+    slides_per_half = pilot["half"].value_counts()
+    assert slides_per_half["A"] == slides_per_half["B"]
+    n_degrees = len({p for _, _, p in c.BLOCKS})
+    versions = dict(line.strip().split("==") for line in (c.RESULTS / "venv_freeze.txt").read_text().splitlines())
+    face_dim = chromatic.ball_sixpacks.__kwdefaults__["_max_face_dim"]
+    fpca_rtol = inspect.signature(tc.ph.fpca_from_gram).parameters["rtol"].default
+    interval = guard_settings["interval"][1] - guard_settings["interval"][0]
     # The rule's outcome, asserted against its own curves.
     ps_at = {
         name: [ch["ps_curve"][x][len(ch["gap_A"]["gap"]) - 2] for x in ("A->B", "B->A")]
@@ -542,7 +569,7 @@ def main() -> None:
     assert stratum["guard"] is None and stratum["contiguity"] is None and level2["ari"] is None
     k1, ps1_ab, ps1_ba = best_ps(level1)
     k2, ps2_ab, ps2_ba = best_ps(level2)
-    assert k1 == k2 == 2
+    assert k1 == k2 == SPLIT_K
     assert level2["ps_curve"]["B->A"][1] >= domains.PS_MIN > level2["ps_curve"]["A->B"][1]
     gain = {
         (name, h): ch[f"gap_{h}"]["gap"][-1] - ch[f"gap_{h}"]["gap"][0]
@@ -553,7 +580,13 @@ def main() -> None:
         assert abs(value - (level1 if name == "level1" else level2)[f"gap_{h}"]["largest_gain"]) < 1e-12
     assert gain["level1", "A"] > gain["level1", "B"] and gain["level2", "A"] > gain["level2", "B"]
     assert null["k"] == null["k_A"] == null["k_B"] and all(p >= domains.PS_MIN for p in null["ps"])
-    assert null["k"] < k_max1 and not rising(null, "A")
+    assert null["k"] < k_max1 and not rising(null, "A") and not rising(null, "B")
+    assert null["gap_A"]["k"] == null["gap_B"]["k"] == null["k"]
+    null_gain = {h: null[f"gap_{h}"]["gap"][null["k"] - 1] - null[f"gap_{h}"]["gap"][0] for h in "AB"}
+    null_construction = null["construction"].split(";")[0]
+    assert null_construction.startswith("log10 of n = Poisson(")
+    k_last = 2 + max(i for i, p in enumerate(level2["ps_curve"]["B->A"]) if p >= domains.PS_MIN)
+    assert level2["ps_curve"]["A->B"][k_last - 2] < domains.PS_MIN
 
     # ---------------- slides, balls and compute
     cells = np.rint(10 ** L1[:, 0]).astype(np.int64)
@@ -610,6 +643,7 @@ def main() -> None:
         means["A"], L1[A].mean(axis=0), atol=1e-12
     )
     assert np.allclose(list(stratum["mean_L1"].values()), means["all"], atol=1e-12)
+    assert stratum["size_A"] == stratum["size_B"] == n_half["A"] and stratum["slides_A"] == stratum["slides_B"]
     std_diff = (means["A"] - means["B"]) / np.sqrt((sds["A"] ** 2 + sds["B"] ** 2) / 2)
     feature_names = [name if j == 0 else f"{name} fraction" for j, name in enumerate(L1_NAMES)]
     profile_rows = [
@@ -626,6 +660,7 @@ def main() -> None:
     mech = split_mechanism(L1, half, level1["ps_curve"])
     ab, ba = mech["A->B"], mech["B->A"]
     assert abs(ab["ps"] - ps1_ab) < 1e-12 and abs(ba["ps"] - ps1_ba) < 1e-12
+    assert min(ab["cos"], ba["cos"]) > 0.95  # nearly the same split direction in both halves
     for m in mech.values():  # every minority: fewer epithelial, more stromal, immune and other cells, and more cells
         for kind in ("own", ""):
             keys = [key for key in m["profiles"] if ("own" in key) == (kind == "own")]
@@ -662,7 +697,7 @@ def main() -> None:
             "test minority on the training majority's side",
             "test majority on the training minority's side",
             "pairs kept together, minority / majority",
-            "PS(2)",
+            f"PS({SPLIT_K})",
         ],
         mech_rows,
     )
@@ -676,7 +711,7 @@ def main() -> None:
     )
     splits = random_splits(L1, F["L2_obs_all"], half)
     low = min(min(r["level1"] + r["level2"]) for r in splits["rows"])
-    assert all(r["slides"] == 30 for r in splits["rows"]) and low >= domains.PS_MIN
+    assert all(r["slides"] == [n_slides, n_slides] for r in splits["rows"]) and low >= domains.PS_MIN
     assert max(splits["halves_level2_all"][0], ps1_ab, ps2_ab) < domains.PS_MIN  # the slide halves fail A->B
     split_rows = [
         [
@@ -695,11 +730,13 @@ def main() -> None:
         ],
     ]
     split_table = table(
-        ["halves", "level 1, PS(2) one way / the other", "level 2, PS(2) one way / the other"], split_rows
+        ["halves", f"level 1, PS({SPLIT_K}) one way / the other", f"level 2, PS({SPLIT_K}) one way / the other"],
+        split_rows,
     )
 
     # ---------------- level 2: the mean residual curves; the control
-    mean_curves = mean_residual_curves(pilot, F["s0_all"])
+    mean_curves, n_curves = mean_residual_curves(pilot, F["s0_all"])
+    assert n_curves == n_fit
     summary_of = {}
     for block, (x, v) in mean_curves.items():
         summary_of[block] = {
@@ -765,7 +802,7 @@ def main() -> None:
             "block",
             "class, module, degree",
             "s0, px: A / B / all",
-            "9 components' FVE: A / B / all",
+            f"{features.N_COMPONENTS} components' FVE: A / B / all",
             "first component (all)",
             "zero spread, non-zero residual",
             "gate 1",
@@ -775,16 +812,19 @@ def main() -> None:
         "label2",
     )
     assert all(np.all(F[f"kept_{f}"] == features.N_COMPONENTS) and not np.any(F[f"dropped_{f}"]) for f in fits)
+    n_shown = 5  # the leading fractions the MFA table prints
     mfa_rows = [
         [
             f,
             f"{F[f'mfa_evr_{f}'].sum():.3f}",
-            ", ".join(f"{v:.3f}" for v in F[f"mfa_evr_{f}"][:5]),
+            ", ".join(f"{v:.3f}" for v in F[f"mfa_evr_{f}"][:n_shown]),
             f"{F[f'mfa_evr_{f}'][-1]:.3f}",
         ]
         for f in fits
     ]
-    mfa_table = table(["fit", "first 20 components explain", "first five", "20th"], mfa_rows)
+    mfa_table = table(
+        ["fit", f"first {features.N_MFA} components explain", f"first {n_shown}", f"{features.N_MFA}th"], mfa_rows
+    )
     zero_total = int(F["zero_spread_nonzero"].sum())
     zero_image_h1 = int(F["zero_spread_nonzero"][image_h1].sum())
     assert zero_image_h1 > zero_total / 2
@@ -800,7 +840,10 @@ def main() -> None:
     verify_table = table(["check (all passed)", "sample", "tolerance", "measured"], verify_rows, "left2 wrap1")
     sixpack = next(ch for ch in V["checks"] if ch["check"].startswith("six-packs: saved labelling-0"))
     n_gated = sum(ch["tolerance"] != "descriptive" for ch in V["checks"])
-    halves_fit = max(ch["measured"] for ch in V["checks"] if ch["check"].startswith(("fPCA A: fit", "fPCA B: fit")))
+    fit_checks = [ch for ch in V["checks"] if ch["check"].startswith("fPCA") and "fit-sample scores" in ch["check"]]
+    assert len(fit_checks) == len(features.FITS) and all(ch["sample"] == f"{len(c.BLOCKS)} blocks" for ch in fit_checks)
+    fits_max = max(ch["measured"] for ch in fit_checks)
+    n_balls = len(V["samples"]["balls"])
 
     # ---------------- figures
     fig_level1 = figure(
@@ -808,6 +851,7 @@ def main() -> None:
             level1,
             "Level 1, composition strata: the rule's curves, with the pre-flight's composition null "
             "(cluster-free, reported only) for contrast",
+            rule["B"],
             null,
         ),
         "Gap and prediction-strength curves at level 1",
@@ -818,26 +862,29 @@ def main() -> None:
     fig_ecdf = figure(
         fig_l1_ecdf(L1, half),
         "Distribution of the level-1 features per half",
-        "Empirical distribution function of each level-1 feature over each half's 22,500 centres.",
+        f"Empirical distribution function of each level-1 feature over each half's {n_half['A']:,} centres.",
     )
     fig_level2 = figure(
-        fig_rule(level2, "Level 2, subdomains inside the one stratum: the rule's curves"),
+        fig_rule(level2, "Level 2, subdomains inside the one stratum: the rule's curves", rule["B"]),
         "Gap and prediction-strength curves at level 2",
-        f"As at level 1, on the 20 MFA components in each half's own basis, k = 1..{k_max2}.",
+        f"As at level 1, on the {features.N_MFA} MFA components in each half's own basis, k = 1..{k_max2}.",
     )
     fig_control = figure(
         fig_rule(
-            control, "The control (labelling 1 against labellings 2..19, in the observed bases): the rule's curves"
+            control,
+            f"The control (labelling 1 against labellings 2..{c.R}, in the observed bases): the rule's curves",
+            rule["B"],
         ),
         "Gap and prediction-strength curves of the control",
-        "As at level 2. Prediction strength is drawn for completeness: with k = 1 in both halves the rule does not "
+        f"As at level 2. Prediction strength is drawn for completeness: with k = {control['k_A']} in both halves the "
+        "rule does not "
         "read it.",
     )
     fig_means = figure(
-        fig_mean_residuals(mean_curves),
+        fig_mean_residuals(mean_curves, n_curves),
         "Mean scaled residual curve of each block",
         "Rows: the class t of the inclusion (class t → all cells); columns: the module and the degree. Each curve is "
-        "the exact mean of the 12,000 fit-sample centres' scaled residual curves, drawn as steps at its own "
+        f"the exact mean of the {n_curves:,} fit-sample centres' scaled residual curves, drawn as steps at its own "
         f"breakpoints ({min(breakpoints):,} to {max(breakpoints):,} per block) on a logarithmic filtration axis. "
         "Above 0, the observed classes keep more bars alive at that value than their random labellings.",
     )
@@ -847,20 +894,22 @@ def main() -> None:
         "<p><strong>Under the rule fixed in advance, topology does not add.</strong> Level 1 gives one composition "
         f"stratum: each half's gap statistic rises at every k up to {k_max1}, but prediction strength at "
         f"k = {k_max1} is {level1['ps'][0]:.3f} (A→B) and {level1['ps'][1]:.3f} (B→A), below {domains.PS_MIN}, so "
-        f"k = 1. The control finds no structure (k = 1), so level 2 runs. It gives no subdomains: the gap rises to "
+        f"k = {level1['k']}. The control finds no structure (k = {control['k']}), so level 2 runs. It gives no "
+        "subdomains: the gap rises to "
         f"k = {k_max2} in both halves, and prediction strength there is {level2['ps'][0]:.3f} and "
         f"{level2['ps'][1]:.3f}. The verdict is “{S['verdict']['verdict']}”, with the reason "
         f"“{S['verdict']['reason']}”: the pairwise guard had nothing to test.</p>"
-        f"<p><strong>No split recurs across the slide halves.</strong> The best k at both levels is 2, with "
+        f"<p><strong>No split recurs across the slide halves.</strong> The best k at both levels is {k1}, with "
         f"prediction strength {ps1_ab:.3f} / {ps1_ba:.3f} at level 1 and {ps2_ab:.3f} / {ps2_ba:.3f} at level 2. At "
-        f"level 1 both halves split along the same direction (|cos| {ab['cos']:.3f}) into a minority of fuller "
+        f"level 1 both halves split along nearly the same direction (|cos| {min(ab['cos'], ba['cos']):.3f} or more) "
+        "into a minority of fuller "
         "balls with fewer epithelial and more stromal, immune and other cells, but half A's boundary lies further "
         f"toward the minority: {ab['minority']['crossing']:,} of half B's {ab['minority']['n']:,} minority centres "
         "fall on half A's majority side. Post hoc, on random half/half splits that mix the slides, prediction "
-        f"strength at k = 2 is at least {low:.3f} in every direction at both levels: the split recurs within a "
+        f"strength at k = {SPLIT_K} is at least {low:.3f} in every direction at both levels: the split recurs within a "
         "mixed set of slides and moves between the two slide halves.</p>"
-        f"<p><code>verify_results.py</code> recomputed every saved result by another route: {n_gated} checks "
-        "passed.</p>"
+        f"<p>{n_gated} independent checks of the saved results passed (<code>verify_results.py</code>); section 9 "
+        "says what they recompute and what they leave out.</p>"
     )
 
     rulings = [
@@ -879,16 +928,16 @@ def main() -> None:
         (
             "2026-11-20",
             "Simon",
-            "Random labelling within the ball as the reference; the closed 150 µm ball; per-class domain and "
-            "image Betti curves; a pilot of 30 slides with 1,500 centres each; recurrence across two halves of "
-            "the slides and an H&amp;E atlas as the checks.",
+            f"Random labelling within the ball as the reference; the closed {c.DELTA_UM:.0f} µm ball; per-class "
+            f"domain and image Betti curves; a pilot of {n_slides} slides with {c.N_CENTRES:,} centres each; "
+            "recurrence across two halves of the slides and an H&amp;E atlas as the checks.",
         ),
         (
             "2026-11-20",
             "Simon, after the builder check",
             "k by the gap statistic against a Gaussian with the data's mean and covariance, confirmed by "
-            "prediction strength of at least 0.8 in both directions, else k = 1; residuals scaled by the "
-            "moderated spread.",
+            f"prediction strength of at least {domains.PS_MIN} in both directions, else k = 1; residuals scaled by "
+            "the moderated spread.",
         ),
         (
             "2026-11-21",
@@ -899,8 +948,8 @@ def main() -> None:
         (
             "2026-11-21",
             "Simon (the floor)",
-            f"Gains Gap(k) − Gap(1) count from {min_gain}, raised from 0.02 before any "
-            "study data, after skewed cluster-free clouds reached 0.02.",
+            f"Gains Gap(k) − Gap(1) count from {min_gain}, raised from {FIRST_FLOOR} before any study data, after "
+            f"skewed cluster-free clouds reached {FIRST_FLOOR}.",
         ),
         (
             "2026-11-21",
@@ -917,19 +966,19 @@ def main() -> None:
   <p>The cell-type study found that the per-type topology of whole slides re-describes density and composition.
   This pilot asks the next question at the scale where the liver is organised: around each cell, does the
   arrangement of cell types relative to each other, measured by the chromatic persistent homology of the cell's
-  150 µm neighbourhood, define recurring microanatomical domains that density, composition and pairwise contacts
-  do not? The design fixed two levels. <strong>Level 1</strong> groups centres by the density and composition of
-  their balls, with no topology. <strong>Level 2</strong> looks inside each level-1 group for subdomains in
-  chromatic topology measured against random labellings of the same cells.</p>
+  {c.DELTA_UM:.0f} µm neighbourhood, define recurring microanatomical domains that density, composition and
+  pairwise contacts do not? The design fixed two levels. <strong>Level 1</strong> groups centres by the density and
+  composition of their balls, with no topology. <strong>Level 2</strong> looks inside each level-1 group for
+  subdomains in chromatic topology measured against random labellings of the same cells.</p>
   <p>For each ball and class t, the <em>six-pack</em> of the inclusion (class t → all cells) holds six persistence
   modules. The <em>domain</em> (the class's own alpha persistent homology) and the <em>image</em> (the class's
   features that persist among all cells), in degrees 0 and 1, determine the other modules' Betti curves together
-  with the codomain, which does not depend on the labels. So 4 classes × 2 modules × 2 degrees, the 16
-  <em>blocks</em>, carry every residual of the six-packs. A centre's residual curve in a block is its observed
-  reduced Betti curve minus the mean of 19 random labellings (positions and class counts kept), divided by
-  sqrt(s² + s0²): its own spread over the references, moderated by the block's median. Each block's residuals go
-  through an exact fPCA (9 components) and the 16 blocks through a multiple factor analysis (20 components): the
-  level-2 features. The rulings:</p>
+  with the codomain, which does not depend on the labels. So {len(c.CLASSES)} classes × {len(c.MODULES)} modules ×
+  {n_degrees} degrees, the {len(c.BLOCKS)} <em>blocks</em>, carry every residual of the six-packs. A centre's residual
+  curve in a block is its observed reduced Betti curve minus the mean of {c.R} random labellings (positions and class
+  counts kept), divided by sqrt(s² + s0²): its own spread over the references, moderated by the block's median. Each
+  block's residuals go through an exact fPCA ({features.N_COMPONENTS} components) and the {len(c.BLOCKS)} blocks
+  through a multiple factor analysis ({features.N_MFA} components): the level-2 features. The rulings:</p>
   {rulings_table}
   <p class="note">Every ruling, with what it costs if wrong, is in <code>design.md</code> and
   <code>progress.md</code>. The design, the plan and the rule for k were committed before any centre was
@@ -937,29 +986,33 @@ def main() -> None:
 
     section2 = f"""
   <h2>2. Pilot slides and compute</h2>
-  <p>Thirty slides, five per condition, were drawn from the cell-type study's development slides without a quality
-  flag. Within each condition a seeded split put 3 + 2 slides into halves A and B, alternating, so each half holds
-  15 slides and every condition appears in both (A / B:
-  {html.escape(", ".join(f"{k} {v}" for k, v in halves_per_condition.items()))}). Each slide gives 1,500 centre
-  cells drawn at random, {N:,} in all. A centre's ball holds every cell within 150 µm (303.52 px at an assumed
-  0.4942 µm/px): from {cells.min()} to {cells.max()} cells, median {np.median(cells):.0f}.</p>
-  <p>The six-packs of 20 labellings per centre, {20 * N:,} chromatic complexes, took {bars_wall:,.0f} s
+  <p>The pilot has {n_slides} slides, {per} per condition, drawn from the cell-type study's development slides
+  without a quality flag. Within each condition a seeded split put {big} + {per - big} slides into halves A and B,
+  alternating which half gets {big}, so each half holds {slides_per_half["A"]} slides and every condition appears in
+  both (A / B:
+  {html.escape(", ".join(f"{k} {v}" for k, v in halves_per_condition.items()))}). Each slide gives {c.N_CENTRES:,}
+  centre cells drawn at random, {n_rows:,} in all. A centre's ball holds every cell within {c.DELTA_UM:.0f} µm
+  ({c.DELTA_PX:.2f} px at an assumed {c.PX_UM} µm/px): from {cells.min()} to {cells.max()} cells, median
+  {np.median(cells):.0f}.</p>
+  <p>The six-packs of {c.R + 1} labellings per centre, {(c.R + 1) * n_rows:,} chromatic complexes, took
+  {bars_wall:,.0f} s
   ({bars_wall / 3600:.1f} h) of slide wall time on {workers} processes, {bars_started.replace("T", " ")} to
   {bars_finished[11:16]}: {bars_total:,} finite domain and image bars and {cod_total:,} codomain bars,
   {bars_bytes / 1e9:.2f} GB. <code>features.py</code> took {run["seconds"]:,} s ({run["cpu_seconds"]:,.0f} s of
   CPU) with a peak RSS of {run["peak_rss_gb"]:.2f} GB, <code>domains.py</code> {S["seconds"]["total"]:.0f} s, the
   pre-flight's re-run {PF["seconds"]:.0f} s, and <code>verify_results.py</code> {V["seconds"]["total"]:,.0f} s
   (peak RSS {V["peak_rss_gb"]:.2f} GB).</p>
-  <details><summary>Table: the 30 pilot slides and their balls</summary>{slides_table}</details>"""
+  <details><summary>Table: the {n_slides} pilot slides and their balls</summary>{slides_table}</details>"""
 
     section3 = f"""
   <h2>3. One composition stratum</h2>
-  <p>Level 1 describes each ball by log10 of its cell count and its four class fractions, z-scored: each half with
+  <p>Level 1 describes each ball by log10 of its cell count and its {len(c.CLASSES)} class fractions, z-scored:
+  each half with
   its own means and SDs for its gap statistic, both halves with the training half's in each prediction-strength
   direction. Each half's gap statistic rises at every k from 1 to {k_max1}, by {gain["level1", "A"]:.3f} in half
   A and {gain["level1", "B"]:.3f} in half B, so neither half stops before k<sub>max</sub> and
   k<sub>A</sub> = k<sub>B</sub> = {k_max1}. Prediction strength at k = {k_max1} is {level1["ps"][0]:.3f} (A→B)
-  and {level1["ps"][1]:.3f} (B→A), under {domains.PS_MIN}, so k = 1: one composition stratum of all
+  and {level1["ps"][1]:.3f} (B→A), under {domains.PS_MIN}, so k = {level1["k"]}: one composition stratum of all
   {stratum["size"]:,} centres, {stratum["size_A"]:,} per half on {stratum["slides_A"]} slides each. At no k from 2
   to {k_max1} does prediction strength reach {domains.PS_MIN} in both directions; the best is k = {k1}
   ({ps1_ab:.3f} / {ps1_ba:.3f}), so reading it at another k would not have changed the outcome. A map of one
@@ -967,9 +1020,9 @@ def main() -> None:
   {fig_level1}
   <details><summary>Table: the level-1 gap and prediction-strength curves</summary>{rule_table(level1)}</details>
   <p><strong>Against the composition null.</strong> The pre-flight's cluster-free composition cloud of the same
-  size (log10 of Poisson(120) + 1 cells and the fractions of a multinomial draw from Dirichlet(6, 2, 1, 1),
-  reported and not gated) has a gap that rises to k = {null["k"]} and stops there, with gains of
-  {null["gap_A"]["largest_gain"]:.3f} and {null["gap_B"]["largest_gain"]:.3f}, and prediction strength confirms
+  size ({html.escape(null_construction)}; reported and not gated) has a gap that rises to k = {null["k"]} in both
+  halves and stops there, with gains Gap({null["k"]}) − Gap(1) of {null_gain["A"]:.3f} and {null_gain["B"]:.3f}, and
+  prediction strength confirms
   {null["k"]} strata in both directions ({null["ps"][0]:.3f} / {null["ps"][1]:.3f}). In that cloud the rule reports
   bins of a continuum; in the real compositions the gap never stops rising and no split recurs across the
   halves.</p>
@@ -983,7 +1036,7 @@ def main() -> None:
   {profile_table}
   {fig_ecdf}
   <h3>Why no split recurs (descriptive)</h3>
-  <p>In each prediction-strength direction both halves are in the training half's z-coordinates. At k = 2 they
+  <p>In each prediction-strength direction both halves are in the training half's z-coordinates. At k = {k1} they
   split along nearly the same direction: the |cosine| between the two halves' centroid differences is
   {ab["cos"]:.3f} (A→B) and {ba["cos"]:.3f} (B→A). Every split cuts off a minority of fuller balls with fewer
   epithelial and more stromal, immune and other cells: {100 * ab["test_minority_share"]:.1f}% of half B in A's
@@ -992,35 +1045,41 @@ def main() -> None:
   coordinates and {-ba["boundary_offset"]:.2f} in B's. So half A's centroids put {ab["minority"]["crossing"]:,} of
   half B's {ab["minority"]["n"]:,} minority centres
   ({100 * ab["minority"]["crossing"] / ab["minority"]["n"]:.0f}%) on the majority side, and only
-  {ab["minority"]["share"]:.3f} of that cluster's pairs stay together: that is PS(2) A→B. In the other direction
+  {ab["minority"]["share"]:.3f} of that cluster's pairs stay together: that is PS({k1}) A→B. In the other direction
   half B's centroids put {ba["majority"]["crossing"]:,} of half A's {ba["majority"]["n"]:,} majority centres on
-  the minority side, and PS(2) B→A is {ba["ps"]:.3f}.</p>
+  the minority side, and PS({k1}) B→A is {ba["ps"]:.3f}.</p>
   {mech_table}
   {profile_split}
   <h3>Post hoc: random half/half splits (outside the rule)</h3>
-  <p>Not part of the rule, and it cannot change the verdict: prediction strength at k = 2 on three random
-  half/half splits of all {N:,} centres, each random half holding centres of all 30 slides, at level 1 (z-scored
+  <p>Not part of the rule, and it cannot change the verdict: prediction strength at k = {SPLIT_K} on
+  {len(splits["rows"])} random half/half splits of all {n_rows:,} centres, each random half holding centres of all
+  {n_slides} slides, at level 1 (z-scored
   as the rule does) and at level 2 in the all-slides basis, the one basis both random halves share. Every
   direction reaches at least {low:.3f}. Within a mixed set of slides the 2-means split is stable; between the two
   slide halves it is not, at either level, and the all-slides basis does not change that.</p>
   {split_table}
-  <p class="note">Seeds: <code>SeedSequence([SEED, 0x5B17, i, 1])</code>, i = 1..3; k-means as in the rule
-  (<code>n_init=20</code>, <code>random_state=0</code>). The rule's level-2 values use each training half's own
+  <p class="note">Seeds: <code>SeedSequence([SEED, 0x{SPLIT_MARK:X}, i, 1])</code>, i = 1..{len(splits["rows"])};
+  k-means as in
+  the rule (<code>n_init={domains.N_INIT}</code>, <code>random_state={rule["seed"]}</code>). The rule's level-2 values
+  use each training half's own
   basis; the last row puts both slide halves in the all-slides basis.</p>"""
 
     section4 = f"""
   <h2>4. No subdomains</h2>
-  <p>Level 2 clusters the stratum's centres on their 20 MFA components, in each half's own basis for the rule.
+  <p>Level 2 clusters the stratum's centres on their {features.N_MFA} MFA components, in each half's own basis for
+  the rule.
   Each half's gap rises at every k up to k<sub>max</sub> = {k_max2}, by {gain["level2", "A"]:.3f} in half A and
   {gain["level2", "B"]:.3f} in half B, so k<sub>A</sub> = k<sub>B</sub> = {k_max2}. Prediction strength at
-  k = {k_max2} is {level2["ps"][0]:.3f} (A→B) and {level2["ps"][1]:.3f} (B→A), so k = 1: no subdomains. The best
-  k is again {k2} ({ps2_ab:.3f} / {ps2_ba:.3f}); at k = 3 the B→A direction reaches
-  {level2["ps_curve"]["B->A"][1]:.3f} but A→B only {level2["ps_curve"]["A->B"][1]:.3f}. As at level 1, half A's
-  gains exceed half B's and A→B is the weaker direction at k = 2, and the post-hoc random splits of section 3
+  k = {k_max2} is {level2["ps"][0]:.3f} (A→B) and {level2["ps"][1]:.3f} (B→A), so k = {level2["k"]}: no subdomains.
+  The best
+  k is again {k2} ({ps2_ab:.3f} / {ps2_ba:.3f}); B→A stays at or above {domains.PS_MIN} up to k = {k_last}
+  ({level2["ps_curve"]["B->A"][k_last - 2]:.3f}), but A→B is {level2["ps_curve"]["A->B"][k_last - 2]:.3f} there. As at
+  level 1, half A's gains exceed half B's and A→B is the weaker direction at k = {k2}, and the post-hoc random splits
+  of section 3
   show the same picture at this level.</p>
   {fig_level2}
   <details><summary>Table: the level-2 gap and prediction-strength curves</summary>{rule_table(level2)}</details>
-  <p><strong>The stratum's mean residual curves.</strong> The mean of the 12,000 fit-sample centres' scaled
+  <p><strong>The stratum's mean residual curves.</strong> The mean of the {n_curves:,} fit-sample centres' scaled
   residual curves shows, block by block, how the observed classes differ from their random labellings on
   average. In degree 0, the domain and image curves of the stromal, immune and other classes have negative
   integrals and dip furthest at α² of {span(h0_rest, "at_min")}. There the observed cells of each of these classes
@@ -1036,9 +1095,9 @@ def main() -> None:
     section5 = f"""
   <h2>5. The control</h2>
   <p>The control asks whether the coordinates and the rule find structure in pure shuffle noise. Labelling 1 stands
-  in for the observed classes, and its residual is taken against labellings 2..19, scaled with its own spread and
+  in for the observed classes, and its residual is taken against labellings 2..{c.R}, scaled with its own spread and
   the observed fit's s0, then scored in the observed fPCA components and projected with the observed MFA. It must
-  give k = 1. It does: each half's gap stops at k = 1 (Gap(1) − (Gap(2) − s<sub>2</sub>) is
+  give k = 1. It does: each half's gap stops at k = {control["k_A"]} (Gap(1) − (Gap(2) − s<sub>2</sub>) is
   {signed(margin(control, "A"))} in half A and {signed(margin(control, "B"))} in half B), so the control passed
   and level 2 ran. Half B's largest gain, {control["gap_B"]["largest_gain"]:.4f} at k = {k_max2}, comes after its
   gap has stopped. In the all-slides basis the control's level-2 columns have a mean SD of {ctl_sd:.2f}, against
@@ -1050,33 +1109,37 @@ def main() -> None:
   <h2>6. The pairwise guard and the verdict</h2>
   <p>The guard, fixed in advance, runs in every composition stratum with subdomains. In each direction it compares
   how well the test half's subdomains are predicted by the training half's own centroids (stability) and by a
-  gradient-boosted classifier on the 15 pairwise-contact, density and composition features. Topology adds in a
-  stratum if stability wins with a 95% bootstrap interval above 0 in both directions, and the study's verdict is
-  “adds” if such a stratum holds at least 10% of the centres. With no stratum of k ≥ 2 there was nothing to test,
+  gradient-boosted classifier on the {len(guard_settings["pairwise_features"])} pairwise-contact, density and
+  composition features. Topology adds in a stratum if stability wins with a {interval:.0f}% bootstrap interval above 0
+  in both directions, and the study's verdict is “adds” if such a stratum holds at least
+  {100 * guard_settings["min_share"]:.0f}% of the centres. With no stratum of k ≥ 2 there was nothing to test,
   and the guard did not run. The verdict is <strong>“{S["verdict"]["verdict"]}”</strong>, with the reason
   “{S["verdict"]["reason"]}”.</p>"""
 
-    section7 = """
+    section7 = f"""
   <h2>7. Contiguity</h2>
-  <p>Spatial contiguity would compare, for each subdomain, the share of each centre's five nearest same-slide
+  <p>Spatial contiguity would compare, for each subdomain, the share of each centre's
+  {S["settings"]["contiguity_k_nn"]} nearest same-slide
   centres that share its subdomain with its expectation when the labels are reassigned at random within the
   stratum and slide. With no subdomains it was not computed.</p>"""
 
     section8 = """
   <h2>8. The H&amp;E atlas</h2>
-  <p>The atlas was planned for compartments and subdomains: twelve random centres per group with their H&amp;E
+  <p>The atlas was planned for compartments and subdomains: random centres of each group with their H&amp;E
   crops, labels hidden first, and Simon's words for each group recorded in the ledger. With one composition stratum
   and no subdomains there are no groups to compare. Whether to build it is Simon's decision.</p>"""
 
     section9 = f"""
   <h2>9. Methods and reproduction</h2>
   <ul>
-    <li><strong>Balls and labellings.</strong> Per slide, 1,500 centres drawn without replacement; a centre's ball
-    is every cell within δ = 150 µm, boundary included. Labelling 0 is the observed classes (the cell-type study's
-    four groups of HistoPLUS types); labellings 1..19 permute them within the ball. Every generator uses
-    <code>np.random.SeedSequence</code> with a 4-entry key whose last entry is non-zero.</li>
+    <li><strong>Balls and labellings.</strong> Per slide, {c.N_CENTRES:,} centres drawn without replacement; a
+    centre's ball is every cell within δ = {c.DELTA_UM:.0f} µm, boundary included. Labelling 0 is the observed classes
+    (the cell-type study's {len(c.CLASSES)} groups of HistoPLUS types); labellings 1..{c.R} permute them within the
+    ball. Every generator uses <code>np.random.SeedSequence</code> with a key of the seed, the slide, the centre and a
+    stream, whose last entry is non-zero.</li>
     <li><strong>Six-packs.</strong> The numba port of chalc's chromatic Delaunay–Čech filtration (faces to dimension
-    2; values are squared smallest-enclosing-ball radii in px², topocyte's α² convention) and phimaker 0.5.0's
+    {face_dim}; values are squared smallest-enclosing-ball radii in px², topocyte's α² convention) and phimaker
+    {versions["phimaker"]}'s
     <code>sixpack_from_inclusion</code>, one boundary matrix per complex, essential bars left out. The port passes
     <code>num_threads=1</code>, but phimaker runs up to {PHIMAKER_THREADS} threads inside each call
     (<code>progress.md</code>, Task 5). The pairing is unique for a fixed column order, so the results do not
@@ -1086,39 +1149,49 @@ def main() -> None:
     ~{DESIGN_SERIAL_HOURS // DESIGN_HOURS}× the design assumed, and the bars took {bars_wall / 3600:.1f} h instead of
     ~{DESIGN_HOURS} h.</li>
     <li><strong>Residual curves.</strong> Exact signed step functions (observed bars with weight 1, reference bars
-    with −1/19), divided by sqrt(s² + s0²), with s² the centre's spread over its 19 references and s0² the median
-    positive s² over the fitting set's fit sample (400 centres per slide). Exact bar-endpoint arithmetic throughout:
-    no grid and no quadrature. {zero_total:,} centre-blocks had s = 0 with a non-zero residual, {zero_image_h1:,} of
-    them in the four image H1 blocks; the moderated spread keeps them finite.</li>
+    with −1/{c.R}), divided by sqrt(s² + s0²), with s² the centre's spread over its {c.R} references and s0² the median
+    positive s² over the fitting set's fit sample ({c.FIT_PER_SLIDE} centres per slide). Exact bar-endpoint
+    arithmetic throughout: no grid and no quadrature. {zero_total:,} centre-blocks had s = 0 with a non-zero
+    residual, {zero_image_h1:,} of them in the {len(image_h1)} image H1 blocks; the moderated spread keeps them
+    finite.</li>
     <li><strong>fPCA.</strong> Per block and fitting set (half A, half B, all slides), the exact Gram matrix of the
     fit sample's scaled residuals and topocyte's <code>fpca_from_gram</code> (raw, divisor n). A block keeps at
-    most 9 components. The effective rank threshold is <code>fpca_from_gram</code>'s default: an eigenvalue must
-    exceed 1e-10 of the Gram matrix's trace, which is stricter than the design's 1e-12 of the largest eigenvalue,
-    so that rule never binds. All {3 * len(c.BLOCKS)} fits kept 9 components and no block was dropped. Every
-    centre is scored by exact evaluation against the component step functions.</li>
+    most {features.N_COMPONENTS} components. The effective rank threshold is <code>fpca_from_gram</code>'s default:
+    an eigenvalue must exceed {fpca_rtol:g} of the Gram matrix's trace, which is stricter than the rank ruling's
+    {RANK_RULING:g} of the largest eigenvalue, so that rule never binds. All {len(features.FITS) * len(c.BLOCKS)} fits
+    kept {features.N_COMPONENTS} components and no block was dropped. Every centre is scored by exact evaluation
+    against the component step functions.</li>
     <li><strong>MFA</strong> as in the sibling studies: each block divided by the SD of its first score on the fit
-    sample, the 144 columns concatenated, PCA with the sibling sign rule, 20 components kept.</li>
-    <li><strong>The rule for k</strong> (<code>domains.py</code>): per half, the gap statistic against B = 20 draws
-    from a Gaussian with the half's mean and covariance (W<sub>1</sub> the total sum of squares, W<sub>k</sub> the
-    k-means inertia, <code>n_init=20</code>, seed 0); the half's k by Tibshirani's stopping rule from k = 1 with a
+    sample, the {len(c.BLOCKS) * features.N_COMPONENTS} columns concatenated, PCA with the sibling sign rule,
+    {features.N_MFA} components kept.</li>
+    <li><strong>The rule for k</strong> (<code>domains.py</code>): per half, the gap statistic against
+    B = {rule["B"]} draws from a Gaussian with the half's mean and covariance (W<sub>1</sub> the total sum of squares,
+    W<sub>k</sub> the k-means inertia, <code>n_init={rule["n_init"]}</code>, seed {rule["seed"]}); the half's k by
+    Tibshirani's stopping rule from k = 1 with a
     gain floor of {min_gain}; k is the smaller of the halves' and stands only with prediction strength of at least
     {domains.PS_MIN} in both directions. k<sub>max</sub> is {k_max1} at level 1 and {k_max2} at level 2.</li>
   </ul>
   <h3>Per block</h3>
   {block_table}
   <p class="note">s0 is in px: a squared L² norm integrates a count over squared radii (px²). FVE: the fraction of
-  variance of the 9 components. Gate 1: <code>curves.inner_matrix</code> against topocyte's
-  <code>betti_inner_product_matrix</code> (unit weights, 200 curves, relative); gate 2: the fit sample's scores
+  variance of the {features.N_COMPONENTS} components. Gate 1: <code>curves.inner_matrix</code> against topocyte's
+  <code>betti_inner_product_matrix</code> (unit weights, {features.GATE_CURVES} curves, relative); gate 2: the fit
+  sample's scores
   against <code>fpca_from_gram</code>'s (relative to the largest score), the largest of the three fits.</p>
   {mfa_table}
   <h3>Verification</h3>
-  <p><code>verify_results.py</code> recomputes each saved result by a route independent of the one that made it:
-  {n_gated} checks passed, beside {V["n_checks"] - n_gated} descriptive count, in {V["seconds"]["total"]:,.0f} s.
-  The saved labelling-0 bars match chalc
-  15.0.1 to {sixpack["measured"]:.1e} of each ball's scale on {sixpack["sample"].split(",")[0]}; the halves' fits
-  match <code>fpca_from_gram</code> to {halves_fit:.1e} of the largest score. The all-slides fPCA was refitted for
-  blocks {" and ".join(map(str, V["samples"]["all_fit_blocks"]))} only (a refit of all 16 takes about 40 min more);
-  the rule reads only the halves' bases.</p>
+  <p><code>verify_results.py</code> recomputes the saved results by routes independent of the ones that made them:
+  {n_gated} checks passed, beside {V["n_checks"] - n_gated} descriptive count, in {V["seconds"]["total"]:,.0f} s. It
+  recomputes the bars of {n_balls} sampled balls in labelling 0 against chalc {versions["chalc"]}, and of one ball
+  per slide in all {c.R + 1} labellings; the block scores of every fit sample in all
+  {len(features.FITS) * len(c.BLOCKS)} fits, with every block's fractions of variance, kept count and s0; every
+  centre's spreads, level-1 and pairwise features; every level-2 row from the saved block scores; and the results
+  of <code>domains.py</code>. It checks the other centres' block scores and the control's level-2 rows on the
+  {n_balls} sampled centres. It does not recompute the pre-flight, the pilot draw (whose counts per half and
+  condition it checks), the features run's gate diagnostics (the gate columns of the per-block table) or the runs'
+  timings, sizes and versions. The saved labelling-0 bars match chalc to {sixpack["measured"]:.1e} of each ball's
+  scale, and the fits
+  match <code>fpca_from_gram</code> to {fits_max:.1e} of the largest score.</p>
   <details><summary>Table: every check</summary>{verify_table}</details>
   <h3>Provenance</h3>
   <ul>
@@ -1145,7 +1218,8 @@ def main() -> None:
 <body>
 <main>
   <h1>Chromatic domains in GTEx liver: the pilot</h1>
-  <p class="subtitle">Does the local chromatic topology of 150 µm neighbourhoods define microanatomical domains
+  <p class="subtitle">Does the local chromatic topology of {c.DELTA_UM:.0f} µm neighbourhoods define microanatomical
+  domains
   beyond density, composition and pairwise contacts?</p>
   <p class="meta">Report generated {dt.date.today().isoformat()} from the saved results of <code>run_pilot.py</code>,
   <code>features.py</code>, <code>domains.py</code> and <code>verify_results.py</code>; topocyte {c.TOPOCYTE_COMMIT}.

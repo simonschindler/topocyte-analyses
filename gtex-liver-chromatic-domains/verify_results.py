@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Independent checks of every saved result of the chromatic-domains pilot; prints ``ALL CHECKS PASSED``.
+"""Independent checks of the chromatic-domains pilot's saved results; prints ``ALL CHECKS PASSED``.
 
 Run from this folder with the study venv and ``PYTHONPATH=<topocyte checkout at 18e3aa5>``
 (``common.check_topocyte``). It reads the cohort read only (h5py mode "r") and ``results/``,
@@ -30,18 +30,27 @@ Each check recomputes a saved result by another route than the one that made it:
   integer-count sweep over the union of the references' endpoints, giving s0 per block and fit and
   the zero-spread counts; on the first 20 sampled balls, s² by brute force from topocyte's 19 × 19
   Gram matrix against the study's ``curves.spread2`` and the sweep;
-* **decompositions:** each half's fit of each block refitted from the bars, with the Gram matrix of
-  ``curves.inner_matrix`` and topocyte's ``fpca_from_gram``, against the saved scores, fractions of
-  variance and kept counts; the all-slides fit only for ``ALL_FIT_BLOCKS`` (a refit of all 16
-  takes about 40 min more). The 200 sampled centres are scored by the kernel route
-  (c - mean Gram row)·v/√ρ, observed and control. The MFA of each fit by a numpy
-  eigendecomposition with the sibling sign rule, against every saved level-2 row, and the control's
-  level-2 rows of the sampled centres in the halves' bases (the only control rows the rule reads);
+* **decompositions:** every fit of every block (half A, half B and all slides, 48 fits) refitted
+  from the bars, with the Gram matrix of ``curves.inner_matrix`` and topocyte's ``fpca_from_gram``,
+  against the saved scores, fractions of variance and kept counts. The 200 sampled centres are
+  scored by the kernel route (c - mean Gram row)·v/√ρ, observed and control. The MFA of each fit by
+  a numpy eigendecomposition with the sibling sign rule, against every saved level-2 row, and the
+  control's level-2 rows of the sampled centres in each fit's basis;
 * **clustering and verdict:** level 1, the control and level 2 recomputed from ``features.npz``
   with scikit-learn's ``KMeans`` and the saved seeds, by this file's own gap statistic, stopping
   rule and prediction strength (k exactly; gap, s and prediction strength within 1e-12, since
-  k-means inertia moves by an ulp between calls); the verdict from the recomputed k's. The guard
-  did not run: its balanced accuracies reduce to asserting it is absent.
+  k-means inertia moves by an ulp between calls); each stratum's sizes and mean level-1 features;
+  the verdict from the recomputed k's. The guard did not run: its balanced accuracies reduce to
+  asserting it is absent.
+
+Coverage. The bars are recomputed on 230 sampled balls (200 against chalc in labelling 0, one per
+slide in all 20 labellings); the block scores of every fit sample, every block's fractions of
+variance and kept counts, s0, every centre's spreads, ``L1`` and ``P``, every saved level-2 row
+from the saved block scores, and the results of ``domains.py`` in full; the other rows of
+``blk_obs_*`` and the control's ``L2_ctl_*`` on the 200 sampled centres. Not recomputed:
+``results/preflight.json`` (the pre-flight), the pilot draw (``results/pilot.csv``, whose counts per
+half and condition are checked), the features run's gate diagnostics (``gate_gram`` and
+``gate_scores_*``, errors that run measured) and the runs' timings, sizes and versions.
 
 Samples. Every draw uses ``np.random.SeedSequence`` with a 4-entry key whose last entry is
 non-zero (``common``'s rule). The verifier's own keys carry a mark in the second entry, above
@@ -80,7 +89,6 @@ N_COMPONENTS = 9
 N_MFA = 20
 FITS = ("A", "B", "all")
 FIT_STREAM = 0xF17  # the study's fit-sample stream (features.py)
-ALL_FIT_BLOCKS = (1, 11)  # the most distinct endpoints, and the largest gate-2 error, among the all-slides fits
 MARK_BALLS, MARK_ONE_PER_SLIDE, MARK_SHUFFLES = 0xBA11, 0xB17, 0x5AFF  # [SEED, mark, index, 1]
 N_BALLS, N_FIRST, N_INNER = 200, 20, 10
 N_SHUFFLES = 10_000
@@ -616,8 +624,8 @@ def check_block(block: int, pilot: pd.DataFrame, F: dict, sample: np.ndarray, ou
         out["inner_composed"], float(np.max(np.abs(ours - composed) / np.where(bound > 0, bound, 1.0)))
     )
     out["inner_zero_bad"] += int(np.count_nonzero(ours[bound == 0]))
-    # Decompositions: the halves' fits, and the all-slides fit of ALL_FIT_BLOCKS.
-    for f in FITS if block in ALL_FIT_BLOCKS else ("A", "B"):
+    # Decompositions: every fit of the block, the halves' and the all-slides one.
+    for f in FITS:
         rows_f = fit_rows(F, f)
         fit_set = residuals(part, rows_f, np.sqrt(s2[rows_f] + s0sq[f]), 0)
         held = [curves.inner_matrix(fit_set)]
@@ -741,12 +749,7 @@ def check_blocks(pilot: pd.DataFrame, F: dict, sample: np.ndarray, blocks: tuple
         f"{nb_} blocks",
     )
     for f in FITS:
-        refit = [b for b in blocks if f != "all" or b in ALL_FIT_BLOCKS]
-        if not refit:
-            continue
-        text = f"{len(refit)} blocks" + (
-            f" ({', '.join(map(str, refit))}; the others not refitted)" if f == "all" else ""
-        )
+        refit, text = list(blocks), f"{nb_} blocks"
         check(
             f"fPCA {f}: fit-sample scores against fpca_from_gram",
             max(out["fit"][f][refit]) <= 1e-9,
@@ -790,7 +793,7 @@ def check_blocks(pilot: pd.DataFrame, F: dict, sample: np.ndarray, blocks: tuple
         )
         err = float(np.max(np.abs(evr[:N_MFA] - F[f"mfa_evr_{f}"])))
         check(f"MFA {f}: fractions of variance", err <= 1e-9, err, "1e-9", "20 components")
-        if f != "all" and nb_ == N_BLOCKS:
+        if nb_ == N_BLOCKS:
             ctl = ((out["ctl_scores"][f] * weights[None, :, None]).reshape(len(sample), -1) - mean) @ V
             err = float(np.max(np.abs(ctl - F[f"L2_ctl_{f}"][sample_sorted])) / scale)
             check(
@@ -921,6 +924,23 @@ def check_clustering(F: dict, D: dict, summary: dict) -> None:
         "exact",
         f"45,000 rows, {strata} stratum or strata",
     )
+    worst, mismatch = 0.0, int(len(summary["compartments"]) != strata)
+    for comp, record in enumerate(summary["compartments"][:strata]):
+        in_c = compartment == comp
+        sizes = [int(in_c.sum()), int((in_c & A).sum()), int((in_c & B).sum())]
+        slides = [int(np.unique(F["slide_index"][in_c & h]).size) for h in (A, B)]
+        saved = [record["size"], record["size_A"], record["size_B"], record["slides_A"], record["slides_B"]]
+        mismatch += saved != sizes + slides or record["share"] != sizes[0] / N_ROWS
+        sides = [record[key] for key in ("control", "level2") if record[key] is not None]
+        mismatch += sum(side["n_A"] != sizes[1] or side["n_B"] != sizes[2] for side in sides)
+        worst = max(worst, float(np.max(np.abs(L1[in_c].mean(axis=0) - list(record["mean_L1"].values())))))
+    check(
+        "level 1: each stratum's sizes, slides per half and mean level-1 features",
+        mismatch == 0 and worst <= 1e-12,
+        worst if mismatch == 0 else mismatch,
+        "exact; means 1e-12",
+        f"{strata} stratum or strata, with the control's and level 2's sizes",
+    )
     control_k, level2_k = [], []
     for comp in range(strata):
         Ac, Bc = (compartment == comp) & A, (compartment == comp) & B
@@ -962,9 +982,11 @@ def check_clustering(F: dict, D: dict, summary: dict) -> None:
             r["guard"] is None and r["contiguity"] is None and r["level2"]["ari"] is None
             for r in summary["compartments"]
         )
+        and (summary["level1"]["ari"] is None) == (strata == 1)
     )
     check(
-        "guard: absent, as the control passed and every stratum has k = 1 (no balanced accuracies to recompute)",
+        "guard: absent, as the control passed and every stratum has k = 1 (no balanced accuracies to recompute); "
+        "no contiguity and no cross-half ARI where k = 1",
         absent,
         int(not absent),
         "exact",
@@ -1013,7 +1035,7 @@ def main() -> None:
             "scikit-learn": sklearn.__version__,
             "gudhi": gudhi.__version__,
         },
-        "samples": {"balls": [int(r) for r in sample], "all_fit_blocks": list(ALL_FIT_BLOCKS)},
+        "samples": {"balls": [int(r) for r in sample]},
     }
     out = c.RESULTS / "verify.json"
     tmp = out.with_name(out.name + ".tmp")
