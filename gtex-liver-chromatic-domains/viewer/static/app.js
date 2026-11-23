@@ -227,24 +227,29 @@ function clearClusters() {
   if (state.layer === "clusters") state.layer = "types";
   document.querySelector(`input[name=layer][value=${state.layer}]`).checked = true;
   const { radius_um: radius } = state.meta.cluster;
-  $("cluster-note").textContent = `Clusters every cell by its ${radius} µm ball: log10 cells (with density) and `
-    + "the four class fractions, as the pilot's level 1.";
+  $("cluster-note").textContent = "Clusters every cell by its ball: log10 cells (with density) and the four class "
+    + `fractions, as the pilot's level 1 (radius ${radius} µm there).`;
 }
 
 async function runClusters() {
   const id = state.slide;
-  const { k_min: kMin, k_max: kMax } = state.meta.cluster;
+  const { k_min: kMin, k_max: kMax, radius_min_um: rMin, radius_max_um: rMax } = state.meta.cluster;
   const k = Number($("k").value);
+  const radius = Number($("radius").value);
   if (!state.info || state.info.slide_id !== id) return;
   if (!Number.isInteger(k) || k < kMin || k > kMax) {
     $("cluster-note").textContent = `k must be a whole number from ${kMin} to ${kMax}.`;
     return;
   }
+  if (!Number.isFinite(radius) || radius < rMin || radius > rMax) {
+    $("cluster-note").textContent = `The radius must be from ${rMin} to ${rMax} µm.`;
+    return;
+  }
   const density = $("density").checked;
   $("run").disabled = true;
-  $("cluster-note").textContent = `Clustering ${fmt(state.info.n_cells)} cells with k = ${k} …`;
+  $("cluster-note").textContent = `Clustering ${fmt(state.info.n_cells)} cells with k = ${k} in ${radius} µm balls …`;
   try {
-    const result = await fetchOk(`/api/cluster/${encodeURIComponent(id)}?k=${k}&density=${density ? 1 : 0}`)
+    const result = await fetchOk(`/api/cluster/${encodeURIComponent(id)}?k=${k}&radius=${radius}&density=${density ? 1 : 0}`)
       .then((r) => r.json());
     if (state.slide !== id) return;
     const bytes = atob(result.labels);
@@ -371,6 +376,10 @@ async function init() {
   }));
   $("k").min = String(state.meta.cluster.k_min);
   $("k").max = String(state.meta.cluster.k_max);
+  $("radius").min = String(state.meta.cluster.radius_min_um);
+  $("radius").max = String(state.meta.cluster.radius_max_um);
+  $("radius").value = String(state.meta.cluster.radius_um);
+  $("radius").addEventListener("keydown", (event) => { if (event.key === "Enter") runClusters(); });
   $("run").addEventListener("click", runClusters);
   $("k").addEventListener("keydown", (event) => { if (event.key === "Enter") runClusters(); });
   clearClusters();

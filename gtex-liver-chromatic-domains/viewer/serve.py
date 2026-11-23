@@ -53,6 +53,7 @@ MARGIN_PX = 256  # blank border around a point cloud shown without its slide
 CACHE = 4  # slides whose cells, and slide files whose tile generators, stay in memory
 # Composition clusters: the pilot's level 1 (features.level1, domains.kmeans) on every cell of one slide.
 K_MIN, K_MAX = 2, 10
+RADIUS_MIN_UM, RADIUS_MAX_UM = 10.0, 500.0  # the ball's radius; the pilot's is c.DELTA_UM (150 µm)
 N_INIT, KMEANS_SEED = 20, 0
 FEATURES = ("log10 cells", *(f"{name} fraction" for name in c.CLASSES))
 STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css"}
@@ -213,6 +214,20 @@ def composition_clusters(features: np.ndarray, k: int) -> tuple[np.ndarray, list
     return rank[labels].astype(np.uint8), used
 
 
+def cluster_request(query: dict[str, list[str]]) -> tuple[int, bool, float]:
+    """k, density on or off, and the ball's radius in µm from a cluster request's query; ``ValueError`` if invalid."""
+    try:
+        k = int(query.get("k", [""])[0])
+        radius = float(query.get("radius", [str(c.DELTA_UM)])[0])
+    except ValueError:
+        raise ValueError("k must be a whole number and radius a number of µm") from None
+    if not K_MIN <= k <= K_MAX:
+        raise ValueError(f"k must be from {K_MIN} to {K_MAX}")
+    if not (math.isfinite(radius) and RADIUS_MIN_UM <= radius <= RADIUS_MAX_UM):
+        raise ValueError(f"the radius must be from {RADIUS_MIN_UM:g} to {RADIUS_MAX_UM:g} µm")
+    return k, query.get("density", ["1"])[0] == "1", radius
+
+
 def cluster_profiles(features: np.ndarray, labels: np.ndarray, k: int) -> list[dict]:
     """Each cluster's cells, mean cells per ball and mean class fractions."""
     profiles = []
@@ -249,8 +264,8 @@ class Cohort:
         self._lock = threading.Lock()
         self._cells: OrderedDict[str, dict] = OrderedDict()  # slide ID -> xy, types, blob, extent
         self._zooms: OrderedDict[str, tuple] = OrderedDict()  # slide ID -> (OpenSlide, DeepZoomGenerator)
-        self._features: OrderedDict[tuple, np.ndarray] = OrderedDict()  # (slide ID, µm/px) -> level-1 features
-        self._clusters: OrderedDict[tuple, dict] = OrderedDict()  # (slide ID, k, density) -> clustering
+        self._features: OrderedDict[tuple, np.ndarray] = OrderedDict()  # (slide ID, µm/px, radius) -> features
+        self._clusters: OrderedDict[tuple, dict] = OrderedDict()  # (slide ID, k, density, radius) -> clustering
 
     def meta(self) -> dict:
         counts = self.slides["group"].value_counts()
@@ -260,7 +275,14 @@ class Cohort:
             "type_class": self.type_class.tolist(),
             "classes": list(c.CLASSES),
             "um_per_px": c.PX_UM,
-            "cluster": {"k_min": K_MIN, "k_max": K_MAX, "radius_um": c.DELTA_UM, "n_init": N_INIT},
+            "cluster": {
+                "k_min": K_MIN,
+                "k_max": K_MAX,
+                "radius_um": c.DELTA_UM,
+                "radius_min_um": RADIUS_MIN_UM,
+                "radius_max_um": RADIUS_MAX_UM,
+                "n_init": N_INIT,
+            },
             "slides": [
                 {
                     "slide_id": r.slide_id,
@@ -291,35 +313,35 @@ class Cohort:
             return slide_um_per_px(dict(self.opened(slide_id)[0].properties))
         return slide_um_per_px({})
 
-    def features(self, slide_id: str, um_per_px: float) -> np.ndarray:
-        """The level-1 features of every cell's ``DELTA_UM`` ball (log10 cells, four class fractions)."""
-        key = (slide_id, um_per_px)
+    def features(self, slide_id: str, um_per_px: float, radius_um: float) -> np.ndarray:
+        """The level-1 features of every cell's ball of ``radius_um`` (log10 cells, four class fractions)."""
+        key = (slide_id, um_per_px, radius_um)
         with self._lock:
             if key in self._features:
                 self._features.move_to_end(key)
                 return self._features[key]
         cells = self.cells(slide_id)
-        counts = ball_class_counts(cells["xy"], self.type_class[cells["types"]], c.DELTA_UM / um_per_px)
+        counts = ball_class_counts(cells["xy"], self.type_class[cells["types"]], radius_um / um_per_px)
         with self._lock:
             return remember(self._features, key, level1(counts), 2)
 
-    def cluster(self, slide_id: str, k: int, density: bool) -> dict:
+    def cluster(self, slide_id: str, k: int, density: bool, radius_um: float = c.DELTA_UM) -> dict:
         """Composition clusters of every cell of the slide, with each cluster's profile, as JSON-ready data."""
-        key = (slide_id, k, density)
+        key = (slide_id, k, density, radius_um)
         with self._lock:
             if key in self._clusters:
                 self._clusters.move_to_end(key)
                 return self._clusters[key]
         started = time.perf_counter()
         um_per_px, source = self.um_per_px(slide_id)
-        features = self.features(slide_id, um_per_px)
+        features = self.features(slide_id, um_per_px, radius_um)
         columns = [0, 1, 2, 3, 4] if density else [1, 2, 3, 4]
         labels, used = composition_clusters(features[:, columns], k)
         result = {
             "slide_id": slide_id,
             "k": k,
             "density": density,
-            "radius_um": c.DELTA_UM,
+            "radius_um": radius_um,
             "um_per_px": um_per_px,
             "um_source": source,
             "features": [FEATURES[columns[j]] for j in used],
@@ -427,9 +449,8 @@ def make_handler(cohort: Cohort) -> type[BaseHTTPRequestHandler]:
             elif len(parts) == 3 and parts[:2] == ["api", "cells"] and parts[2] in cohort.by_id:
                 self.send(HTTPStatus.OK, cohort.cells(parts[2])["blob"], "application/octet-stream")
             elif len(parts) == 3 and parts[:2] == ["api", "cluster"] and parts[2] in cohort.by_id:
-                k = int(query.get("k", [""])[0])
-                density = query.get("density", ["1"])[0] == "1"
-                result = cohort.cluster(parts[2], k, density)
+                k, density, radius = cluster_request(query)
+                result = cohort.cluster(parts[2], k, density, radius)
                 self.send(HTTPStatus.OK, json.dumps(result).encode(), "application/json")
             elif len(parts) == 5 and parts[:2] == ["api", "tile"] and parts[2] in cohort.wsis:
                 col, row = parts[4].removesuffix(".jpeg").split("_")

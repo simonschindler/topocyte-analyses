@@ -113,12 +113,13 @@ says which.
 
 "Composition clusters on this slide" runs k-means with the chosen k (2 to 10)
 on every cell of the shown slide: the pilot's level-1 features of the cell's
-150 µm ball (log10 cells, unless "with density" is off, and the four class
-fractions; `features.level1`), z-scored on that slide, with `domains.py`'s
-`KMeans(k, n_init=20, random_state=0)`. Clusters are numbered by size, largest
-first, and the legend shows each cluster's mean composition. The first run on
-a slide counts the balls; on the largest slide (about a million cells) k = 10
-takes about 13 s.
+ball (log10 cells, unless "with density" is off, and the four class fractions;
+`features.level1`), z-scored on that slide, with `domains.py`'s
+`KMeans(k, n_init=20, random_state=0)`. The ball's radius is 10 to 500 µm, 150
+µm (the pilot's) by default. Clusters are numbered by size, largest first, and
+the legend shows each cluster's mean composition. The first run at a radius
+counts the balls; on the largest slide (725,038 cells) k = 10 at 150 µm took
+13 s, and k = 4 took 4.6 s at 500 µm and 3.0 s at 50 µm.
 
 ## Outputs
 

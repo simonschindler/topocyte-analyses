@@ -109,3 +109,18 @@ def test_composition_clusters_number_clusters_by_size_and_skip_constant_columns(
         serve.composition_clusters(features, 11)
     with pytest.raises(ValueError, match="constant"):
         serve.composition_clusters(np.ones((10, 3)), 2)
+
+
+def test_cluster_request_reads_k_density_and_radius():
+    assert serve.cluster_request({"k": ["4"]}) == (4, True, c.DELTA_UM)
+    assert serve.cluster_request({"k": ["10"], "density": ["0"], "radius": ["75.5"]}) == (10, False, 75.5)
+    for query, message in (
+        ({"k": ["1"]}, "k must be from"),
+        ({"k": ["4.5"]}, "whole number"),
+        ({}, "whole number"),
+        ({"k": ["4"], "radius": ["5"]}, "radius must be from"),
+        ({"k": ["4"], "radius": ["nan"]}, "radius must be from"),
+        ({"k": ["4"], "radius": ["600"]}, "radius must be from"),
+    ):
+        with pytest.raises(ValueError, match=message):
+            serve.cluster_request(query)
