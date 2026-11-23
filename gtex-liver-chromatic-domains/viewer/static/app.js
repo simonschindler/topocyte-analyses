@@ -5,6 +5,7 @@ import { PALETTE, rgb } from "/static/palette.js";
 
 const BLANK = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 const CELL_UM = 10; // a cell's drawn diameter once zoomed in far enough
+const SCALE_MAX_CSS = 150; // the scale bar's longest length on screen
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => n.toLocaleString("en-US");
 
@@ -167,6 +168,29 @@ function renderSlides() {
   }
 }
 
+// --- scale bar --------------------------------------------------------------------------------------------
+
+// The longest of 1, 2 or 5 × 10^k that is not above maxUm.
+function niceLength(maxUm) {
+  const power = 10 ** Math.floor(Math.log10(maxUm));
+  return [5, 2, 1].map((m) => m * power).find((um) => um <= maxUm) ?? power;
+}
+
+function updateScaleBar() {
+  const scale = $("scalebar");
+  const item = viewer.world.getItemAt(0);
+  if (!state.info || !item) {
+    scale.hidden = true;
+    return;
+  }
+  const rect = item.viewportToImageRectangle(viewer.viewport.getBounds(true));
+  const umPerCss = (state.info.um_per_px * rect.width) / viewer.container.clientWidth;
+  const um = niceLength(SCALE_MAX_CSS * umPerCss);
+  scale.querySelector(".bar").style.width = `${um / umPerCss}px`;
+  scale.querySelector(".label").textContent = `${Number(um.toPrecision(3)).toLocaleString("en-US")} µm`;
+  scale.hidden = false;
+}
+
 // --- one slide --------------------------------------------------------------------------------------------
 
 function applyHne() {
@@ -176,7 +200,8 @@ function applyHne() {
 
 function slideStatus(info) {
   const where = info.wsi ? ($("hne").checked ? "on its H&E" : "H&E hidden") : "no slide file";
-  return `${info.slide_id} · ${info.group}${info.pilot ? " (pilot)" : ""} · ${fmt(info.n_cells)} cells · ${where}`;
+  const scale = `${info.um_per_px} µm/px${info.um_source === "assumed" ? " (assumed)" : ""}`;
+  return `${info.slide_id} · ${info.group}${info.pilot ? " (pilot)" : ""} · ${fmt(info.n_cells)} cells · ${where} · ${scale}`;
 }
 
 async function loadSlide(id) {
@@ -204,11 +229,13 @@ async function loadSlide(id) {
       if (state.slide !== id) return;
       state.info = info;
       state.counts = counts;
-      overlay ??= new PointsOverlay(viewer, CELL_UM / state.meta.um_per_px);
+      overlay ??= new PointsOverlay(viewer, CELL_UM / info.um_per_px);
+      overlay.cellPx = CELL_UM / info.um_per_px;
       overlay.setPoints(xy, types);
       $("hne").disabled = !info.wsi;
       applyHne();
       applyColors();
+      updateScaleBar();
       setStatus(slideStatus(info));
     });
     viewer.addOnceHandler("open-failed", (event) => {
@@ -233,6 +260,8 @@ async function init() {
     maxZoomPixelRatio: 4,
     visibilityRatio: 0.2,
   });
+  viewer.addHandler("update-viewport", updateScaleBar);
+  viewer.addHandler("resize", updateScaleBar);
   state.meta = await fetchOk("/api/meta").then((r) => r.json());
   renderGroups();
   $("group").addEventListener("change", renderSlides);

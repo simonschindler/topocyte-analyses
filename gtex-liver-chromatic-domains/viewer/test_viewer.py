@@ -77,3 +77,9 @@ def test_wsi_dir_must_be_a_folder(tmp_path):
         serve.parse_args(["--wsi-dir", str(tmp_path / "missing")])
     assert serve.parse_args(["--wsi-dir", str(tmp_path)]).wsi_dir == tmp_path
     assert serve.parse_args([]).wsi_dir is None
+
+
+def test_um_per_px_comes_from_the_slide_file_else_the_cohorts_assumption():
+    assert serve.slide_um_per_px({"openslide.mpp-x": "0.2527"}) == (0.2527, "slide file")
+    for properties in ({}, {"openslide.mpp-x": "0"}, {"openslide.mpp-x": "n/a"}, {"openslide.mpp-x": "inf"}):
+        assert serve.slide_um_per_px(properties) == (c.PX_UM, "assumed")

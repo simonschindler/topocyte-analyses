@@ -107,6 +107,9 @@ slide files read only and writes nothing.
 Then open `http://127.0.0.1:8765/`. The page loads OpenSeadragon 4.0.0 from
 cdnjs. The 14 type colours are shades of their class's colour, so the legend's
 toggles and its "only" buttons tell neighbouring types apart.
+The scale bar in µm (1, 2 or 5 × 10^k) uses the slide file's pixel size where
+there is one, else the cohort's assumed 0.4942 µm per pixel; the status line
+says which.
 
 ## Outputs
 

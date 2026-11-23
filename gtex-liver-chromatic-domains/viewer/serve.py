@@ -147,6 +147,20 @@ def find_wsis(folder: Path, slide_ids: set[str]) -> dict[str, Path]:
     return found
 
 
+def slide_um_per_px(properties: dict[str, str]) -> tuple[float, str]:
+    """µm per level-0 px from a slide file's OpenSlide properties, else the cohort's assumed ``PX_UM``.
+
+    Returns the value and where it comes from: "slide file" or "assumed" (the cohort records no pixel size).
+    """
+    try:
+        value = float(properties.get("openslide.mpp-x", "nan"))
+    except ValueError:
+        value = math.nan
+    if math.isfinite(value) and value > 0:
+        return value, "slide file"
+    return c.PX_UM, "assumed"
+
+
 class Cohort:
     """The slide table, the cell types and two small caches: cells blobs and DeepZoom generators."""
 
@@ -194,8 +208,9 @@ class Cohort:
                 self._cells.popitem(last=False)
         return entry
 
-    def zoom(self, slide_id: str):
-        """The slide's DeepZoom generator over the whole slide (limit_bounds off, so level-0 px match the cells)."""
+    def opened(self, slide_id: str) -> tuple:
+        """The slide file opened with OpenSlide, and its DeepZoom generator over the whole slide (limit_bounds
+        off, so level-0 px match the cells)."""
         from openslide import OpenSlide
         from openslide.deepzoom import DeepZoomGenerator
 
@@ -207,7 +222,10 @@ class Cohort:
                 while len(self._zooms) > CACHE:
                     self._zooms.popitem(last=False)[1][0].close()
             self._zooms.move_to_end(slide_id)
-            return self._zooms[slide_id][1]
+            return self._zooms[slide_id]
+
+    def zoom(self, slide_id: str):
+        return self.opened(slide_id)[1]
 
     def info(self, slide_id: str) -> dict:
         row = self.by_id[slide_id]
@@ -220,11 +238,13 @@ class Cohort:
             "wsi": slide_id in self.wsis,
         }
         if out["wsi"]:
-            zoom = self.zoom(slide_id)
+            slide, zoom = self.opened(slide_id)
             out["width"], out["height"] = zoom.level_dimensions[-1]
             out["max_level"] = zoom.level_count - 1
+            out["um_per_px"], out["um_source"] = slide_um_per_px(dict(slide.properties))
         else:
             out["width"], out["height"] = self.cells(slide_id)[1]
+            out["um_per_px"], out["um_source"] = slide_um_per_px({})
         return out
 
     def tile(self, slide_id: str, level: int, col: int, row: int) -> bytes:
