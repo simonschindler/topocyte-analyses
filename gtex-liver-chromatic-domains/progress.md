@@ -598,7 +598,7 @@ Claude's calls:
     - by 5.7–9.2% in the stromal, immune and other domain H1 blocks and in stromal image H1;
     - by 12.6% and 23.9% in immune and other image H1, the two blocks with the fewest bars and the smallest s0 (3.5–5.2);
     - the 9 components' FVE differs by at most 0.054 (other domain H1).
-  - **Descriptive only (Task 7 runs the control's rule):** in the all-slides basis, the control's level-2 columns have a mean SD of 0.77 against 1.12 for the observed, and its first column 0.59 against 2.26.
+  - **Descriptive only (Task 7 runs the control's rule):** in the all-slides basis, the control's level-2 columns have a mean SD of 0.765 against 1.115 for the observed, and its first column 0.59 against 2.26 (0.77 before the final-review fix wave, which corrected it).
   - **Single-class balls occur:** some balls are all epithelial or all stromal (a fraction of 1.0 in `L1`). The smallest ball holds 11 cells (log10 1.04), the largest 744 (log10 2.87).
 
 Claude's calls:
@@ -722,7 +722,7 @@ Claude's calls:
   - **The run** (`logs/verify.log`): 03:29–04:38 on 2026-11-23, after fix round 1 (below), on AC power inside `caffeinate -is`, from the committed file (md5 `dc89f50f…`, unchanged through the run). **ALL CHECKS PASSED**: 61 checks and 1 descriptive count, in 4,147 s (arrays 5 s, clustering 267 s, balls 256 s, blocks 3,618 s). Peak RSS 10.46 GB, peak memory footprint 13.75 GB.
   - **The first run,** 02:16–02:47, before the task review: 59 checks and 1 descriptive count passed in 1,833 s (peak RSS 9.17 GB), with the all-slides fPCA refitted for blocks 1 and 11 only and `L2_ctl_all` unchecked. The rerun replaces its `results/verify.json`.
   - **Trial runs before it,** on subsets: the arrays (6 s); the balls of two slides (14 s); blocks 7 (42 s) and 1 (353 s, peak RSS 8.52 GB, the heaviest block with its all-slides fit); the clustering (275 s). Every check passed in each.
-  - **Independent routes** (the controller's rulings):
+  - **Routes** (the controller's rulings; the Coverage bullet below says which checks share code with what they check):
     - chalc 15.0.1 for the six-packs;
     - brute-force shuffles for the pair expectation;
     - topocyte's `betti_inner_product_matrix` for the inner products, with the weighted residual curves composed from the unit-weight inner products of each centre's 20 labelling curves;
@@ -769,9 +769,10 @@ Claude's calls:
     | MFA A, B and all: every level-2 row and the fractions by eigendecomposition | 45,000 rows × 20 | 1e-9 | 1.1e-12 at most; 7.6e-16 |
     | MFA A, B and all: the control's level-2 rows of the sampled centres (kernel route, then the MFA) | 200 centres × 16 blocks | 1e-9 | 7.4e-14 (A), 2.3e-13 (B), 3.5e-13 (all) |
 
-  - **Coverage** (as fix round 1 left it; the verifier's docstring, the README and the report's section 9 say the same):
-    - recomputed: the bars on 230 sampled balls (200 against chalc in labelling 0, one per slide in all 20 labellings; no ball is in both samples); the block scores of every fit sample in all 48 fits, every block's fractions of variance and kept count, and s0; every centre's spreads, `L1` and `P`; every level-2 row from the saved block scores; the results of `domains.py` in full;
-    - checked on the 200 sampled centres: the other rows of `blk_obs_*`, and the control's `L2_ctl_*` in all three bases;
+  - **Coverage** (as the final-review fix wave left it; the verifier's docstring, the README and the report's section 9 state it in their own words):
+    - recomputed for every centre or fit: `L1` and `P` from the saved class and pair counts; every centre's spreads, s0 and the zero-spread counts; the block scores of every fit sample in all 48 fits, with every block's fractions of variance and kept count; every level-2 row from the saved block scores; `domains.json`'s curves, choices (each half's k, largest gains and the too-small flag included), strata, settings and verdict;
+    - recomputed on samples: the bars of 230 balls (200 sampled, against chalc in labelling 0; one per slide, bit for bit in all 20 labellings; the two samples are checked to be disjoint), with their class counts; the pair counts of 50 of them (Qhull on the first 20 sampled, bit for bit on the 30); the other rows of `blk_obs_*` and the control's `L2_ctl_*` in all three bases on the 200 sampled centres;
+    - shared code: the bit-for-bit bars rerun the study's port; the fPCA refits use `curves.inner_matrix`, as `features.py` did, checked against topocyte on 10 sampled centres per block only; the clustering checks reimplement the rule but call the same scikit-learn `KMeans` with the same seeds and reference draws. Those checks reproduce rather than verify;
     - not recomputed: `results/preflight.json` (the pre-flight), the pilot draw (`results/pilot.csv`, whose counts per half and condition are checked), the features run's gate diagnostics (`gate_gram`, `gate_scores_*`) and the runs' timings, sizes and versions;
     - the guard's balanced accuracies reduce to asserting the guard is absent (ruling T8-c).
 - **Report:** `build_report.py` writes `report.html` (0.3 MB) in 79 s, peak RSS 6.92 GB, with no warning under `-W error` (`logs/build_report.log`; rebuilt after fix round 1). Sections follow ruling T8-a:
@@ -793,13 +794,13 @@ Claude's calls:
       - the domain H1 curves of all four classes rise above 0 (at 185 to 897 px²) before they fall below it (at 2,702 to 3,701 px²).
   - **The mechanism (T8-d),** both halves in the training half's z-coordinates at k = 2:
 
-    | direction | \|cos\| | training half's minority | test half's own minority | boundary offset, z-units | crossings | PS(2) |
+    | direction | \|cos\| | training half's minority | test half's own minority | midpoint offset, z-units | crossings | PS(2) |
     |---|---|---|---|---|---|---|
     | A→B | 0.993 | 17.5% of A | 15.7% of B (3,526) | +0.46 | 797 of B's 3,526 minority on A's majority side; 0 of 18,974 the other way | 0.650 |
     | B→A | 0.993 | 16.1% of B | 17.6% of A (3,964) | −0.51 | 711 of A's 18,536 majority on B's minority side; 0 of 3,964 the other way | 0.926 |
 
     - Every minority holds fuller balls with fewer epithelial and more stromal, immune and other cells: half B's own minority in A→B has log10 cells 2.216 against 2.113 and an epithelial fraction of 0.390 against 0.798.
-    - Half A's boundary lies further toward the minority than half B's, in both coordinate systems; the boundary offset is where each 2-means boundary crosses the training half's split direction.
+    - The midpoint of half A's two centroids lies further toward the minority than the midpoint of half B's, in both coordinate systems. The midpoint offset is the training centroids' midpoint minus the test centroids' midpoint, projected on the training half's split direction (unit length); the code called it the boundary offset, and this ledger first said, wrongly, that it is where each boundary crosses that direction.
     - The task reviewer's numbers (|cos| 0.993, a 16% minority, 797 of 3,526) are reproduced, and PS(2) recomputed from the crossings equals the saved value in both directions.
   - **Post hoc, outside the rule (T8-e):** PS(2) on three random half/half splits of all 45,000 centres (keys `[SEED, 0x5B17, i, 1]`), each random half holding centres of all 30 slides:
 
@@ -811,7 +812,7 @@ Claude's calls:
     | slide halves, the rule's bases | 0.650 / 0.926 | 0.737 / 0.926 |
     | slide halves, the all-slides basis | — | 0.741 / 0.934 |
 
-    The 2-means split is stable within a mixed set of slides and moves between the two slide halves, at both levels and in either basis. It cannot change the verdict.
+    High prediction strength on random halves is no evidence of a split: two random halves of one large sample give k-means a high PS(2) whether or not clusters exist, and cluster-free clouds give 0.98–0.99 (`design.md`, step 10 and the builder check; Task 4 above), the reason the rule asks the gap statistic first. What the contrast shows is that the two slide halves differ: half A's balls hold more cells, by 0.35 pooled SD in log10 cells, the largest of the level-1 differences. It cannot change the verdict. (Until the final-review fix wave this ledger said the split "moves between the two slide halves", which suggested a real split.)
   - **The look,** in the browser pane (the report served from a scratch copy on 127.0.0.1, dark theme), at 1,024 px and at the 375 px mobile preset: no horizontal page overflow, all five figures load, every table scrolls inside its wrapper. Fixed after the look:
     - the prediction-strength panels' threshold label sat on the curves at k = 2 and 3; it moved to the right end;
     - Helvetica Neue has no arrow glyph, so the legends say "trained on half A, tested on half B";
@@ -832,7 +833,7 @@ Claude's calls:
 - **Constants in `build_report.py` without a results file,** named as such and checked where they can be: the provenance (the md5 sums of `features.py` and `domains.py`, the git blob, the commits); the serial time per centre measured in Task 5 (0.50 s) and phimaker's 10 threads; the design's estimates (12 h serial, 2 h on 8 processes); and, since fix round 1, the k rule's first floor (0.02) and the rank ruling's threshold (1e-12 of the largest eigenvalue).
 - **`build_report.py` reads `logs/features.log`** for the features run's time, CPU and peak RSS, after checking that its first line names the md5 of this `features.py`. No results file holds them; the README says so.
 - **T8-e adds the slide halves in the all-slides basis** as a reference row (0.741 / 0.934), so the random splits and the slide halves are compared in one basis at level 2.
-- **T8-d adds the boundary offset,** which says on which side the crossings fall.
+- **T8-d adds the midpoint offset** (the boundary offset in the code), which says on which side the crossings fall.
 - **The report's mean residual curves are recomputed at every build** (76 s): a cache of 670 MB served development only and went to the Trash.
 
 ### Task 8, fix round 1: the task review (2026-11-23)
@@ -850,3 +851,22 @@ The review found 2 Important issues; its Minor findings are deferred to the whol
   - **The plurals** are asserted for both halves (sizes and slides per half) and for both random halves (all 30 slides in each).
 - **The rerun:** `verify_results.py` ALL CHECKS PASSED (61 checks and 1 descriptive count, 4,147 s, peak RSS 10.46 GB; "The run" above). `build_report.py -W error` rebuilt `report.html` in 79 s with no warning. ruff check and `ruff format --check` are clean on both files. No study module changed, so the suite was not rerun.
 
+### Final-review fix wave (2026-11-23)
+
+The whole-study review (86179f0..1db991c) found 0 Critical, 2 Important and 5 new Minor issues, and triaged 4 carried minors to fix before hand-over. Nothing it found moves a saved result or the verdict. One fixer; the edits touch only `build_report.py`, `verify_results.py`, the study README, `../README.md`, this ledger and `../.gitignore`, so every study module keeps its md5.
+
+- **I1, the post-hoc random splits.** Prediction strength of 0.95 or more on random halves was stated without what a cluster-free cloud gives. The report's summary and sections 3 and 4, `../README.md` and the T8-e note above now say that cluster-free clouds give 0.98–0.99 at k = 2 too, so the contrast shows that the slide halves differ (half A's balls hold more cells, by 0.35 pooled SD in log10 cells, asserted to be the largest difference), not that a split exists. The three records are quoted in `build_report.py` (`CLUSTER_FREE_PS2`) and found in `design.md` and this ledger at every build.
+- **I2, the second study.** The summary, section 8 and the README status now say that the design's fallback, the level-1 strata as the second study's regions, does not hold either: one stratum, so no regions at either level, and where they come from is Simon's decision.
+- **M1:** the README's run block creates `logs/`.
+- **M2:** the summary says the control gives k = 1 in both halves, not that it finds no structure; section 5 contrasts it with the observed level 2 (the gaps rise at every k there, asserted).
+- **M3:** section 1's note says that the rule was committed in 0b031a3 on 2026-11-21, before the bars began (2026-11-22), and ran unchanged, while the strata wording of `design.md` and `plan.md` came with the domains results in 381d0ce. `build_report.py` checks it from the git history: the design and the plan were added before the bars began, the rule's functions and constants stand verbatim in 0b031a3's `domains.py`, and the strata phrases first appear in 381d0ce.
+- **M4:** Task 6's control SD is 0.765 (was 0.77).
+- **M5:** `results/verify.json` records the md5 of `verify_results.py` and the sha256 of every gitignored file the verifier read (`features.npz`, `domains.npz`, the 30 bars files and the sibling's `density.npz`). `build_report.py` asserts the md5, and the sha256 of `features.npz` and the bars files it reads itself (3.8 s).
+- **L22:** `*.tmp` in `../.gitignore`, so a temporary file left by an interrupted atomic write cannot be staged.
+- **L44:** the report's section 9 and the verifier's docstring name the generators that are plain seeds: the pilot draw `default_rng(SEED)`, the gap references `default_rng(0)`, the pre-flight `default_rng(1)` and the guard's bootstrap `default_rng(12345)`. The report formats them from `domains.json`, `preflight.json` and `domains.py`.
+- **L46:** the T8-d offset is the midpoint offset along the training split direction, in `split_mechanism`'s docstring, the report's prose and table header, and the T8-d note above.
+- **L53, coverage.** The verifier's docstring, the README, the report's summary and section 9 and the Coverage bullet above say what is recomputed for every centre or fit, what only on samples, which checks share code with what they check, and what is not recomputed; "independent" is gone. New checks back the statements: each half's own k, its largest gain and the too-small flag of every rule application, the rule's settings and level-1 features in `domains.json` (`RULE` names them once in the verifier), and the disjointness of the 200 sampled and the 30 bit-for-bit balls. `verify.json` records the bit-for-bit rows and the size of the first sample, and the report asserts the disjointness too.
+- **L45, L49, L52, L54:** `rtol=0` beside `atol=1e-12`; `FEATURES_MD5` is the md5 of blob f7ae634's content; every B→A prediction strength up to k = 3 is asserted to reach 0.8; the README says to run the verifier with nothing else heavy open.
+- **The repeated rows (the review's recommendation):** section 4 says that in 9 of the 16 blocks at least 10% of the centres share one block-score row (all-slides fit), up to 71% in other image H1. Asserted for every block: those are exactly the centres with no bars in the block in any labelling, and in degree 0 exactly the balls with at most one cell of the class; the control's residual is zero there too, so it shares the rows.
+- **Also:** "all four classes" and "the largest of the three fits" are no longer typed, and `build_report.py`'s docstring names every source of its constants.
+- **Checks before the run:** ruff check and `ruff format --check` are clean on both files. The new clustering checks ran on their own (268 s, all passed), and `build_report.py -W error` built a scratch page from the previous `verify.json`, patched with the new fields and with the md5 and sha256 comparisons left out, in 86 s (peak RSS 6.63 GB) with no warning.

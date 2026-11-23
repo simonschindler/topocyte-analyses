@@ -4,18 +4,25 @@
 Run from this folder with the study venv and ``PYTHONPATH=<topocyte checkout at 18e3aa5>``
 (``common.check_topocyte``). It reads ``results/`` (``pilot.csv``, the bars jsons,
 ``features.npz``, ``domains.json``, ``preflight.json``, ``verify.json``), the bars files for the
-mean residual curves, and ``logs/features.log`` for the features run's time and memory, and
-writes ``report.html`` with every figure embedded as a 128-colour PNG (the sibling reports'
-palette). It writes nothing else. About 90 s, peak RSS about 7 GB (the mean residual curves).
+mean residual curves and the repeated rows, ``logs/features.log`` for the features run's time and
+memory, ``design.md`` and ``progress.md`` for the records it quotes, and the git history. It checks
+that ``verify.json`` comes from this folder's ``verify_results.py`` (md5) and that ``features.npz``
+and the bars files are the ones it checked (sha256). It writes ``report.html`` with every figure
+embedded as a 128-colour PNG (the sibling reports' palette), and nothing else. About 90 s, peak RSS
+about 7 GB (the mean residual curves).
 
-No number in the prose is typed by hand: each is formatted from those files or from the study's
-constants (``common``, ``features``, ``domains``), and every sentence that states a direction, a
-ranking or an outcome is asserted against the numbers it states. Four kinds of value have no
-results file and are constants below, named as such: the provenance of the saved results (commits
-and md5 sums, checked against the files and the git history), one measurement recorded in
-``progress.md`` (the serial time per centre behind the speed-up of 8 processes, and phimaker's
-threads), the design's estimates that the run is compared with, and two thresholds the rulings
-replaced or never applied (the k rule's first floor, and the rank ruling's threshold).
+No number in the prose is typed by hand: each is formatted from those files or from constants (the
+study's in ``common``, ``features`` and ``domains``, the defaults of ``chromatic.ball_sixpacks`` and
+of topocyte's ``fpca_from_gram``, and the post-hoc splits' seeds below), and every sentence that
+states a direction, a ranking or an outcome is asserted against the numbers it states. Six kinds of
+value have no results file and are constants below, named as such: the provenance of the saved
+results (commits and md5 sums, checked against the files and the git history), one measurement
+recorded in ``progress.md`` (the serial time per centre behind the speed-up of 8 processes, and
+phimaker's threads), the design's estimates that the run is compared with, two thresholds the
+rulings replaced or never applied (the k rule's first floor, and the rank ruling's threshold), the
+prediction strengths at k = 2 that ``design.md`` and ``progress.md`` record for cluster-free clouds
+(each quoted from its file, which is checked), and the share of centres from which the report lists
+a block's repeated rows.
 
 Three things are computed here, all descriptive (the controller's rulings for Task 8):
 - the stratum's mean residual curve of each block (T8-b): the exact mean, every bar kept with
@@ -38,6 +45,7 @@ import html
 import inspect
 import io
 import json
+import os
 import re
 import subprocess
 
@@ -61,8 +69,9 @@ ACCENT = "#2a78d6"
 HALF = {"A": "#2a78d6", "B": "#eb6834"}  # the dataviz palette's first two slots, validated as a pair
 L1_NAMES = ("log10 cells", *c.CLASSES)
 SPLIT_MARK, SPLIT_K = 0x5B17, 2  # T8-e: SeedSequence([SEED, 0x5B17, i, 1]), i = 1..3; prediction strength at k = 2
-# Provenance of the saved results (progress.md, Tasks 5-7, and the controller's ruling); check_provenance checks it.
-BARS_COMMIT, FEATURES_COMMIT, DOMAINS_COMMIT = "e8db8a4", "da7e578", "381d0ce"
+# Provenance of the saved results (progress.md, Tasks 4-7, and the controller's ruling); check_provenance checks it.
+# RULE_COMMIT added the rule for k (Task 4), which domains.py ran unchanged at DOMAINS_COMMIT.
+BARS_COMMIT, FEATURES_COMMIT, DOMAINS_COMMIT, RULE_COMMIT = "e8db8a4", "da7e578", "381d0ce", "0b031a3"
 FEATURES_BLOB, FEATURES_MD5 = "f7ae634", "48ef03203e58aca9de7cfebfae1200d9"
 DOMAINS_MD5 = "964d508240c2c32d9883e5f68e07dd34"
 # Measured once, without a results file (progress.md, Task 5): a centre of GTEX-YJ89-1426 took 0.50 s serially
@@ -73,6 +82,14 @@ DESIGN_SERIAL_HOURS, DESIGN_HOURS = 12, 2
 # The k rule's first floor, raised to 0.03 on 2026-11-21 (design.md, Rulings), and the rank ruling's threshold, an
 # eigenvalue above 1e-12 of a block's largest (features.py's docstring), which never binds.
 FIRST_FLOOR, RANK_RULING = 0.02, 1e-12
+# Prediction strength at k = 2 on cluster-free clouds, the reason the rule asks the gap statistic first: (file, the
+# record as quoted there, the value, the cloud). check_records finds each quote in its file.
+CLUSTER_FREE_PS2 = (
+    ("design.md", "PS(2) ≈ 0.98 at 4,000 points per half", 0.98, "a Gaussian with PCA-like variances, 4,000 per half"),
+    ("design.md", "gave PS 0.99 / 0.89 / 0.85 at k = 2 / 4 / 8", 0.99, "a level-1-like Gaussian, 22,500 per half"),
+    ("progress.md", "and also 0.98 at k = 2", 0.98, "the pre-flight's skewed level-1 cloud, 22,500 per half"),
+)
+REPEAT_SHARE = 0.10  # the report lists the blocks where at least this share of centres share one block-score row
 
 plt.rcParams.update(
     {
@@ -189,16 +206,36 @@ def git(*args: str) -> str:
     return subprocess.run(["git", "-C", str(c.HERE), *args], capture_output=True, text=True, check=True).stdout.strip()
 
 
-def check_provenance() -> dict:
-    """The code that wrote the saved results is the code here (md5 sums, git), and the features run's record."""
+def check_provenance(metas: list[dict]) -> dict:
+    """The code that wrote the saved results is the code here (md5 sums, git), the features run's record, and the
+    history of the rule for k and of the design's strata wording."""
 
     def md5(name: str) -> str:
         return hashlib.md5((c.HERE / name).read_bytes()).hexdigest()
 
+    def show(commit: str, name: str) -> str:
+        return git("show", f"{commit}:gtex-liver-chromatic-domains/{name}")
+
     blob = git("rev-parse", f"{FEATURES_COMMIT}:gtex-liver-chromatic-domains/features.py")
-    assert blob.startswith(FEATURES_BLOB) and md5("features.py") == FEATURES_MD5, "features.py changed"
+    content = subprocess.run(["git", "-C", str(c.HERE), "cat-file", "-p", blob], capture_output=True, check=True)
+    assert blob.startswith(FEATURES_BLOB) and hashlib.md5(content.stdout).hexdigest() == FEATURES_MD5
+    assert md5("features.py") == FEATURES_MD5, "features.py changed"
     assert md5("domains.py") == DOMAINS_MD5, "domains.py changed since it wrote domains.json"
     assert git("cat-file", "-t", BARS_COMMIT) == git("cat-file", "-t", DOMAINS_COMMIT) == "commit"
+    # The design, the plan and the rule for k were committed before the bars began, and the rule ran unchanged; the
+    # strata wording of design.md and plan.md came with the domains results.
+    bars_started = dt.datetime.fromisoformat(min(m["started"] for m in metas))
+    added = [git("log", "--diff-filter=A", "--format=%cI", "--", name) for name in ("design.md", "plan.md")]
+    rule_date = git("log", "-1", "--format=%cI", RULE_COMMIT)
+    assert all(dt.datetime.fromisoformat(d).replace(tzinfo=None) < bars_started for d in [*added, rule_date])
+    rule = (domains.kmeans_fit, domains._log_w, domains.stop_rule, domains.gap_choice, domains.prediction_strength)
+    old = show(RULE_COMMIT, "domains.py")
+    assert all(inspect.getsource(f).strip() in old for f in (*rule, domains.ps_from_labels, domains.choose_k))
+    assert all(f"{name} = {getattr(domains, name)}" in old for name in ("N_INIT", "N_REFERENCES", "MIN_GAIN", "PS_MIN"))
+    last_two = git("log", "--format=%H", "-2", DOMAINS_COMMIT, "--", "design.md", "plan.md").split()
+    assert last_two[0].startswith(DOMAINS_COMMIT) and last_two[1].startswith(RULE_COMMIT)
+    for name, phrase in (("design.md", "Compartments are strata, not modes"), ("plan.md", "composition strata")):
+        assert phrase not in show(RULE_COMMIT, name) and phrase in show(DOMAINS_COMMIT, name)
     log = (c.LOGS / "features.log").read_text().splitlines()
     assert f"features.py md5 {FEATURES_MD5}" in log[0], "logs/features.log is not the run of this features.py"
     wrote = re.search(r"in (\d+) s; peak RSS ([\d.]+) GB", next(line for line in log if line.startswith("wrote")))
@@ -208,22 +245,47 @@ def check_provenance() -> dict:
         "peak_rss_gb": float(wrote.group(2)),
         "cpu_seconds": float(user),
         "started": re.search(r"started (\S+ \S+),", log[0]).group(1),
+        "rule_date": rule_date[:10],
     }
+
+
+def check_verified_inputs(V: dict, pilot: pd.DataFrame) -> int:
+    """``verify.json`` comes from this folder's ``verify_results.py`` (md5), and ``features.npz`` and the bars files
+    read here are the files it checked (sha256). Returns the number of files compared."""
+    assert V["script_md5"] == hashlib.md5((c.HERE / "verify_results.py").read_bytes()).hexdigest(), "verify.json"
+    files = [c.RESULTS / "features.npz"] + [c.RESULTS / "bars" / f"{s}.npz" for s in pilot["slide_id"]]
+    for path in files:
+        with path.open("rb") as f:
+            digest = hashlib.file_digest(f, "sha256").hexdigest()
+        assert digest == V["inputs_sha256"][os.path.relpath(path, c.HERE)], f"{path.name} is not the verified file"
+    return len(files)
+
+
+def check_records() -> list[tuple[float, str]]:
+    """The cluster-free prediction strengths, each found as quoted in its file: (value, cloud)."""
+    out = []
+    for name, quote, value, cloud in CLUSTER_FREE_PS2:
+        assert quote in (c.HERE / name).read_text() and f"{value}" in quote, f"{name} does not record {quote!r}"
+        out.append((value, cloud))
+    return out
 
 
 def load() -> dict:
     pilot = pd.read_csv(c.RESULTS / "pilot.csv")
     metas = [json.loads((c.RESULTS / "bars" / f"{s}.json").read_text()) for s in pilot["slide_id"]]
+    V = json.loads((c.RESULTS / "verify.json").read_text())
+    n_verified = check_verified_inputs(V, pilot)
     with np.load(c.RESULTS / "features.npz", allow_pickle=False) as z:
-        F = {key: z[key] for key in z.files if not key.startswith("blk_obs_")}
+        F = {key: z[key] for key in z.files if not key.startswith("blk_obs_") or key == "blk_obs_all"}
     return {
         "pilot": pilot,
         "metas": metas,
         "F": F,
         "S": json.loads((c.RESULTS / "domains.json").read_text()),
         "PF": json.loads((c.RESULTS / "preflight.json").read_text()),
-        "V": json.loads((c.RESULTS / "verify.json").read_text()),
-        "run": check_provenance(),
+        "V": V,
+        "n_verified": n_verified,
+        "run": check_provenance(metas),
     }
 
 
@@ -260,14 +322,39 @@ def mean_residual_curves(
     return out, n
 
 
+def repeated_rows(pilot: pd.DataFrame, blk: np.ndarray) -> list[float]:
+    """Per block, the share of centres whose block-score row (all-slides fit) is the most common one.
+
+    Asserted: in every block those centres are exactly the ones with no bars in the block in any labelling, whose
+    residual is zero; in degree 0 they are exactly the balls with at most one cell of the class.
+    """
+    n_lab, n_blocks = c.R + 1, len(c.BLOCKS)
+    no_bars, class_counts = np.zeros((len(blk), n_blocks), bool), np.zeros((len(blk), len(c.CLASSES)), np.int64)
+    for _, slide in pilot.iterrows():
+        rows = int(slide["slide_index"]) * c.N_CENTRES + np.arange(c.N_CENTRES)
+        with np.load(c.RESULTS / "bars" / f"{slide['slide_id']}.npz", allow_pickle=False) as z:
+            per_owner, class_counts[rows] = np.diff(z["offsets"]), z["class_counts"]
+        no_bars[rows] = per_owner.reshape(c.N_CENTRES, n_lab, n_blocks).sum(axis=1) == 0
+    shares = []
+    for block, (t, _, p) in enumerate(c.BLOCKS):
+        _, inverse, counts = np.unique(blk[:, block], axis=0, return_inverse=True, return_counts=True)
+        repeated = inverse.ravel() == np.argmax(counts)
+        assert np.array_equal(repeated, no_bars[:, block]) and (
+            p == 1 or np.array_equal(repeated, class_counts[:, t] <= 1)
+        )
+        shares.append(float(repeated.mean()))
+    return shares
+
+
 def split_mechanism(L1: np.ndarray, half: np.ndarray, ps_curve: dict) -> dict:
     """T8-d: each prediction-strength direction at k = 2, both halves in the training half's z-coordinates.
 
     The training half's 2-means and the test half's own 2-means (``domains.kmeans_fit``, as
     ``prediction_strength`` fits them); the |cosine| of their centroid differences; each one's
-    minority share and mean level-1 features; where each one's boundary (the bisector of its two
-    centroids) crosses the training half's split direction, in the training half's z-units; and
-    the crossings, the test clusters' centres that the training centroids assign to the other side.
+    minority share and mean level-1 features; the offset between the two boundaries along the
+    training half's split direction (the midpoint of the training centroids minus the midpoint of
+    the test centroids, projected on that unit direction, in the training half's z-units); and the
+    crossings, the test clusters' centres that the training centroids assign to the other side.
     Prediction strength recomputed from the crossings must equal the saved PS(2).
     """
     out = {}
@@ -526,6 +613,9 @@ def main() -> None:
     half, L1 = F["half"], F["L1"]
     A = half == "A"
     assert V["passed"] and V["n_checks"] == len(V["checks"]) and all(check["passed"] for check in V["checks"])
+    cluster_free = check_records()
+    cf_low, cf_high = min(v for v, _ in cluster_free), max(v for v, _ in cluster_free)
+    assert cf_low >= domains.PS_MIN  # every cluster-free cloud passes the confirmation too
     level1, comps = S["level1"], S["compartments"]
     assert len(comps) == 1 and level1["k"] == 1 and S["control_k"] == [1] and S["control_passed"]
     stratum = comps[0]
@@ -533,6 +623,8 @@ def main() -> None:
     null = PF["descriptive"][0]
     assert null["case"].startswith("composition null") and PF["passed"]
     rule, guard_settings = S["settings"]["rule"], S["settings"]["guard"]
+    preflight_seed = int(re.match(r"one default_rng\((\d+)\) draws the cases", PF["data"]).group(1))
+    assert f"default_rng({domains.BOOT_SEED})" in guard_settings["bootstrap"]
     k_max1, k_max2, min_gain = rule["k_max_strata"], rule["k_max_subdomains"], rule["min_gain"]
     n_rows, n_slides, n_fit = len(half), len(pilot), int(F["fit"].sum())
     n_half = {h: int(np.count_nonzero(half == h)) for h in "AB"}
@@ -587,6 +679,7 @@ def main() -> None:
     assert null_construction.startswith("log10 of n = Poisson(")
     k_last = 2 + max(i for i, p in enumerate(level2["ps_curve"]["B->A"]) if p >= domains.PS_MIN)
     assert level2["ps_curve"]["A->B"][k_last - 2] < domains.PS_MIN
+    assert all(p >= domains.PS_MIN for p in level2["ps_curve"]["B->A"][: k_last - 1])
 
     # ---------------- slides, balls and compute
     cells = np.rint(10 ** L1[:, 0]).astype(np.int64)
@@ -639,10 +732,10 @@ def main() -> None:
     # ---------------- level 1: the stratum, the halves, the mechanism and the random splits
     means = {f: np.array(level1["zscore"][f]["mean"]) for f in ("A", "B", "all")}
     sds = {f: np.array(level1["zscore"][f]["sd"]) for f in ("A", "B", "all")}
-    assert np.allclose(means["all"], L1.mean(axis=0), atol=1e-12) and np.allclose(
-        means["A"], L1[A].mean(axis=0), atol=1e-12
+    assert np.allclose(means["all"], L1.mean(axis=0), rtol=0, atol=1e-12) and np.allclose(
+        means["A"], L1[A].mean(axis=0), rtol=0, atol=1e-12
     )
-    assert np.allclose(list(stratum["mean_L1"].values()), means["all"], atol=1e-12)
+    assert np.allclose(list(stratum["mean_L1"].values()), means["all"], rtol=0, atol=1e-12)
     assert stratum["size_A"] == stratum["size_B"] == n_half["A"] and stratum["slides_A"] == stratum["slides_B"]
     std_diff = (means["A"] - means["B"]) / np.sqrt((sds["A"] ** 2 + sds["B"] ** 2) / 2)
     feature_names = [name if j == 0 else f"{name} fraction" for j, name in enumerate(L1_NAMES)]
@@ -657,6 +750,7 @@ def main() -> None:
     )
     biggest = int(np.argmax(np.abs(std_diff)))
     assert means["A"][0] > means["B"][0] and means["A"][4] > means["B"][4] and means["A"][1] < means["B"][1]
+    assert biggest == 0  # the halves differ most in log10 cells (the summary and section 3 say so)
     mech = split_mechanism(L1, half, level1["ps_curve"])
     ab, ba = mech["A->B"], mech["B->A"]
     assert abs(ab["ps"] - ps1_ab) < 1e-12 and abs(ba["ps"] - ps1_ba) < 1e-12
@@ -666,7 +760,7 @@ def main() -> None:
             keys = [key for key in m["profiles"] if ("own" in key) == (kind == "own")]
             minority, majority = (m["profiles"][key] for key in sorted(keys, key=lambda key: "majority" in key))
             assert minority[1] < majority[1] and all(minority[j] > majority[j] for j in (0, 2, 3, 4))
-    # A's boundary lies further toward the minority's end than B's, in both halves' coordinates.
+    # The midpoint of A's centroids lies further toward the minority than B's, along either half's split direction.
     assert ab["boundary_offset"] > 0 > ba["boundary_offset"]
     assert (
         ab["minority"]["crossing"] > 0 == ab["majority"]["crossing"]
@@ -693,7 +787,7 @@ def main() -> None:
             "|cos| of the split directions",
             "training half's minority",
             "test half's own minority",
-            "training boundary − test boundary (z-units)",
+            "training − test centroid midpoint, along the training split (z-units)",
             "test minority on the training majority's side",
             "test majority on the training minority's side",
             "pairs kept together, minority / majority",
@@ -780,6 +874,16 @@ def main() -> None:
     breakpoints = [len(x) for x, _ in mean_curves.values()]
     ctl_sd, obs_sd = float(np.mean(F["L2_ctl_all"].std(axis=0))), float(np.mean(F["L2_obs_all"].std(axis=0)))
     assert ctl_sd < obs_sd
+    assert rising(level2, "A") and rising(level2, "B") and control["k_A"] == control["k_B"] == 1  # the contrast
+    shares = repeated_rows(pilot, F["blk_obs_all"])
+    listed = sorted((b for b in range(len(c.BLOCKS)) if shares[b] >= REPEAT_SHARE), key=lambda b: -shares[b])
+    assert listed
+
+    def block_name(b: int) -> str:
+        t, module, p = c.BLOCKS[b]
+        return f"{c.CLASSES[t]} {module} H{p}"
+
+    repeated_list = ", ".join(f"{block_name(b)} {100 * shares[b]:.0f}%" for b in listed)
 
     # ---------------- methods: per-block table, MFA, verification
     fits = features.FITS
@@ -843,7 +947,9 @@ def main() -> None:
     fit_checks = [ch for ch in V["checks"] if ch["check"].startswith("fPCA") and "fit-sample scores" in ch["check"]]
     assert len(fit_checks) == len(features.FITS) and all(ch["sample"] == f"{len(c.BLOCKS)} blocks" for ch in fit_checks)
     fits_max = max(ch["measured"] for ch in fit_checks)
-    n_balls = len(V["samples"]["balls"])
+    n_balls, n_first, bit_rows = len(V["samples"]["balls"]), V["samples"]["n_first"], V["samples"]["bit_for_bit"]
+    assert len(bit_rows) == n_slides and not set(bit_rows) & set(V["samples"]["balls"])  # disjoint samples
+    assert sorted(r // c.N_CENTRES for r in bit_rows) == list(range(n_slides))  # one per slide
 
     # ---------------- figures
     fig_level1 = figure(
@@ -894,22 +1000,27 @@ def main() -> None:
         "<p><strong>Under the rule fixed in advance, topology does not add.</strong> Level 1 gives one composition "
         f"stratum: each half's gap statistic rises at every k up to {k_max1}, but prediction strength at "
         f"k = {k_max1} is {level1['ps'][0]:.3f} (A→B) and {level1['ps'][1]:.3f} (B→A), below {domains.PS_MIN}, so "
-        f"k = {level1['k']}. The control finds no structure (k = {control['k']}), so level 2 runs. It gives no "
+        f"k = {level1['k']}. The control gives k = {control['k_A']} in both halves, so level 2 runs. It gives no "
         "subdomains: the gap rises to "
         f"k = {k_max2} in both halves, and prediction strength there is {level2['ps'][0]:.3f} and "
         f"{level2['ps'][1]:.3f}. The verdict is “{S['verdict']['verdict']}”, with the reason "
-        f"“{S['verdict']['reason']}”: the pairwise guard had nothing to test.</p>"
+        f"“{S['verdict']['reason']}”: the pairwise guard had nothing to test. The design's fallback does not hold "
+        "either: if topology did not add, the level-1 strata were to give the planned second study its regions, and "
+        "there is one stratum. The pilot gives that study no regions at either level; where they come from instead "
+        "is Simon's decision.</p>"
         f"<p><strong>No split recurs across the slide halves.</strong> The best k at both levels is {k1}, with "
         f"prediction strength {ps1_ab:.3f} / {ps1_ba:.3f} at level 1 and {ps2_ab:.3f} / {ps2_ba:.3f} at level 2. At "
         f"level 1 both halves split along nearly the same direction (|cos| {min(ab['cos'], ba['cos']):.3f} or more) "
         "into a minority of fuller "
-        "balls with fewer epithelial and more stromal, immune and other cells, but half A's boundary lies further "
-        f"toward the minority: {ab['minority']['crossing']:,} of half B's {ab['minority']['n']:,} minority centres "
-        "fall on half A's majority side. Post hoc, on random half/half splits that mix the slides, prediction "
-        f"strength at k = {SPLIT_K} is at least {low:.3f} in every direction at both levels: the split recurs within a "
-        "mixed set of slides and moves between the two slide halves.</p>"
-        f"<p>{n_gated} independent checks of the saved results passed (<code>verify_results.py</code>); section 9 "
-        "says what they recompute and what they leave out.</p>"
+        "balls with fewer epithelial and more stromal, immune and other cells, but the midpoint of half A's "
+        f"centroids lies further toward the minority: {ab['minority']['crossing']:,} of half B's "
+        f"{ab['minority']['n']:,} minority centres fall on half A's majority side. Post hoc, on random half/half "
+        f"splits that mix the slides, prediction strength at k = {SPLIT_K} is at least {low:.3f} in every direction at "
+        f"both levels. That is no sign of a split: cluster-free clouds give {cf_low:.2f}–{cf_high:.2f} too "
+        "(<code>design.md</code>, <code>progress.md</code>). It shows that the two slide halves differ: half A's "
+        f"balls hold more cells, by {num(std_diff[0], 2)} pooled SD in log10 cells.</p>"
+        f"<p>{n_gated} checks of the saved results passed (<code>verify_results.py</code>); section 9 says what they "
+        "recompute, which of them share code with what they check, and what they leave out.</p>"
     )
 
     rulings = [
@@ -960,6 +1071,8 @@ def main() -> None:
         ),
     ]
     rulings_table = table(["date", "who", "ruling"], [list(row) for row in rulings], "left2")
+    strata_date = next(date for date, who, _ in rulings if who == "Simon (strata)")
+    assert strata_date < bars_started[:10]
 
     section1 = f"""
   <h2>1. Question and rulings</h2>
@@ -982,7 +1095,9 @@ def main() -> None:
   {rulings_table}
   <p class="note">Every ruling, with what it costs if wrong, is in <code>design.md</code> and
   <code>progress.md</code>. The design, the plan and the rule for k were committed before any centre was
-  computed.</p>"""
+  computed: the rule in {RULE_COMMIT} on {run["rule_date"]}, and <code>domains.py</code> ran it unchanged; the bars
+  began on {bars_started[:10]}. The strata wording of <code>design.md</code> and <code>plan.md</code> (ruled
+  {strata_date}) was committed only with the domains results, in {DOMAINS_COMMIT}.</p>"""
 
     section2 = f"""
   <h2>2. Pilot slides and compute</h2>
@@ -1040,9 +1155,10 @@ def main() -> None:
   split along nearly the same direction: the |cosine| between the two halves' centroid differences is
   {ab["cos"]:.3f} (A→B) and {ba["cos"]:.3f} (B→A). Every split cuts off a minority of fuller balls with fewer
   epithelial and more stromal, immune and other cells: {100 * ab["test_minority_share"]:.1f}% of half B in A's
-  coordinates, {100 * ab["train_minority_share"]:.1f}% of half A in its own. Along the shared direction, half A's
-  boundary lies further toward the minority than half B's, by {ab["boundary_offset"]:.2f} z-units in A's
-  coordinates and {-ba["boundary_offset"]:.2f} in B's. So half A's centroids put {ab["minority"]["crossing"]:,} of
+  coordinates, {100 * ab["train_minority_share"]:.1f}% of half A in its own. Along the training half's split
+  direction, the midpoint of half A's two centroids lies further toward the minority than the midpoint of half B's,
+  by {ab["boundary_offset"]:.2f} z-units in A's coordinates and {-ba["boundary_offset"]:.2f} in B's. So half A's
+  centroids put {ab["minority"]["crossing"]:,} of
   half B's {ab["minority"]["n"]:,} minority centres
   ({100 * ab["minority"]["crossing"] / ab["minority"]["n"]:.0f}%) on the majority side, and only
   {ab["minority"]["share"]:.3f} of that cluster's pairs stay together: that is PS({k1}) A→B. In the other direction
@@ -1055,8 +1171,14 @@ def main() -> None:
   {len(splits["rows"])} random half/half splits of all {n_rows:,} centres, each random half holding centres of all
   {n_slides} slides, at level 1 (z-scored
   as the rule does) and at level 2 in the all-slides basis, the one basis both random halves share. Every
-  direction reaches at least {low:.3f}. Within a mixed set of slides the 2-means split is stable; between the two
-  slide halves it is not, at either level, and the all-slides basis does not change that.</p>
+  direction reaches at least {low:.3f}. That is no evidence of a split: two random halves of one large sample give
+  k-means a high prediction strength at k = {SPLIT_K} whether or not clusters exist, which is why the rule asks the
+  gap statistic first. On cluster-free clouds the records give
+  {html.escape("; ".join(f"{value:.2f} for {cloud}" for value, cloud in cluster_free))}
+  (<code>design.md</code>, the builder check and step 10; <code>progress.md</code>, Task 4). What the contrast shows
+  is that the two slide halves differ: half A's balls hold more cells, by {num(std_diff[0], 2)} pooled SD in log10
+  cells, the largest difference in the table above. Between the slide halves the 2-means split does not carry over,
+  at either level, and the all-slides basis does not change that.</p>
   {split_table}
   <p class="note">Seeds: <code>SeedSequence([SEED, 0x{SPLIT_MARK:X}, i, 1])</code>, i = 1..{len(splits["rows"])};
   k-means as in
@@ -1074,9 +1196,14 @@ def main() -> None:
   The best
   k is again {k2} ({ps2_ab:.3f} / {ps2_ba:.3f}); B→A stays at or above {domains.PS_MIN} up to k = {k_last}
   ({level2["ps_curve"]["B->A"][k_last - 2]:.3f}), but A→B is {level2["ps_curve"]["A->B"][k_last - 2]:.3f} there. As at
-  level 1, half A's gains exceed half B's and A→B is the weaker direction at k = {k2}, and the post-hoc random splits
-  of section 3
-  show the same picture at this level.</p>
+  level 1, half A's gains exceed half B's and A→B is the weaker direction at k = {k2}. On the post-hoc random splits
+  of section 3 prediction strength at k = {SPLIT_K} is high at this level too, which, as there, shows that the slide
+  halves differ, not that subdomains exist.</p>
+  <p><strong>Repeated rows.</strong> In {len(listed)} of the {len(c.BLOCKS)} blocks at least
+  {100 * REPEAT_SHARE:.0f}% of the centres share one identical block-score row (all-slides fit): {repeated_list}.
+  They are exactly the centres with no bars in that block in any of the {c.R + 1} labellings, whose residual is
+  zero; in degree 0, exactly the balls with at most one cell of the class. The shuffles keep each ball's class
+  counts, so the control's residual is zero at the same centres, and it shares these rows.</p>
   {fig_level2}
   <details><summary>Table: the level-2 gap and prediction-strength curves</summary>{rule_table(level2)}</details>
   <p><strong>The stratum's mean residual curves.</strong> The mean of the {n_curves:,} fit-sample centres' scaled
@@ -1084,9 +1211,9 @@ def main() -> None:
   average. In degree 0, the domain and image curves of the stromal, immune and other classes have negative
   integrals and dip furthest at α² of {span(h0_rest, "at_min")}. There the observed cells of each of these classes
   fall into fewer components, on their own and among all cells, than the same number of shuffled cells. In degree
-  1, the image curves of all four classes have positive integrals and peak at α² of {span(image_h1, "at_max")}:
-  there more loops of one class's cells stay holes among all cells than under shuffling. The domain H1 curves of all
-  four classes rise above 0 before they fall below it: maxima at α² of {span(domain_h1, "at_max")}; minima at
+  1, the image curves of every class have positive integrals and peak at α² of {span(image_h1, "at_max")}:
+  there more loops of one class's cells stay holes among all cells than under shuffling. The domain H1 curves of
+  every class rise above 0 before they fall below it: maxima at α² of {span(domain_h1, "at_max")}; minima at
   {span(domain_h1, "at_min")}. With no subdomains these are the stratum's only curves; there is no split of
   them to compare.</p>
   {fig_means}
@@ -1101,7 +1228,9 @@ def main() -> None:
   {signed(margin(control, "A"))} in half A and {signed(margin(control, "B"))} in half B), so the control passed
   and level 2 ran. Half B's largest gain, {control["gap_B"]["largest_gain"]:.4f} at k = {k_max2}, comes after its
   gap has stopped. In the all-slides basis the control's level-2 columns have a mean SD of {ctl_sd:.2f}, against
-  {obs_sd:.2f} for the observed.</p>
+  {obs_sd:.2f} for the observed. The contrast with the observed level 2: there each half's gap rises at every k up
+  to {k_max2}; here it stops at k = {control["k_A"]} in both halves. The topology features depart from a matched
+  Gaussian where shuffle noise does not, but not as clusters that recur across the halves (section 4).</p>
   {fig_control}
   <details><summary>Table: the control's gap and prediction-strength curves</summary>{rule_table(control)}</details>"""
 
@@ -1127,7 +1256,12 @@ def main() -> None:
   <h2>8. The H&amp;E atlas</h2>
   <p>The atlas was planned for compartments and subdomains: random centres of each group with their H&amp;E
   crops, labels hidden first, and Simon's words for each group recorded in the ledger. With one composition stratum
-  and no subdomains there are no groups to compare. Whether to build it is Simon's decision.</p>"""
+  and no subdomains there are no groups to compare. Whether to build it is Simon's decision.</p>
+  <p>The same holds for the second study the design planned, which would compare the pathology conditions region
+  by region with topocyte's local log-odds and attribution maps. Its regions were to be the subdomains, or, if
+  topology did not add, the level-1 strata (<code>design.md</code>). That fallback does not hold either: there is
+  one stratum, so the pilot gives the study no regions at either level, and where they come from instead is
+  Simon's decision.</p>"""
 
     section9 = f"""
   <h2>9. Methods and reproduction</h2>
@@ -1135,8 +1269,11 @@ def main() -> None:
     <li><strong>Balls and labellings.</strong> Per slide, {c.N_CENTRES:,} centres drawn without replacement; a
     centre's ball is every cell within δ = {c.DELTA_UM:.0f} µm, boundary included. Labelling 0 is the observed classes
     (the cell-type study's {len(c.CLASSES)} groups of HistoPLUS types); labellings 1..{c.R} permute them within the
-    ball. Every generator uses <code>np.random.SeedSequence</code> with a key of the seed, the slide, the centre and a
-    stream, whose last entry is non-zero.</li>
+    ball. The centre draws, the fit samples and the labellings use <code>np.random.SeedSequence</code> with a key of
+    the seed, the slide, the centre and a stream, whose last entry is non-zero. The other generators are plain
+    seeds: the pilot draw <code>default_rng(SEED)</code>, the gap statistic's references
+    <code>default_rng({rule["seed"]})</code>, the pre-flight <code>default_rng({preflight_seed})</code> and the
+    guard's bootstrap <code>default_rng({domains.BOOT_SEED})</code>, which did not run.</li>
     <li><strong>Six-packs.</strong> The numba port of chalc's chromatic Delaunay–Čech filtration (faces to dimension
     {face_dim}; values are squared smallest-enclosing-ball radii in px², topocyte's α² convention) and phimaker
     {versions["phimaker"]}'s
@@ -1177,21 +1314,34 @@ def main() -> None:
   variance of the {features.N_COMPONENTS} components. Gate 1: <code>curves.inner_matrix</code> against topocyte's
   <code>betti_inner_product_matrix</code> (unit weights, {features.GATE_CURVES} curves, relative); gate 2: the fit
   sample's scores
-  against <code>fpca_from_gram</code>'s (relative to the largest score), the largest of the three fits.</p>
+  against <code>fpca_from_gram</code>'s (relative to the largest score), the largest over the {len(fits)}
+  fits.</p>
   {mfa_table}
   <h3>Verification</h3>
-  <p><code>verify_results.py</code> recomputes the saved results by routes independent of the ones that made them:
-  {n_gated} checks passed, beside {V["n_checks"] - n_gated} descriptive count, in {V["seconds"]["total"]:,.0f} s. It
-  recomputes the bars of {n_balls} sampled balls in labelling 0 against chalc {versions["chalc"]}, and of one ball
-  per slide in all {c.R + 1} labellings; the block scores of every fit sample in all
-  {len(features.FITS) * len(c.BLOCKS)} fits, with every block's fractions of variance, kept count and s0; every
-  centre's spreads, level-1 and pairwise features; every level-2 row from the saved block scores; and the results
-  of <code>domains.py</code>. It checks the other centres' block scores and the control's level-2 rows on the
-  {n_balls} sampled centres. It does not recompute the pre-flight, the pilot draw (whose counts per half and
-  condition it checks), the features run's gate diagnostics (the gate columns of the per-block table) or the runs'
-  timings, sizes and versions. The saved labelling-0 bars match chalc to {sixpack["measured"]:.1e} of each ball's
-  scale, and the fits
-  match <code>fpca_from_gram</code> to {fits_max:.1e} of the largest score.</p>
+  <p><code>verify_results.py</code> recomputes the saved results: {n_gated} checks passed, beside
+  {V["n_checks"] - n_gated} descriptive count, in {V["seconds"]["total"]:,.0f} s. Most checks take another route
+  than the code that made the result. Where a check shares code with it, it reproduces rather than verifies: the
+  bars bit for bit rerun the study's own port; the fPCA refits build their Gram matrices with
+  <code>curves.inner_matrix</code>, as <code>features.py</code> did, and that function is checked against topocyte's
+  <code>betti_inner_product_matrix</code> on sampled centres only; and the clustering checks reimplement the rule
+  but call the same scikit-learn <code>KMeans</code> with the same seeds and reference draws.</p>
+  <ul>
+    <li><strong>For every centre or fit:</strong> the level-1 and pairwise features from the saved class and pair
+    counts; every centre's spreads, s0 and the zero-spread counts; the block scores of every fit sample in all
+    {len(features.FITS) * len(c.BLOCKS)} fits, with every block's fractions of variance and kept count; every
+    level-2 row from the saved block scores; and <code>domains.json</code>'s curves, choices, strata, settings and
+    verdict.</li>
+    <li><strong>On samples:</strong> the bars of {n_balls + len(bit_rows)} balls, {n_balls} sampled in labelling 0
+    against chalc {versions["chalc"]} and one per slide in all {c.R + 1} labellings (the two samples are disjoint),
+    which also recompute those balls' class counts; the pair counts of {n_first + len(bit_rows)} of them (Qhull on
+    the first {n_first} sampled balls, bit for bit on the {len(bit_rows)} one per slide); the other centres' block
+    scores and the control's level-2 rows on the {n_balls} sampled centres.</li>
+    <li><strong>Not recomputed:</strong> the pre-flight, the pilot draw (whose counts per half and condition it
+    checks), the features run's gate diagnostics (the gate columns of the per-block table) and the runs' timings,
+    sizes and versions.</li>
+  </ul>
+  <p>The saved labelling-0 bars match chalc to {sixpack["measured"]:.1e} of each ball's scale, and the fits match
+  <code>fpca_from_gram</code> to {fits_max:.1e} of the largest score.</p>
   <details><summary>Table: every check</summary>{verify_table}</details>
   <h3>Provenance</h3>
   <ul>
@@ -1203,8 +1353,13 @@ def main() -> None:
     {FEATURES_MD5[:8]}…, the first line of <code>logs/features.log</code>), started {run["started"]}.</li>
     <li><code>results/domains.json</code> and <code>.npz</code>: <code>domains.py</code> md5 {DOMAINS_MD5[:8]}…
     at {DOMAINS_COMMIT}; the pre-flight re-run at {DOMAINS_COMMIT}.</li>
-    <li>This page checks the md5 sums of <code>features.py</code> and <code>domains.py</code> against those runs'
-    before it is built.</li>
+    <li>The rule for k: <code>domains.py</code>'s rule as committed in {RULE_COMMIT} on {run["rule_date"]},
+    unchanged at {DOMAINS_COMMIT}.</li>
+    <li><code>results/verify.json</code>: <code>verify_results.py</code> md5 {V["script_md5"][:8]}…, with the
+    sha256 of every gitignored file it read.</li>
+    <li>This page checks the md5 sums of <code>features.py</code>, <code>domains.py</code> and
+    <code>verify_results.py</code> against those runs', and the sha256 of the {d["n_verified"]} files it reads that the
+    verifier read (<code>features.npz</code> and the bars files), before it is built.</li>
   </ul>"""
 
     document = f"""<!doctype html>

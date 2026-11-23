@@ -4,13 +4,26 @@
 Level 1 gives one composition stratum, the control passes, and level 2 gives no
 subdomains, so the verdict is "does not add" ("no compartment with subdomains")
 and the pairwise guard had nothing to test. `report.html` has the curves and the
-reasons. `verify_results.py` recomputes the saved results by independent routes:
-the bars on 230 sampled balls, every fit's fPCA and MFA, every centre's spreads
-and level-1 and pairwise features, and the results of `domains.py`. It does not
-redo the pre-flight, the pilot draw (it checks its counts), the features run's
-gate diagnostics or the runs' timings. The H&E atlas was planned for
+reasons. The design's fallback does not hold either: if topology did not add,
+the level-1 strata were to give the planned second study its regions, and there
+is one stratum. The pilot gives that study no regions at either level; where
+they come from instead is Simon's decision. The H&E atlas was planned for
 compartments and subdomains; with one stratum and no subdomains there are no
 groups to compare, and whether to build it is Simon's decision.
+
+`verify_results.py` recomputes, for every centre or fit, the level-1 and
+pairwise features from the saved class and pair counts, every centre's spreads,
+every fit's fPCA and MFA and every level-2 row, and the results of
+`domains.py`. On samples it recomputes the bars of 230 balls (200 sampled,
+against chalc; one per slide, bit for bit; the two samples disjoint) with their
+class counts, the pair counts of 50 of them (Qhull on 20, bit for bit on 30),
+and the other centres' block scores and the control's level-2 rows on the 200
+sampled centres. Most checks take another route than the code they check; the
+bit-for-bit bars, the Gram matrices (`curves.inner_matrix`, as `features.py`
+used it) and the k-means fits (the same scikit-learn calls and seeds) reproduce
+rather than verify. It does not redo the pre-flight, the pilot draw (it checks
+its counts), the features run's gate diagnostics or the runs' timings, sizes
+and versions.
 
 Around each cell of a GTEx liver slide, does the arrangement of cell types
 relative to each other define recurring microanatomical domains that density,
@@ -52,13 +65,17 @@ uv pip install --python .venv/bin/python -r requirements.txt
 | `verify_results.py`, `build_report.py` | `f62ff28` and the task review's fixes after it | `18e3aa5` | 2026-11-23 |
 
 The run order, from this folder. The long runs went on AC power inside
-`caffeinate -is`, with `/usr/bin/time -l` and their logs in `logs/`;
-`build_report.py` reads the features run's time and peak RSS from
-`logs/features.log`, whose first line names the md5 of `features.py`.
+`caffeinate -is`, with `/usr/bin/time -l` and their logs in `logs/` (gitignored,
+so a fresh checkout creates it); `build_report.py` reads the features run's time
+and peak RSS from `logs/features.log`, whose first line names the md5 of
+`features.py`. Run `verify_results.py` with nothing else heavy open: on the
+16 GB Mac its peak RSS reached 10.46 GB and its memory footprint 13.75 GB,
+climbing across the blocks (allocator cache, it seems).
 
 ```bash
 export PYTHONPATH=/path/to/topocyte-18e3aa5
 PY=.venv/bin/python
+mkdir -p logs
 $PY -m pytest -q -W error                       # the study's tests, about 2 min
 $PY run_pilot.py pilot
 $PY run_pilot.py preflight                      # about 12 min
@@ -77,9 +94,11 @@ slide index), `results/venv_freeze.txt`, `results/preflight.json`,
 `results/bars/*.json` (each slide's timings, sizes and versions),
 `results/domains.json` (the rule's curves, choices and verdict) and
 `results/verify.json` (every check with its sample, tolerance and measured
-value).
+value, the md5 of `verify_results.py`, and the sha256 of every gitignored file
+it read).
 
 Not in git: `results/bars/*.npz` (9.33 GB), `results/features.npz` (206 MB),
 `results/domains.npz`, `logs/`, `report.html` and the `.venv/`. The scripts
 regenerate them; the copy the report was built from is in this folder on
-Simon's machine.
+Simon's machine, and `build_report.py` checks `features.npz` and the bars files
+against the sums in `results/verify.json`.

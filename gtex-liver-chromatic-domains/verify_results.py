@@ -1,16 +1,22 @@
 #!/usr/bin/env python
-"""Independent checks of the chromatic-domains pilot's saved results; prints ``ALL CHECKS PASSED``.
+"""Checks of the chromatic-domains pilot's saved results; prints ``ALL CHECKS PASSED``.
 
 Run from this folder with the study venv and ``PYTHONPATH=<topocyte checkout at 18e3aa5>``
-(``common.check_topocyte``). It reads the cohort read only (h5py mode "r") and ``results/``,
-writes ``results/verify.json`` (each check with its sample, tolerance and measured value, and
-the run's time and peak RSS) and exits 1 if any check fails. Nothing else is written.
+(``common.check_topocyte``). It reads the cohort read only (h5py mode "r"), the sibling study's
+``density.npz`` (through ``common.read_slide``) and ``results/``, and writes
+``results/verify.json``: each check with its sample, tolerance and measured value; the run's time,
+peak RSS and versions; this file's md5; and the sha256 of every gitignored file it read
+(``results/features.npz``, ``results/domains.npz``, the 30 bars files and the sibling's
+``density.npz``; the cohort, outside the repository, is not hashed). It exits 1 if any check fails.
+Besides numba's cache in ``__pycache__``, nothing else is written.
 
-Each check recomputes a saved result by another route than the one that made it:
+Most checks recompute a saved result by another route than the one that made it. Where a check
+shares code or library calls with what it checks, its bullet says so:
 
 * **arrays and provenance:** every array of ``features.npz``, ``domains.npz`` and the 30 bars
   files finite; the bars files' owners, offsets and sort order; the centre draws and fit samples
-  redrawn from their keys; ``L1`` from the class counts; ``P`` from exact rational expectations;
+  redrawn from their keys; ``L1`` from the class counts; ``P`` from the pair counts and exact
+  rational expectations;
 * **six-packs** on 200 sampled real balls (cells found by brute force): the saved labelling-0
   domain and image bars and the codomain against chalc 15.0.1, the port (faces to dimension 3 and
   to dimension 2, every module) against chalc, the three Betti identities at every endpoint, and
@@ -19,7 +25,8 @@ Each check recomputes a saved result by another route than the one that made it:
   ties can pair near-zero bars differently in chalc's exact arithmetic (progress.md, Task 2);
   the bottleneck distance must stay within 1e-9 of the scale;
 * **bars bit for bit:** one ball per slide recomputed with ``chromatic.ball_sixpacks``, all 20
-  labellings and 16 blocks, the codomain and the pair counts;
+  labellings and 16 blocks, the codomain and the pair counts. This is the code that made the bars:
+  a reproduction, not an independent route;
 * **pair counts:** on the first 20 sampled balls, the Delaunay edges by scipy (Qhull) against the
   saved counts, and the expectation against 10,000 brute-force shuffles (within 5 standard errors);
 * **inner products:** per block, ``curves.inner_matrix`` against topocyte's
@@ -31,34 +38,47 @@ Each check recomputes a saved result by another route than the one that made it:
   the zero-spread counts; on the first 20 sampled balls, s² by brute force from topocyte's 19 × 19
   Gram matrix against the study's ``curves.spread2`` and the sweep;
 * **decompositions:** every fit of every block (half A, half B and all slides, 48 fits) refitted
-  from the bars, with the Gram matrix of ``curves.inner_matrix`` and topocyte's ``fpca_from_gram``,
-  against the saved scores, fractions of variance and kept counts. The 200 sampled centres are
-  scored by the kernel route (c - mean Gram row)·v/√ρ, observed and control. The MFA of each fit by
-  a numpy eigendecomposition with the sibling sign rule, against every saved level-2 row, and the
-  control's level-2 rows of the sampled centres in each fit's basis;
+  from the bars against the saved scores, fractions of variance and kept counts. The Gram matrices
+  come from ``curves.inner_matrix``, the function ``features.py`` used (checked against topocyte
+  above); the components and scores from topocyte's ``fpca_from_gram``. The 200 sampled centres
+  are scored by the kernel route (c - mean Gram row)·v/√ρ, observed and control. The MFA of each
+  fit by a numpy eigendecomposition with the sibling sign rule, against every saved level-2 row,
+  and the control's level-2 rows of the sampled centres in each fit's basis;
 * **clustering and verdict:** level 1, the control and level 2 recomputed from ``features.npz``
-  with scikit-learn's ``KMeans`` and the saved seeds, by this file's own gap statistic, stopping
-  rule and prediction strength (k exactly; gap, s and prediction strength within 1e-12, since
-  k-means inertia moves by an ulp between calls); each stratum's sizes and mean level-1 features;
-  the verdict from the recomputed k's. The guard did not run: its balanced accuracies reduce to
-  asserting it is absent.
+  by this file's own gap statistic, stopping rule and prediction strength (k exactly; gap, s and
+  prediction strength within 1e-12, since k-means inertia moves by an ulp between calls). They run
+  on scikit-learn's ``KMeans`` with the saved seeds and reference draws, the library calls
+  ``domains.py`` makes, so the k-means fits are reproduced rather than found another way. Each
+  half's own k and largest gain, the too-small flags, each stratum's sizes and mean level-1
+  features, the rule's settings (``RULE``) and the verdict from the recomputed k's are checked too.
+  The guard did not run: its balanced accuracies reduce to asserting it is absent.
 
-Coverage. The bars are recomputed on 230 sampled balls (200 against chalc in labelling 0, one per
-slide in all 20 labellings); the block scores of every fit sample, every block's fractions of
-variance and kept counts, s0, every centre's spreads, ``L1`` and ``P``, every saved level-2 row
-from the saved block scores, and the results of ``domains.py`` in full; the other rows of
+Coverage. Recomputed for every centre or fit: ``L1`` and ``P`` from the saved class and pair counts;
+s0 and the zero-spread counts from every centre's spreads; the block scores of every fit sample in
+all 48 fits, with every block's fractions of variance and kept counts; every level-2 row from the
+saved block scores; and ``domains.json``'s curves, choices, strata, settings and verdict. Recomputed
+on samples: the bars of 230 balls (200 against chalc in labelling 0, one per slide in all 20
+labellings; the two samples are checked to be disjoint), which also recompute those balls' class
+counts; the pair counts of 50 of them (Qhull on 20, bit for bit on 30); the other rows of
 ``blk_obs_*`` and the control's ``L2_ctl_*`` on the 200 sampled centres. Not recomputed:
 ``results/preflight.json`` (the pre-flight), the pilot draw (``results/pilot.csv``, whose counts per
 half and condition are checked), the features run's gate diagnostics (``gate_gram`` and
 ``gate_scores_*``, errors that run measured) and the runs' timings, sizes and versions.
 
-Samples. Every draw uses ``np.random.SeedSequence`` with a 4-entry key whose last entry is
-non-zero (``common``'s rule). The verifier's own keys carry a mark in the second entry, above
-every slide index, so none meets a study key ``[SEED, slide_index, centre_index, stream]``.
+Samples. The verifier's own draws use ``np.random.SeedSequence`` with a 4-entry key whose last
+entry is non-zero (``common``'s rule) and a mark in the second entry above every slide index, so
+none meets a study key ``[SEED, slide_index, centre_index, stream]``. To reproduce the saved
+results it also redraws with the study's own generators: the centre draws, fit samples and
+labellings from their ``SeedSequence`` keys, and the gap statistic's references from
+``default_rng(0)``, as ``domains.py`` draws them. The study's other generators are plain seeds and
+are not redrawn here: the pilot draw (``default_rng(SEED)``, checked through its counts), the
+pre-flight (``default_rng(1)``) and the guard's bootstrap (``default_rng(12345)``; the guard did not
+run).
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import platform
@@ -67,6 +87,7 @@ import sys
 import time
 from fractions import Fraction
 from math import comb
+from pathlib import Path
 
 import gudhi
 import numba as nb
@@ -93,6 +114,9 @@ MARK_BALLS, MARK_ONE_PER_SLIDE, MARK_SHUFFLES = 0xBA11, 0xB17, 0x5AFF  # [SEED, 
 N_BALLS, N_FIRST, N_INNER = 200, 20, 10
 N_SHUFFLES = 10_000
 DROP_RTOL, BOTTLENECK_RTOL = 1e-12, 1e-9
+# The rule for k (design step 10), restated here rather than imported from domains.py; checked against domains.json.
+RULE = {"B": 20, "min_gain": 0.03, "ps_min": 0.8, "n_init": 20, "seed": 0}
+RULE |= {"k_max_strata": 10, "k_max_subdomains": 6, "min_half": 500}
 PAIR_INDEX = np.full((4, 4), -1, np.int64)
 for _k, (_a, _b) in enumerate(c.PAIRS):
     PAIR_INDEX[_a, _b] = PAIR_INDEX[_b, _a] = _k
@@ -124,6 +148,11 @@ def rng_of(key: list[int]) -> np.random.Generator:
 def peak_rss_gb() -> float:
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return (peak if sys.platform == "darwin" else 1024 * peak) / 1e9
+
+
+def sha256(path: Path) -> str:
+    with path.open("rb") as f:
+        return hashlib.file_digest(f, "sha256").hexdigest()
 
 
 def load_bars(slide_id: str, keys: tuple[str, ...] | None = None) -> dict[str, np.ndarray]:
@@ -349,17 +378,19 @@ def pair_check(bxy: np.ndarray, bcls: np.ndarray, z: dict, centre: int, j: int) 
     return agree, float(zs.max())
 
 
-def check_balls(pilot: pd.DataFrame, sample: np.ndarray) -> None:
+def check_balls(pilot: pd.DataFrame, sample: np.ndarray) -> list[int]:
+    """The ball checks; returns the rows of the bit-for-bit balls, one per slide."""
     import topocyte as tc
 
     worst = {"saved": 0.0, "dim3": 0.0, "dim2": 0.0, "alpha": 0.0}
     n_cmp = dict.fromkeys(worst, 0)
     n_dropped = identity = ball_bad = bit_bad = pair_bad = n_bit_bars = 0
-    z_worst, first = 0.0, [int(r) for r in sample[:N_FIRST]]
+    z_worst, first, ones = 0.0, [int(r) for r in sample[:N_FIRST]], []
     chromatic.ball_sixpacks(np.array([[0.0, 0.0], [3.0, 1.0], [1.0, 4.0]]), np.array([0, 1, 2]))  # load numba
     for s, slide in pilot.iterrows():
         rows = sorted(int(r) for r in sample if r // c.N_CENTRES == s)
         one = int(rng_of([c.SEED, MARK_ONE_PER_SLIDE, s, 1]).integers(c.N_CENTRES))
+        ones.append(s * c.N_CENTRES + one)
         xy, cls = c.read_slide(slide["slide_id"])
         z = load_bars(slide["slide_id"])
         balls = {}
@@ -416,6 +447,14 @@ def check_balls(pilot: pd.DataFrame, sample: np.ndarray) -> None:
         counts, n_edges = chromatic.pair_counts(bxy, bcls)
         bit_bad += not (same and np.array_equal(counts, z["pair_counts"][one]) and n_edges == z["n_edges"][one])
         print(f"  balls: {slide['slide_id']}: {len(rows)} sampled, centre {one} bit for bit", flush=True)
+    overlap = len(set(ones) & {int(r) for r in sample})
+    check(
+        "balls: the sampled balls and the bit-for-bit balls (one per slide) are disjoint",
+        overlap == 0 and len(set(ones)) == len(ones) and len(np.unique(sample)) == len(sample),
+        overlap,
+        "0 shared",
+        f"{len(sample)} sampled, {len(ones)} bit for bit",
+    )
     check(
         "balls: cells by brute force equal the saved counts",
         ball_bad == 0,
@@ -471,6 +510,7 @@ def check_balls(pilot: pd.DataFrame, sample: np.ndarray) -> None:
         "5 SE",
         f"first {N_FIRST} sampled balls × 10 pairs",
     )
+    return ones
 
 
 # ---------------------------------------------------------------- per block: spreads, inner products, decompositions
@@ -813,13 +853,13 @@ def zscore(X: np.ndarray, ref: np.ndarray) -> np.ndarray:
 
 
 def kmeans(X: np.ndarray, k: int) -> KMeans:
-    return KMeans(n_clusters=k, n_init=20, random_state=0).fit(X)
+    return KMeans(n_clusters=k, n_init=RULE["n_init"], random_state=RULE["seed"]).fit(X)
 
 
-def gap_statistic(X: np.ndarray, k_max: int, B: int = 20) -> tuple[np.ndarray, np.ndarray, dict]:
+def gap_statistic(X: np.ndarray, k_max: int, B: int = RULE["B"]) -> tuple[np.ndarray, np.ndarray, dict]:
     """Gap(k) and s_k for k = 1..k_max against B Gaussian draws with X's mean and covariance (one default_rng(0),
     in order), with W_1 the total sum of squares; and the k-means fits of X for k >= 2."""
-    rng = np.random.default_rng(0)
+    rng = np.random.default_rng(RULE["seed"])
     mean, cov = X.mean(axis=0), np.cov(X, rowvar=False)
     fits = {k: kmeans(X, k) for k in range(2, k_max + 1)}
 
@@ -837,7 +877,7 @@ def stop(gap: np.ndarray, s: np.ndarray) -> int:
     """Where the gap stops rising (design step 10): the smallest k >= 1 with Gap(k) >= Gap(k+1) - s_(k+1), else
     k_max; a k >= 2 must gain at least 0.03 over Gap(1), else 1."""
     k_hat = next((k for k in range(1, len(gap)) if gap[k - 1] >= gap[k] - s[k]), len(gap))
-    return k_hat if k_hat == 1 or gap[k_hat - 1] - gap[0] >= 0.03 else 1
+    return k_hat if k_hat == 1 or gap[k_hat - 1] - gap[0] >= RULE["min_gain"] else 1
 
 
 def strength(train_model: KMeans, test: np.ndarray, k: int) -> float:
@@ -864,7 +904,7 @@ def recompute_rule(halves: dict[str, np.ndarray], tests: dict[str, np.ndarray], 
     k = min(k_A, k_B)
     ps = [] if k == 1 else [curve["A->B"][k - 2], curve["B->A"][k - 2]]
     return {
-        "k": 1 if any(x < 0.8 for x in ps) else k,
+        "k": 1 if any(x < RULE["ps_min"] for x in ps) else k,
         "k_A": k_A,
         "k_B": k_B,
         "ps": ps,
@@ -875,8 +915,9 @@ def recompute_rule(halves: dict[str, np.ndarray], tests: dict[str, np.ndarray], 
 
 def compare_rule(label: str, mine: dict, saved: dict) -> None:
     exact = mine["k"] == saved["k"] and mine["k_A"] == saved["k_A"] and mine["k_B"] == saved["k_B"]
+    exact &= all(saved[f"gap_{h}"]["k"] == mine[f"k_{h}"] for h in "AB") and not saved.get("too_small", False)
     check(
-        f"{label}: k, k_A and k_B recomputed",
+        f"{label}: k, k_A, k_B and each half's own k recomputed; the rule ran (not too small)",
         exact,
         abs(mine["k"] - saved["k"]),
         "exact",
@@ -887,7 +928,9 @@ def compare_rule(label: str, mine: dict, saved: dict) -> None:
         for h in "AB"
         for j, key in enumerate(("gap", "s"))
     )
-    check(f"{label}: both halves' gap and s curves", err <= 1e-12, err, "1e-12", "k = 1..k_max")
+    gains = {h: float(np.max(mine["gap"][h][0][1:] - mine["gap"][h][0][0])) for h in "AB"}
+    err = max([err] + [abs(gains[h] - saved[f"gap_{h}"]["largest_gain"]) for h in "AB"])
+    check(f"{label}: both halves' gap and s curves and largest gains", err <= 1e-12, err, "1e-12", "k = 1..k_max")
     errors = [float(np.max(np.abs(np.array(mine["curves"][d]) - saved["ps_curve"][d]))) for d in ("A->B", "B->A")]
     errors += [abs(x - y) for x, y in zip(mine["ps"], saved["ps"], strict=False)]
     err = max(errors) if len(mine["ps"]) == len(saved["ps"]) else np.inf
@@ -903,10 +946,22 @@ def compare_rule(label: str, mine: dict, saved: dict) -> None:
 def check_clustering(F: dict, D: dict, summary: dict) -> None:
     half, L1 = F["half"], F["L1"]
     A, B = half == "A", half == "B"
+    settings_ok = (
+        summary["settings"]["rule"] == RULE
+        and summary["settings"]["level1_features"] == ["log10 cells", *c.CLASSES]
+        and summary["n_centres"] == N_ROWS
+    )
+    check(
+        "domains.json: the rule's settings and the level-1 features are this file's",
+        settings_ok,
+        int(not settings_ok),
+        "exact",
+        f"{len(RULE)} settings",
+    )
     level1 = recompute_rule(
         {"A": zscore(L1[A], L1[A]), "B": zscore(L1[B], L1[B])},
         {"A": zscore(L1[B], L1[A]), "B": zscore(L1[A], L1[B])},
-        10,
+        RULE["k_max_strata"],
     )
     compare_rule("level 1", level1, summary["level1"])
     saved_z = summary["level1"]["zscore"]
@@ -945,7 +1000,10 @@ def check_clustering(F: dict, D: dict, summary: dict) -> None:
     for comp in range(strata):
         Ac, Bc = (compartment == comp) & A, (compartment == comp) & B
         record = summary["compartments"][comp]
-        if min(Ac.sum(), Bc.sum()) < 500:
+        if min(Ac.sum(), Bc.sum()) < RULE["min_half"]:
+            sides = [record["control"]] + [record["level2"]] * (record["level2"] is not None)
+            small = all(side["too_small"] and side["k"] == 1 for side in sides)
+            check(f"stratum {comp}: too small for the rule", small, int(not small), "exact", "control and level 2")
             control_k.append(1)
             level2_k.append(1)
             continue
@@ -953,7 +1011,8 @@ def check_clustering(F: dict, D: dict, summary: dict) -> None:
             if key == "obs" and control_k[-1] > 1:
                 break
             X = {h: F[f"L2_{key}_{h}"] for h in "AB"}
-            mine = recompute_rule({"A": X["A"][Ac], "B": X["B"][Bc]}, {"A": X["A"][Bc], "B": X["B"][Ac]}, 6)
+            halves, tests = {"A": X["A"][Ac], "B": X["B"][Bc]}, {"A": X["A"][Bc], "B": X["B"][Ac]}
+            mine = recompute_rule(halves, tests, RULE["k_max_subdomains"])
             compare_rule(f"stratum {comp}, {'control' if key == 'ctl' else 'level 2'}", mine, record[label])
             ks.append(mine["k"])
     control_passed = all(k == 1 for k in control_k)
@@ -999,19 +1058,23 @@ def check_clustering(F: dict, D: dict, summary: dict) -> None:
 
 def main() -> None:
     started = time.perf_counter()
+    script_md5 = hashlib.md5(Path(__file__).read_bytes()).hexdigest()
     c.check_topocyte()
     pilot = pd.read_csv(c.RESULTS / "pilot.csv")
+    inputs = [c.RESULTS / "features.npz", c.RESULTS / "domains.npz"]
+    inputs += [c.RESULTS / "bars" / f"{slide_id}.npz" for slide_id in pilot["slide_id"]] + [c.SIB / "density.npz"]
+    inputs_sha256 = {os.path.relpath(f, c.HERE): sha256(f) for f in inputs}
     with np.load(c.RESULTS / "features.npz", allow_pickle=False) as z:
         F = {key: z[key] for key in z.files}
     with np.load(c.RESULTS / "domains.npz", allow_pickle=False) as z:
         D = {key: z[key] for key in z.files}
     summary = json.loads((c.RESULTS / "domains.json").read_text())
     sample = sampled_rows()
-    seconds = {}
+    seconds, bit_for_bit = {}, []
     for name, run in (
         ("arrays", lambda: check_arrays_and_provenance(pilot, F, D)),
         ("clustering", lambda: check_clustering(F, D, summary)),
-        ("balls", lambda: check_balls(pilot, sample)),
+        ("balls", lambda: bit_for_bit.extend(check_balls(pilot, sample))),
         ("blocks", lambda: check_blocks(pilot, F, sample)),
     ):
         t = time.perf_counter()
@@ -1035,7 +1098,11 @@ def main() -> None:
             "scikit-learn": sklearn.__version__,
             "gudhi": gudhi.__version__,
         },
-        "samples": {"balls": [int(r) for r in sample]},
+        # The sampled balls (the first n_first also get the pair-count checks and the brute-force spreads) and the
+        # bit-for-bit balls, one per slide; rows of features.npz.
+        "samples": {"balls": [int(r) for r in sample], "n_first": N_FIRST, "bit_for_bit": bit_for_bit},
+        "script_md5": script_md5,
+        "inputs_sha256": inputs_sha256,
     }
     out = c.RESULTS / "verify.json"
     tmp = out.with_name(out.name + ".tmp")
