@@ -4,7 +4,8 @@ or by the study's four classes, with the slides filtered by pathology group. On 
 clusters every cell by the composition of its ball (the pilot's level-1 features) with a chosen k and radius,
 or, on the 30 pilot slides, the 1,500 sampled centres by their saved chromatic TDA features (level 2), or
 colours every cell by its saved cohort-wide e-means cluster (the sibling study gtex-liver-emeans-neighbourhoods).
-Every cell can also be coloured by its 10-nearest-neighbour density, binned at the cohort's deciles.
+Every cell can also be coloured by its 10-nearest-neighbour density, binned at the cohort's deciles, and the
+cells below a density threshold can be hidden in every layer. The shown slide's GTEx pathology notes are shown.
 
 Adapted from ``tissuegeometry/web/cosine_viewer`` (its DeepZoom tile serving and WebGL point overlay) without
 its local-homology endpoints, its FastAPI backend or its tissuegraphs and Rust imports.
@@ -18,7 +19,8 @@ then open the printed address. A slide is shown on its H&E when DIR holds a file
 with a suffix OpenSlide reads (``.svs`` for GTEx); the cells' coordinates are level-0 pixels of that slide.
 
 Read only: the cohort ``.h5ad`` (h5py mode "r"), the pathology study's ``density.npz`` (each slide's cohort
-rows, and every cell's density, memory-mapped) and ``pathology.csv`` (each slide's group), this study's ``results/pilot.csv`` and ``results/features.npz``,
+rows, and every cell's density, memory-mapped) and ``pathology.csv`` (each slide's group, GTEx pathology
+categories and notes), this study's ``results/pilot.csv`` and ``results/features.npz``,
 the e-means study's ``results/labels_<set>.npz``, ``clusters.json``, ``gap.json`` and ``kmeans_check.json``
 (the e-means option is off when they are not there), and the slide files.
 Nothing is written.
@@ -70,6 +72,7 @@ EMEANS_SETS = ("composition", "density", "composition+density")
 WORSE = 0.002  # log ratio of W_k above which a fit is named worse than k-means++'s (the e-means study's report)
 PACKED = 3  # (set, k) whose packed labels of every cohort cell (63 MB each) stay in memory
 DENSITY_BINS = 10  # the density layer's bins: the cohort's deciles of the 10-NN density, the density slices
+CURVE_STEPS = 1000  # the threshold slider's steps: the cohort's density quantiles at levels 0, 0.001, ..., 1
 STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css"}
 
 
@@ -142,6 +145,38 @@ def density_codes(rho: np.ndarray, deciles: np.ndarray) -> np.ndarray:
     rho >= d_j, and d_0 is the cohort's minimum.
     """
     return np.searchsorted(deciles[1:], rho, side="right").astype(np.uint8)
+
+
+def density_blob(rho: np.ndarray, bins: np.ndarray) -> bytes:
+    """``[n u32][n × f32 density][n u8 bin]``, little-endian: a slide's densities (cells per mm²) and bins."""
+    n = len(bins)
+    if rho.shape != (n,):
+        raise ValueError(f"{rho.shape} densities for {n} bins")
+    return (
+        struct.pack("<I", n)
+        + np.ascontiguousarray(rho, dtype="<f4").tobytes()
+        + np.ascontiguousarray(bins, dtype=np.uint8).tobytes()
+    )
+
+
+def threshold_curve(curve: np.ndarray, levels: np.ndarray, deciles: np.ndarray) -> np.ndarray:
+    """The cohort's density quantiles at levels 0, 0.001, ..., 1 (the pathology study's curve), with every hundredth
+    step set to that study's decile, so that the threshold slider's steps 0, 100, ..., 900 are the density slices'
+    thresholds. ``ValueError`` if the levels are not those steps or the result does not rise."""
+    if len(curve) != CURVE_STEPS + 1 or not np.allclose(levels, np.linspace(0, 1, CURVE_STEPS + 1), rtol=0, atol=1e-12):
+        raise ValueError(f"the density curve has {len(curve)} levels, not 0 to 1 in steps of 1/{CURVE_STEPS}")
+    out = np.array(curve, dtype=np.float64)
+    out[0 : CURVE_STEPS : CURVE_STEPS // DENSITY_BINS] = deciles
+    if np.any(np.diff(out) < 0):
+        raise ValueError("the density curve with the deciles in place does not rise")
+    return out
+
+
+def load_notes(path: Path) -> dict[str, dict[str, str]]:
+    """Each slide's GTEx pathology categories and notes and its quality flag, from the pathology study's table."""
+    columns = ["slide_id", "categories", "notes", "quality_flag"]
+    table = pd.read_csv(path, usecols=columns, dtype=str, keep_default_na=False)
+    return {row.slide_id: {key: getattr(row, key) for key in columns[1:]} for row in table.itertuples(index=False)}
 
 
 def cell_types() -> list[str]:
@@ -425,12 +460,16 @@ class Cohort:
         self._pilot: dict | None = None  # slide ID -> the pilot's saved centres, loaded on the first TDA request
         self.emeans_sets = load_emeans(EMEANS)  # None without the e-means study's results
         self._packed: OrderedDict[tuple, np.ndarray] = OrderedDict()  # (set, k) -> packed labels of every cell
-        self._density: OrderedDict[str, dict] = OrderedDict()  # slide ID -> its cells' density bins
+        self._density: OrderedDict[str, bytes] = OrderedDict()  # slide ID -> its cells' densities and bins
         n_cohort = int(self.slides["end"].max())
         self.rho = npz_memmap(c.SIB / "density.npz", "rho")  # every cohort cell's 10-NN density, cells per mm²
         with np.load(c.SIB / "density.npz", allow_pickle=False) as density:
             self.deciles = np.asarray(density["deciles"], dtype=np.float64)
             self.k_nn, self.density_um_per_px = int(density["k_nn"]), float(density["pixel_um"])
+            self.curve = threshold_curve(density["curve"], density["curve_levels"], self.deciles)
+        self.notes = load_notes(c.SIB / "pathology.csv")
+        if set(self.notes) != set(self.by_id):
+            raise ValueError("pathology.csv's notes and the slide table hold different slides")
         if self.rho.shape != (n_cohort,) or self.rho.dtype != np.float64:
             raise ValueError(f"density.npz's rho is {self.rho.dtype} {self.rho.shape}, not {n_cohort:,} densities")
         if len(self.deciles) != DENSITY_BINS or not np.all(np.diff(self.deciles) > 0):
@@ -462,6 +501,7 @@ class Cohort:
                 "deciles": self.deciles.tolist(),
                 "k_nn": self.k_nn,
                 "um_per_px": self.density_um_per_px,
+                "curve": self.curve.tolist(),
             },
             "emeans": None
             if self.emeans_sets is None
@@ -476,6 +516,7 @@ class Cohort:
                     "n_cells": int(r.n_cells),
                     "pilot": bool(r.pilot),
                     "wsi": r.slide_id in self.wsis,
+                    **self.notes[r.slide_id],
                 }
                 for r in self.slides.itertuples(index=False)
             ],
@@ -615,8 +656,8 @@ class Cohort:
         with self._lock:
             return remember(self._clusters, key, result, 8)
 
-    def density(self, slide_id: str) -> dict:
-        """The density bin of every cell of the slide (``density_codes``), as JSON-ready data."""
+    def density(self, slide_id: str) -> bytes:
+        """Every cell's density and density bin (``density_codes``) on the slide, as ``density_blob``."""
         with self._lock:
             if slide_id in self._density:
                 self._density.move_to_end(slide_id)
@@ -625,10 +666,9 @@ class Cohort:
         rho = np.asarray(self.rho[int(row.start) : int(row.end)])
         if not np.all(np.isfinite(rho) & (rho > 0)):
             raise RuntimeError(f"{slide_id}: a cell has no positive, finite density")
-        codes = density_codes(rho, self.deciles)
-        result = {"slide_id": slide_id, "codes": base64.b64encode(codes.tobytes()).decode("ascii")}
+        blob = density_blob(rho, density_codes(rho, self.deciles))
         with self._lock:
-            return remember(self._density, slide_id, result, CACHE)
+            return remember(self._density, slide_id, blob, CACHE)
 
     def packed(self, name: str, k: int) -> np.ndarray:
         """The e-means study's packed labels of every cohort cell for one set and k."""
@@ -740,7 +780,7 @@ def make_handler(cohort: Cohort) -> type[BaseHTTPRequestHandler]:
                 k = cluster_request({"k": query.get("k", [""])})[0]
                 self.send(HTTPStatus.OK, json.dumps(cohort.tda(parts[2], k)).encode(), "application/json")
             elif len(parts) == 3 and parts[:2] == ["api", "density"] and parts[2] in cohort.by_id:
-                self.send(HTTPStatus.OK, json.dumps(cohort.density(parts[2])).encode(), "application/json")
+                self.send(HTTPStatus.OK, cohort.density(parts[2]), "application/octet-stream")
             elif len(parts) == 3 and parts[:2] == ["api", "emeans"] and parts[2] in cohort.by_id:
                 name, k = emeans_request(query)
                 self.send(HTTPStatus.OK, json.dumps(cohort.emeans(parts[2], name, k)).encode(), "application/json")

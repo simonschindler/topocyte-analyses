@@ -209,3 +209,40 @@ def test_density_codes_are_the_last_density_slice_that_keeps_the_cell():
     deciles = np.array([0.0, 10, 20, 30, 40, 50, 60, 70, 80, 90])
     rho = np.array([0.0, 9.99, 10.0, 55.0, 89.9, 90.0, 1e6])
     assert serve.density_codes(rho, deciles).tolist() == [0, 0, 1, 5, 8, 9, 9]
+
+
+def test_density_blob_layout():
+    rho = np.array([0.5, 1200.25, 4100.0])
+    bins = np.array([0, 1, 9], dtype=np.uint8)
+    blob = serve.density_blob(rho, bins)
+    n = struct.unpack_from("<I", blob)[0]
+    assert n == 3 and len(blob) == 4 + 5 * n
+    assert np.array_equal(np.frombuffer(blob, "<f4", n, 4), rho.astype(np.float32))
+    assert np.array_equal(np.frombuffer(blob, np.uint8, n, 4 + 4 * n), bins)
+    with pytest.raises(ValueError, match="densities"):
+        serve.density_blob(rho[:2], bins)
+
+
+def test_threshold_curve_puts_the_deciles_at_every_hundredth_step():
+    levels = np.linspace(0, 1, serve.CURVE_STEPS + 1)
+    curve = 1000 * levels**2
+    deciles = curve[::100][:10] + 1e-9  # the study's deciles differ from its curve in the last digits
+    out = serve.threshold_curve(curve, levels, deciles)
+    assert np.array_equal(out[0:1000:100], deciles) and out[1] == curve[1] and out[-1] == curve[-1]
+    with pytest.raises(ValueError, match="levels"):
+        serve.threshold_curve(curve[:-1], levels[:-1], deciles)
+    with pytest.raises(ValueError, match="does not rise"):
+        serve.threshold_curve(curve, levels, deciles[::-1])
+
+
+def test_load_notes_keeps_empty_fields_as_empty_text(tmp_path):
+    path = tmp_path / "pathology.csv"
+    path.write_text(
+        "slide_id,group,label,label_reason,categories,notes,quality_flag,n_cells\n"
+        'S1,cirrhosis,cirrhosis,curated,"cirrhosis, fibrosis","2 pieces; cirrhosis",,10\n'
+        "S2,unclassified,other,none,,,preservation,5\n"
+    )
+    assert serve.load_notes(path) == {
+        "S1": {"categories": "cirrhosis, fibrosis", "notes": "2 pieces; cirrhosis", "quality_flag": ""},
+        "S2": {"categories": "", "notes": "", "quality_flag": "preservation"},
+    }

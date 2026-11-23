@@ -20,6 +20,7 @@ const state = {
   types: null, // the shown slide's type code per cell
   clusters: null, // /api/cluster/<id> of the shown slide, with its labels decoded
   density: null, // the shown slide's density bin per cell (/api/density/<id>)
+  rho: null, // the shown slide's 10-NN density per cell, float32
   densityCounts: null, // cells per density bin on the shown slide
   layer: "types", // "types" | "classes" | "clusters" | "density"
   hidden: { types: new Set(), classes: new Set(), clusters: new Set(), density: new Set() },
@@ -237,20 +238,37 @@ function slideLabel(s) {
   return `${s.slide_id} · ${fmt(s.n_cells)} cells${s.pilot ? " · pilot" : ""}${s.wsi ? " · H&E" : ""}`;
 }
 
+// A slide's option in the list, with its GTEx pathology categories and notes as the tooltip.
+function slideOption(s) {
+  const option = new Option(slideLabel(s), s.slide_id);
+  option.title = [s.categories, s.notes].filter(Boolean).join(": ") || "no pathology categories or notes";
+  return option;
+}
+
+function renderPathology(id) {
+  const s = state.meta.slides.find((x) => x.slide_id === id);
+  $("pathology").hidden = !s;
+  if (!s) return;
+  $("pathology-group").textContent = `Pathology group: ${s.group}`;
+  $("pathology-flag").textContent = s.quality_flag ? `flag: ${s.quality_flag}` : "";
+  $("pathology-categories").textContent = `GTEx categories: ${s.categories || "none"}`;
+  $("pathology-notes").textContent = s.notes ? `Notes: ${s.notes}` : "No pathology notes.";
+}
+
 function renderSlides() {
   const group = $("group").value;
   const onlyHne = $("hne-only").checked;
   const slides = state.meta.slides.filter((s) => (!group || s.group === group) && (!onlyHne || s.wsi));
   const list = $("slides");
   if (group) {
-    list.replaceChildren(...slides.map((s) => new Option(slideLabel(s), s.slide_id)));
+    list.replaceChildren(...slides.map(slideOption));
   } else {
     const blocks = state.meta.groups.map((g) => {
       const members = slides.filter((s) => s.group === g.name);
       if (!members.length) return null;
       const block = document.createElement("optgroup");
       block.label = g.name;
-      block.append(...members.map((s) => new Option(slideLabel(s), s.slide_id)));
+      block.append(...members.map(slideOption));
       return block;
     }).filter(Boolean);
     list.replaceChildren(...blocks);
@@ -400,6 +418,41 @@ async function runClusters() {
   }
 }
 
+// --- density threshold --------------------------------------------------------------------------------
+
+// The threshold at a slider step (the cohort's density quantile at step / 1000; the deciles at steps 0, 100, ...,
+// 900), and the density bin it falls in, by density_codes' rule.
+function thresholdAt(step) {
+  const { curve, deciles } = state.meta.density;
+  const t = curve[step];
+  return { t, bin: deciles.slice(1).filter((d) => d <= t).length };
+}
+
+// Hide the cells below the threshold in every layer, as the overlay decides it: by bin where the bins differ,
+// by float32 density inside the threshold's bin.
+function applyThreshold() {
+  const step = Number($("threshold").value);
+  const { t, bin } = thresholdAt(step);
+  overlay?.setThreshold(bin, t);
+  const bins = state.density;
+  const rho = state.rho;
+  if (!bins) {
+    $("threshold-note").textContent = "";
+    return;
+  }
+  const tf = Math.fround(t);
+  let shown = 0;
+  for (let i = 0; i < bins.length; i++) if (bins[i] > bin || (bins[i] === bin && rho[i] >= tf)) shown += 1;
+  const n = bins.length;
+  if (step === 0) {
+    $("threshold-note").textContent = `No threshold: every cell is shown (${fmt(n)}).`;
+    return;
+  }
+  const slice = step % 100 === 0 ? `, density slice ${step / 100}` : "";
+  $("threshold-note").textContent = `≥ ${fmt(Math.round(t))} cells per mm² (cohort percentile `
+    + `${(step / 10).toFixed(1)}${slice}): ${fmt(shown)} of ${fmt(n)} cells shown (${((100 * shown) / n).toFixed(1)}%).`;
+}
+
 // --- scale bar --------------------------------------------------------------------------------------------
 
 // The longest of 1, 2 or 5 × 10^k that is not above maxUm.
@@ -438,12 +491,13 @@ function slideStatus(info) {
 
 async function loadSlide(id) {
   state.slide = id;
+  renderPathology(id);
   setStatus(`Loading ${id} …`);
   try {
     const [info, buffer, density] = await Promise.all([
       fetchOk(`/api/slide/${encodeURIComponent(id)}`).then((r) => r.json()),
       fetchOk(`/api/cells/${encodeURIComponent(id)}`).then((r) => r.arrayBuffer()),
-      fetchOk(`/api/density/${encodeURIComponent(id)}`).then((r) => r.json()),
+      fetchOk(`/api/density/${encodeURIComponent(id)}`).then((r) => r.arrayBuffer()),
     ]);
     if (state.slide !== id) return; // a later choice won
     const n = new DataView(buffer).getUint32(0, true);
@@ -451,8 +505,9 @@ async function loadSlide(id) {
     const types = new Uint8Array(buffer, 4 + 8 * n, n);
     const counts = new Array(state.meta.types.length).fill(0);
     for (let i = 0; i < n; i++) counts[types[i]] += 1;
-    const bins = decode(density.codes);
-    if (bins.length !== n) throw new Error(`${bins.length} density bins for ${n} cells`);
+    if (new DataView(density).getUint32(0, true) !== n) throw new Error(`density for another number of cells`);
+    const rho = new Float32Array(density, 4, n);
+    const bins = new Uint8Array(density, 4 + 4 * n, n);
     const binCounts = new Array(DENSITY.light.length).fill(0);
     for (let i = 0; i < n; i++) binCounts[bins[i]] += 1;
     const source = info.wsi
@@ -468,12 +523,14 @@ async function loadSlide(id) {
       state.counts = counts;
       state.types = types;
       state.density = bins;
+      state.rho = rho;
       state.densityCounts = binCounts;
       updateMethod();
       clearClusters();
       overlay ??= new PointsOverlay(viewer, CELL_UM / info.um_per_px);
       overlay.cellPx = CELL_UM / info.um_per_px;
-      overlay.setPoints(xy, codesOf(state.layer));
+      overlay.setPoints(xy, codesOf(state.layer), bins, rho);
+      applyThreshold();
       $("hne").disabled = !info.wsi;
       applyHne();
       applyColors();
@@ -528,6 +585,7 @@ async function init() {
   });
   $("k").addEventListener("keydown", (event) => { if (event.key === "Enter") runClusters(); });
   clearClusters();
+  $("threshold").addEventListener("input", applyThreshold);
   $("size").addEventListener("input", (event) => overlay?.setPointScale(Number(event.target.value)));
   $("alpha").addEventListener("input", (event) => overlay?.setAlpha(Number(event.target.value)));
   $("hne").addEventListener("change", () => {

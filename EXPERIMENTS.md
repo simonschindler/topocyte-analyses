@@ -448,7 +448,9 @@ coloured by:
 - the chromatic-domains pilot's TDA features;
 - the saved e-means clusters of study 6.
 
-It reads everything read only and writes nothing.
+A slider hides the cells below a density threshold in any colouring, and a box
+shows the slide's GTEx pathology notes. It reads everything read only and
+writes nothing.
 
 ## What we have learned
 

@@ -36,6 +36,15 @@
   #slides { height: 260px; font-variant-numeric: tabular-nums; }
   #slides optgroup { color: var(--ink2); font-style: normal; }
   #slides option { color: var(--ink); }
+  .pathology {
+    display: flex; flex-direction: column; gap: 3px; padding: 8px 10px; font-size: 12px;
+    border: 1px solid var(--rule); border-radius: 4px; background: var(--surface);
+  }
+  .pathology[hidden] { display: none; }
+  .pathology .head { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
+  .pathology .flag { color: var(--muted); font-weight: 400; }
+  .pathology .categories { color: var(--ink2); }
+  .pathology .notes { margin: 0; }
   .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--ink2); font-size: 12px; }
   .check { display: flex; align-items: center; gap: 6px; color: var(--ink2); font-size: 12px; }
   fieldset { border: 0; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 4px 12px; }
@@ -87,6 +96,11 @@
   <label class="check"><input type="checkbox" id="hne-only"> <span id="hne-only-label">Only slides with H&amp;E</span></label>
   <div class="row"><span>Slide</span><span id="n-slides"></span></div>
   <select id="slides" size="14" aria-label="Slide"></select>
+  <div id="pathology" class="pathology" hidden>
+    <div class="head"><span id="pathology-group"></span><span id="pathology-flag" class="flag"></span></div>
+    <div id="pathology-categories" class="categories"></div>
+    <p id="pathology-notes" class="notes"></p>
+  </div>
   <fieldset>
     <legend>Colour by</legend>
     <label><input type="radio" name="layer" value="types" checked> HistoPLUS type</label>
@@ -96,6 +110,15 @@
   </fieldset>
   <ul id="legend"></ul>
   <p class="note" id="legend-note" hidden></p>
+  <label class="field">Show only cells with 10-NN density at or above
+    <input type="range" id="threshold" min="0" max="999" step="1" value="0" list="density-slices">
+  </label>
+  <datalist id="density-slices">
+    <option value="0"></option><option value="100"></option><option value="200"></option><option value="300"></option>
+    <option value="400"></option><option value="500"></option><option value="600"></option><option value="700"></option>
+    <option value="800"></option><option value="900"></option>
+  </datalist>
+  <p class="note" id="threshold-note"></p>
   <section class="clusters">
     <div class="head">Clusters on this slide</div>
     <label class="field">Features <select id="method">

@@ -2,13 +2,19 @@
 // a slide in one draw call, at its level-0 px position; colour and visibility come from a table indexed by the
 // cell's code (HistoPLUS type or cluster label), so switching layers or hiding a code only changes a uniform.
 // A code can be drawn in front (alpha 1) or behind (alpha 2: a first pass under everything else), and each
-// code has its own size factor, so a few highlighted cells stay visible over the rest.
+// code has its own size factor, so a few highlighted cells stay visible over the rest. A density threshold hides
+// the cells below it in every layer: decided by the cell's density bin where the bins differ (exact: the server
+// bins in float64) and by its float32 density inside the threshold's own bin.
 
 const MAX_TYPES = 16;
 
 const VS = `
   attribute vec2 a_position;    // level-0 px
   attribute float a_type;       // HistoPLUS type code
+  attribute float a_bin;        // density bin (cohort decile)
+  attribute float a_density;    // 10-NN density, cells per mm²
+  uniform float u_minBin;       // the bin the density threshold falls in
+  uniform float u_minDensity;   // the density threshold
   uniform vec4 u_bounds;        // visible image rectangle (x, y, width, height) in level-0 px
   uniform float u_pointSize;    // device px
   uniform vec4 u_colors[${MAX_TYPES}];  // rgb, and 0 hidden, 1 in front, 2 behind
@@ -18,7 +24,8 @@ const VS = `
   void main() {
     int code = int(a_type + 0.5);
     vec4 colour = u_colors[code];
-    if (colour.a < 0.5 || abs(colour.a - u_pass) > 0.5) {
+    bool below = a_bin < u_minBin - 0.5 || (a_bin < u_minBin + 0.5 && a_density < u_minDensity);
+    if (below || colour.a < 0.5 || abs(colour.a - u_pass) > 0.5) {
       gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
       gl_PointSize = 0.0;
       return;
@@ -55,6 +62,10 @@ export class PointsOverlay {
     this.loc = {
       position: gl.getAttribLocation(this.program, "a_position"),
       type: gl.getAttribLocation(this.program, "a_type"),
+      bin: gl.getAttribLocation(this.program, "a_bin"),
+      density: gl.getAttribLocation(this.program, "a_density"),
+      minBin: gl.getUniformLocation(this.program, "u_minBin"),
+      minDensity: gl.getUniformLocation(this.program, "u_minDensity"),
       bounds: gl.getUniformLocation(this.program, "u_bounds"),
       pointSize: gl.getUniformLocation(this.program, "u_pointSize"),
       colors: gl.getUniformLocation(this.program, "u_colors"),
@@ -64,7 +75,11 @@ export class PointsOverlay {
     };
     this.positions = gl.createBuffer();
     this.types = gl.createBuffer();
+    this.bins = gl.createBuffer();
+    this.densities = gl.createBuffer();
     this.count = 0;
+    this.minBin = 0;
+    this.minDensity = 0;
     this.colors = new Float32Array(MAX_TYPES * 4);
     this.sizes = new Float32Array(MAX_TYPES).fill(1);
     this.pointScale = 1;
@@ -104,16 +119,28 @@ export class PointsOverlay {
     this.draw();
   }
 
-  // xy: Float32Array of 2n level-0 px coordinates; types: Uint8Array of n type codes.
-  setPoints(xy, types) {
+  // xy: Float32Array of 2n level-0 px coordinates; types: Uint8Array of n codes; bins: Uint8Array of n density
+  // bins; densities: Float32Array of n densities.
+  setPoints(xy, types, bins, densities) {
     const gl = this.gl;
+    const n = types.length;
+    if (xy.length !== 2 * n || bins.length !== n || densities.length !== n) {
+      throw new Error(`${xy.length / 2} positions, ${n} codes, ${bins.length} bins, ${densities.length} densities`);
+    }
     gl.bindBuffer(gl.ARRAY_BUFFER, this.positions);
     gl.bufferData(gl.ARRAY_BUFFER, xy, gl.STATIC_DRAW);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.types);
     gl.bufferData(gl.ARRAY_BUFFER, types, gl.STATIC_DRAW);
-    this.count = types.length;
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.bins);
+    gl.bufferData(gl.ARRAY_BUFFER, bins, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.densities);
+    gl.bufferData(gl.ARRAY_BUFFER, densities, gl.STATIC_DRAW);
+    this.count = n;
     this.draw();
   }
+
+  // Hide the cells below a density threshold: those in a lower bin, and those in its bin below its value.
+  setThreshold(minBin, minDensity) { this.minBin = minBin; this.minDensity = minDensity; this.draw(); }
 
   // Replace the per-cell codes the colour table is indexed by (type codes, or cluster labels), one per cell.
   setCodes(codes) {
@@ -154,12 +181,20 @@ export class PointsOverlay {
     gl.uniform1f(this.loc.alpha, this.alpha);
     gl.uniform4fv(this.loc.colors, this.colors);
     gl.uniform1fv(this.loc.sizes, this.sizes);
+    gl.uniform1f(this.loc.minBin, this.minBin);
+    gl.uniform1f(this.loc.minDensity, this.minDensity);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.positions);
     gl.enableVertexAttribArray(this.loc.position);
     gl.vertexAttribPointer(this.loc.position, 2, gl.FLOAT, false, 0, 0);
     gl.bindBuffer(gl.ARRAY_BUFFER, this.types);
     gl.enableVertexAttribArray(this.loc.type);
     gl.vertexAttribPointer(this.loc.type, 1, gl.UNSIGNED_BYTE, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.bins);
+    gl.enableVertexAttribArray(this.loc.bin);
+    gl.vertexAttribPointer(this.loc.bin, 1, gl.UNSIGNED_BYTE, false, 0, 0);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.densities);
+    gl.enableVertexAttribArray(this.loc.density);
+    gl.vertexAttribPointer(this.loc.density, 1, gl.FLOAT, false, 0, 0);
     let behind = false;
     for (let i = 3; i < this.colors.length; i += 4) behind ||= this.colors[i] > 1.5;
     if (behind) {
