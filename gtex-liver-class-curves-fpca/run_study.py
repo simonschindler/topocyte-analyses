@@ -20,9 +20,9 @@ Stages
     Every outer fold of the 476 development slides: ``make_folds(labels, 20, 5, seed=DEV_FOLD_SEED)``, the cell-type
     improvement phase's development folds, with the inner seed ``1000 + 5 × repeat + fold``. Gate: ``dc_unfiltered``,
     averaged over the repeats, equals that phase's ``improve_dev.npz`` ``baseline:D+C-features@51`` (``np.allclose``,
-    ``atol=1e-12``), else ``RuntimeError`` and nothing written. Writes ``results/development.npz`` (every arm's
-    out-of-fold probabilities per repeat, the chosen ``k`` and the dropped slides per fold, the folds, the slides) and
-    ``results/development.json`` (the run's metadata).
+    ``rtol=0``, ``atol=1e-12``), else ``RuntimeError`` and nothing written. Writes ``results/development.npz``
+    (every arm's out-of-fold probabilities per repeat, the chosen ``k`` and the dropped slides per fold, the folds,
+    the slides) and ``results/development.json`` (the run's metadata).
 
 Run from this folder: ``PYTHONPATH=<topocyte checkout at 18e3aa5> <python> run_study.py development``. It reads
 ``results/gram.npz`` and the cell-type study's saved results, read only, and writes only to ``results/``.
@@ -120,12 +120,13 @@ def outer_fold(
 def dc_gate(dc_unfiltered: np.ndarray, reference: np.ndarray) -> float:
     """The largest absolute difference of the unfiltered ``D+C`` probabilities from the cell-type study's.
 
-    ``RuntimeError`` unless the shapes agree and ``np.allclose(dc_unfiltered, reference, atol=1e-12)``.
+    ``RuntimeError`` unless the shapes agree and ``np.allclose(dc_unfiltered, reference, rtol=0, atol=1e-12)``: an
+    absolute tolerance alone, since ``np.allclose``'s default ``rtol=1e-5`` would pass a difference of 5e-6 at 0.5.
     """
     if dc_unfiltered.shape != reference.shape:
         raise RuntimeError(f"unfiltered D+C has shape {dc_unfiltered.shape}, the cell-type study's {reference.shape}")
     gap = float(np.max(np.abs(dc_unfiltered - reference)))
-    if not np.allclose(dc_unfiltered, reference, atol=1e-12):
+    if not np.allclose(dc_unfiltered, reference, rtol=0, atol=1e-12):
         raise RuntimeError(f"unfiltered D+C differs from the cell-type study's by up to {gap:.3g}")
     return gap
 
@@ -192,6 +193,7 @@ def run_development(inputs: dict, grams: dict[str, np.ndarray]) -> dict:
         },
         "dc_gate": {
             "reference": f"gtex-liver-celltype-slices/results/improve_dev.npz {DC_GATE_KEY}",
+            "rtol": 0,
             "atol": 1e-12,
             "max_abs_difference": gap,
         },

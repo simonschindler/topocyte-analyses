@@ -38,6 +38,10 @@ classification." Then: "cohort means pathology group. i want to know if it beats
 - **topocyte check:** `check_topocyte` is copied from the chromatic-domains study, not imported from it, so that
   each study stays self-contained and pinned to its own topocyte.
 - **Commits:** local, on topocyte-analyses `main`, one per task (Simon's practice for this repository). Simon pushes.
+- **D+C gates:** `np.allclose` with `rtol=0` and `atol=1e-12`, an absolute tolerance alone. NumPy's default
+  `rtol=1e-5` would let a difference of 5e-6 pass at a probability of 0.5.
+- **Outlier rule:** unchanged, as pre-registered, although the first timed outer fold dropped 40 of its 380 training
+  slides. Every run records its drops as they fall.
 
 ## Runs
 
@@ -61,3 +65,31 @@ classification." Then: "cohort means pathology group. i want to know if it beats
     594 × 594 matrices, finite and exactly symmetric, with positive diagonals (the smallest, other's, 5.6e8), and
     `slide_ids` in the spaces.npz order. Each matrix's smallest eigenvalue is positive (1.2e-12 to 6.5e-12 of its
     largest). Five random entries per class equal `sum_of_minima` within a relative 3.4e-15.
+- 2026-11-23: `run_study.py development`, in the foreground (`caffeinate -is /usr/bin/time -l`,
+  `logs/development.log`): 39.6 s wall (38.2 s in the json), 37.4 s user CPU, peak RSS 0.32 GB, peak memory footprint
+  0.25 GB. No warning, and no logistic fit failed to converge.
+  - **The D+C gate passed.** The unfiltered D+C arm, averaged over the 20 repeats, equals the improvement phase's
+    `improve_dev.npz` `baseline:D+C-features@51` exactly (largest absolute difference 0; gate `rtol=0`,
+    `atol=1e-12`).
+  - **`k` chosen in the 100 outer folds:** 4 (25 folds), 6 (37), 10 (7), 12 (6), 16 (17), 20 (3), 24 (4), 32 (1).
+    Never 8, 40 or 51.
+  - **Drops,** among the training slides only:
+    - per outer fold, 36–56 (median 44) of 380–381 training slides, 9.4–14.7%;
+    - overall, 4,460 of the 38,080 training-slide places, 11.7%;
+    - by group: healthy 13.4%, congestion 12.1%, steatosis 11.7%, necrosis 17.6%, inflammation/hepatitis 15.1%,
+      fibrosis 4.5%, cirrhosis 13.0%, unclassified 11.2%;
+    - by slide: of the 476 development slides, 382 were never dropped, 94 at least once, and 37 in all 80 outer
+      folds in which they trained.
+    - The kept training slides number 325–345 per fold. The smallest group among them, inflammation/hepatitis, keeps
+      at least 6, enough for the inner 5-fold.
+  - Checked after the run (a scratch script, not kept):
+    - `results/development.npz` (gitignored) holds the four arms, each 20 × 476 × 8; every slide's probabilities sum
+      to 1 in every repeat.
+    - It also holds `k` (20 × 5, all in `K_GRID`), `dropped` (20 × 5 × 476, never a test slide), `folds` (equal to
+      `make_folds(..., seed=1)`) and `slide_ids` (the development slides in order).
+    - The json's `chosen_k` and `dropped_per_fold` match the npz.
+    - `results/development.json` names run_study.py md5 319f1f10…, folds.py c6b1d654… and common.py db4b4915…, the
+      committed files.
+  - Checked before the run (scratch, not kept): the unfiltered D+C arm over the 100 folds equalled the reference
+    bitwise, both under default threading and with one BLAS thread. One outer fold took 0.39 s.
+  - No AUC was computed and no arm was compared with another: the readouts are Task 5's.

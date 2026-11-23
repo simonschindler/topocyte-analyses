@@ -400,7 +400,7 @@ def test_run_development_refuses_dc_unlike_the_celltype_study(tmp_path, monkeypa
     monkeypatch.setattr(rs, "outer_fold", _fake_outer_fold(dev, []))
     reference = np.zeros((dev.size, 8))
     reference[:, 0] = dev / 1000 + 3 / 10
-    reference[5, 0] += 1e-3
+    reference[5, 0] += 1e-7  # within np.allclose's default rtol=1e-5 of 0.3: only an absolute tolerance refuses it
     _write_reference(tmp_path, reference)
     monkeypatch.setattr(c, "CELLTYPE", tmp_path)
     monkeypatch.setattr(c, "RESULTS", tmp_path / "out")
@@ -408,3 +408,13 @@ def test_run_development_refuses_dc_unlike_the_celltype_study(tmp_path, monkeypa
     with pytest.raises(RuntimeError, match="D\\+C"):
         rs.run_development(inputs, {})
     assert not (tmp_path / "out/development.npz").exists()
+
+
+def test_dc_gate_allows_an_absolute_difference_of_1e_12_only():
+    reference = np.full((3, 8), 0.5)
+    assert rs.dc_gate(reference + 5e-13, reference) < 1e-12
+    for gap in (2e-12, 1e-7):  # 1e-7 lies within np.allclose's default rtol=1e-5 of 0.5
+        with pytest.raises(RuntimeError, match="D\\+C differs"):
+            rs.dc_gate(reference + gap, reference)
+    with pytest.raises(RuntimeError, match="shape"):
+        rs.dc_gate(reference[:2], reference)

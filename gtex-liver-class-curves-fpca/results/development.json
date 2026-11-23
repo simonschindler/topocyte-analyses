@@ -1,0 +1,184 @@
+{
+ "description": "every outer fold of the development slides: each arm's probabilities in development.npz",
+ "n_slides": 476,
+ "folds": {
+  "repeats": 20,
+  "splits": 5,
+  "seed": 1,
+  "inner_seed": "1000 + 5 * repeat + fold"
+ },
+ "dc_gate": {
+  "reference": "gtex-liver-celltype-slices/results/improve_dev.npz baseline:D+C-features@51",
+  "rtol": 0,
+  "atol": 1e-12,
+  "max_abs_difference": 0.0
+ },
+ "chosen_k": {
+  "4": 25,
+  "6": 37,
+  "10": 7,
+  "12": 6,
+  "16": 17,
+  "20": 3,
+  "24": 4,
+  "32": 1
+ },
+ "dropped_per_fold": [
+  [
+   40,
+   44,
+   51,
+   45,
+   42
+  ],
+  [
+   47,
+   43,
+   46,
+   45,
+   48
+  ],
+  [
+   42,
+   45,
+   43,
+   42,
+   47
+  ],
+  [
+   49,
+   50,
+   44,
+   45,
+   39
+  ],
+  [
+   38,
+   47,
+   51,
+   40,
+   41
+  ],
+  [
+   43,
+   42,
+   56,
+   45,
+   41
+  ],
+  [
+   46,
+   44,
+   42,
+   51,
+   44
+  ],
+  [
+   46,
+   41,
+   38,
+   47,
+   46
+  ],
+  [
+   48,
+   36,
+   47,
+   48,
+   38
+  ],
+  [
+   46,
+   43,
+   52,
+   37,
+   44
+  ],
+  [
+   52,
+   42,
+   47,
+   48,
+   39
+  ],
+  [
+   43,
+   42,
+   52,
+   40,
+   44
+  ],
+  [
+   54,
+   39,
+   41,
+   45,
+   39
+  ],
+  [
+   44,
+   48,
+   43,
+   47,
+   40
+  ],
+  [
+   47,
+   43,
+   50,
+   41,
+   41
+  ],
+  [
+   46,
+   51,
+   46,
+   45,
+   41
+  ],
+  [
+   50,
+   42,
+   43,
+   50,
+   40
+  ],
+  [
+   44,
+   47,
+   42,
+   43,
+   45
+  ],
+  [
+   50,
+   43,
+   46,
+   40,
+   43
+  ],
+  [
+   45,
+   42,
+   53,
+   48,
+   39
+  ]
+ ],
+ "convergence_warnings": 0,
+ "seconds": 38.2,
+ "peak_rss_gb": 0.32,
+ "md5": {
+  "run_study.py": "319f1f1009cb27b2ec158e1506f63d95",
+  "folds.py": "c6b1d6546bbda28c9986d88204289133",
+  "common.py": "db4b4915cadc80c815832b6ce97c6b77"
+ },
+ "topocyte_commit": "18e3aa5",
+ "versions": {
+  "python": "3.14.0",
+  "numpy": "2.5.1",
+  "scipy": "1.18.0",
+  "scikit-learn": "1.9.0"
+ },
+ "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+}
