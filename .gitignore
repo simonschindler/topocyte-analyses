@@ -2,6 +2,8 @@
 # them and where the copy its report was built from is kept.
 *.npz
 *.html
+# ...except a viewer's page, which is source, not output.
+!*/viewer/static/*.html
 # Temporary files of the atomic writes (e.g. results/bars/<slide>.npz.tmp) after an interrupted run.
 *.tmp
 logs/

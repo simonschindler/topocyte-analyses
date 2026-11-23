@@ -88,6 +88,26 @@ $PY verify_results.py                           # about 69 min, peak RSS about 1
 $PY build_report.py                             # about 90 s, peak RSS about 7 GB
 ```
 
+## Viewer
+
+`viewer/serve.py` shows the cells of every cohort slide in the browser, coloured
+by HistoPLUS cell type or by the four classes, with the slides filtered by
+pathology group (pathology.csv's eight groups). It is adapted from
+`tissuegeometry/web/cosine_viewer`: OpenSeadragon with a WebGL point layer, served
+by the Python standard library. With `--wsi-dir`, a slide whose file
+`<slide_id>.svs` (or another OpenSlide format) is in that folder is shown on its
+H&E; the cells' coordinates are its level-0 pixels. It reads the cohort and the
+slide files read only and writes nothing.
+
+```bash
+.venv/bin/python viewer/serve.py                        # point clouds only
+.venv/bin/python viewer/serve.py --wsi-dir ~/data/GTEX/wsi --port 8765
+```
+
+Then open `http://127.0.0.1:8765/`. The page loads OpenSeadragon 4.0.0 from
+cdnjs. The 14 type colours are shades of their class's colour, so the legend's
+toggles and its "only" buttons tell neighbouring types apart.
+
 ## Outputs
 
 Tracked: `results/pilot.csv` (the 30 slides with their condition, half and
