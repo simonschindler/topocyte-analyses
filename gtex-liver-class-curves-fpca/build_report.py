@@ -3,17 +3,23 @@
 
 Run from this folder after ``verify_results.py``: ``PYTHONPATH=<topocyte checkout at 18e3aa5> <python>
 build_report.py``. Reads ``results/{spike,gram,development,holdout,verify}.json`` (it checks that ``verify.json`` comes
-from this folder's ``verify_results.py`` and that every check passed), ``results/{development,holdout,gram}.npz``, the
-logs in ``logs/`` for the runs' time and memory (``/usr/bin/time -l``), the inputs as the stages read them
-(``common.load_inputs``), the pathology study's ``pathology.csv`` for the slides' notes, and, for the mean curves, its
+from this folder's ``verify_results.py``, that every check passed, and that the sha256 it records of each of
+``results/{gram,development,holdout}.npz`` is that of the file read here), those npz files, the logs in ``logs/`` for
+the runs' time and memory (``/usr/bin/time -l``) and their creation times, the inputs as the stages read them
+(``common.load_inputs``), the cell-type study's ``improve_dev.json`` and ``improve_holdout.json`` for the D+C macro
+AUCs the gates reproduce, the pathology study's ``pathology.csv`` for the slides' notes, and, for the mean curves, its
 ``density.npz`` and the cohort's cell classes (h5py mode "r"). It runs no stage and fits no classifier.
 
-Two descriptive results no stage saved are computed here, and used by no verdict:
+Three results no stage saved are computed here, and used by no verdict:
 
 - each group's mean class curves on the development slides, counted exactly at displayed thresholds 25 cells per mm²
   apart: the one place a grid of thresholds is used, to draw the curves (the counts at the ten deciles are asserted
   equal to the cell-type study's ``composition.npz``);
-- each block's fractions of variance, from ``folds.BlockFPCA`` fitted on all development slides.
+- each block's fractions of variance, from ``folds.BlockFPCA`` fitted on all development slides;
+- post hoc, the per-repeat paired difference of the curves at the chosen k minus D+C: the mean over the repeats of
+  each repeat's macro AUC difference, with the 2.5 and 97.5 percentiles over the readouts' bootstrap draws
+  (``stratified_bootstrap``, 4000, ``default_rng(12345)``), each draw scoring every repeat on its slides
+  (``repeat_macro_aucs``). The study's ``README.md`` states it, and is checked to state these numbers.
 
 Writes ``report.html``, with its figures embedded as 128-colour PNGs (the sibling reports' palette and look, the
 classes in the liver cell viewer's colours), and nothing else. Under a minute.
@@ -199,6 +205,16 @@ def md5(path) -> str:
     return hashlib.md5(path.read_bytes()).hexdigest()
 
 
+def sha256(path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def scientific(value: float) -> str:
+    """``3.3e-9`` rather than ``3.3e-09``."""
+    mantissa, exponent = f"{value:.1e}".split("e")
+    return f"{mantissa}e{int(exponent)}"
+
+
 def git(*args: str) -> str:
     return subprocess.run(["git", "-C", str(c.HERE), *args], capture_output=True, text=True, check=True).stdout.strip()
 
@@ -223,6 +239,13 @@ def lookup(record: dict, keys: tuple[str, ...]):
     return record
 
 
+def check_readme(claims: dict[str, str]) -> None:
+    """The study's README states each claim as this report formats it (a line break reads as a space)."""
+    text = " ".join((c.HERE / "README.md").read_text().split())
+    for what, claim in claims.items():
+        assert claim in text, f"README.md does not state {what} as {claim!r}"
+
+
 # ---------------------------------------------------------------- the descriptive computations
 
 
@@ -243,6 +266,7 @@ def mean_curves(inputs: dict) -> dict:
     top, top_linear = (float(quantiles[np.flatnonzero(np.isclose(levels, q))[0]]) for q in (TOP_LEVEL, LINEAR_LEVEL))
     thresholds = np.arange(0.0, math.ceil(top / 1000) * 1000 + STEP / 2, STEP)
     bounds, deciles = inputs["bounds"], inputs["deciles"]
+    assert deciles[0] == rho.min(), "d0 is not the cohort's smallest density: it would not count every cell"
     dev = np.flatnonzero(inputs["dev"])
     counts = np.zeros((dev.size, len(c.CLASSES), thresholds.size))
     at_deciles = np.zeros((deciles.size, dev.size, len(c.CLASSES)), dtype=np.int64)
@@ -277,6 +301,43 @@ def variance_fractions(grams: dict[str, np.ndarray], dev: np.ndarray) -> dict[st
             K = folds.analysis_kernel(grams[name], normalization)
             out[f"{name} {normalization}"] = folds.BlockFPCA().fit(K[np.ix_(dev, dev)]).explained_variance_ratio_
     return out
+
+
+def draw_weights(draws: np.ndarray) -> np.ndarray:
+    """How often each slide appears in each bootstrap draw, (draws, slides), from the draws' index arrays."""
+    offsets = draws + draws.shape[1] * np.arange(draws.shape[0])[:, None]
+    return np.bincount(offsets.ravel(), minlength=draws.size).reshape(draws.shape).astype(float)
+
+
+def repeat_macro_aucs(proba: np.ndarray, labels: np.ndarray, weights: np.ndarray) -> np.ndarray:
+    """``celltype.macro_auc`` of every repeat's probabilities on every bootstrap draw at once: (repeats, draws).
+
+    ``proba`` is (repeats, slides, 8). A draw is given by its row of ``weights``, how often each slide appears in it
+    (``draw_weights``; a row of ones is the slides themselves). A condition's AUC on the drawn slides is the share of
+    their positive-negative pairs, each counted by the product of its two slides' weights, in which the positive slide
+    scores higher, a tie counting half: ``celltype.auc``'s Mann-Whitney formula on the drawn slides, duplicates
+    included. ``main`` checks the result against ``celltype.macro_auc`` on the saved per-repeat AUCs and on the first
+    draws.
+    """
+    n_conditions = len(CONDITIONS)
+    scored = labels < n_conditions
+    y, W = labels[scored], weights[:, scored]
+    total = np.zeros((proba.shape[0], W.shape[0]))
+    for g in range(n_conditions):
+        positive = y == g
+        pairs = W[:, positive].sum(axis=1) * W[:, ~positive].sum(axis=1)
+        for r in range(proba.shape[0]):
+            score = proba[r, scored, g]
+            order = np.argsort(score, kind="stable")
+            ordered, ordered_positive = score[order], positive[order]
+            first = np.searchsorted(ordered, ordered, side="left")  # each slide's tie run in the sorted scores
+            past = np.searchsorted(ordered, ordered, side="right")
+            negatives = np.zeros((W.shape[0], order.size + 1))  # the drawn negatives' weight before each position
+            np.cumsum(W[:, order] * ~ordered_positive, axis=1, out=negatives[:, 1:])
+            at = np.flatnonzero(ordered_positive)
+            wins = (negatives[:, first[at]] + negatives[:, past[at]]) / 2  # the negatives below, half of the tied ones
+            total[r] += (W[:, order[at]] * wins).sum(axis=1) / pairs
+    return total / n_conditions
 
 
 # ---------------------------------------------------------------- figures
@@ -403,6 +464,9 @@ def main() -> None:
     readouts = dev_json["readouts"]
     assert verify["all_ok"] and all(check["ok"] for check in verify["checks"]), "a check of verify_results.py failed"
     assert verify["script_md5"] == md5(c.HERE / "verify_results.py"), "verify.json is not from this verify_results.py"
+    for name in ("gram", "development", "holdout"):  # the npz files read below are those the verifier checked
+        path = c.RESULTS / f"{name}.npz"
+        assert verify["sha256"][f"{c.HERE.name}/results/{path.name}"] == sha256(path), f"{path.name} is not verified"
     for name in ("run_study.py", "folds.py", "common.py"):  # the readouts and the holdout ran the current code
         assert readouts["md5"][name] == hold_json["md5"][name] == md5(c.HERE / name)
     assert list(readouts["arms"]) == list(hold_json["arms"]) == list(ARMS)
@@ -413,6 +477,7 @@ def main() -> None:
         split, dropped, chosen = saved["folds"], saved["dropped"], saved["k"]
         assert [str(s) for s in saved["slide_ids"]] == [ids[i] for i in dev]
         repeat_sd = {arm: float(np.std(saved[arm], axis=0, ddof=1).mean()) for arm in ARMS}
+        per_repeat = {arm: saved[arm] for arm in ("curves", "dc")}  # each repeat's out-of-fold probabilities
     with np.load(c.RESULTS / "holdout.npz", allow_pickle=False) as saved:
         hold_dropped, hold_k = saved["dropped"], int(saved["k"])
         assert [str(s) for s in saved["dev_slide_ids"]] == [ids[i] for i in dev]
@@ -449,10 +514,18 @@ def main() -> None:
     )
     assert diff < 0 and hdiff < 0 and auc["curves"] < auc["dc"] and hauc["curves"] < hauc["dc"]
     assert lo4 <= 0 <= hi4 and diff4 < diff  # k = 4: its interval contains 0 too, and it trails the chosen k
-    assert hlo4 <= 0 <= hhi4 and hlo <= 0 <= hhi
+    assert hlo4 <= 0 <= hhi4 and hlo <= 0 <= hhi and hdiff4 < 0
     gate_dev, gate_hold = dev_json["dc_gate"]["max_abs_difference"], hold_json["gate"]["max_abs_difference"]
     assert max(gate_dev, gate_hold) <= 1e-12 and readouts["gate"]["macro_auc"] == auc["dc_unfiltered"]
     assert hold_json["gate"]["macro_auc"] == hauc["dc_unfiltered"]
+    # The unfiltered D+C's macro AUCs are the improvement phase's own, as section 6 says.
+    improve_dev = json.loads((c.CELLTYPE / "results/improve_dev.json").read_text())
+    (dc_idea,) = [idea for idea in improve_dev["ideas"] if idea["name"] == "baseline:D+C-features"]
+    (dc_readout,) = [row for row in dc_idea["readouts"] if row["k"] == inputs["DC"].shape[1]]
+    improve_holdout = json.loads((c.CELLTYPE / "results/improve_holdout.json").read_text())
+    holdout_dc = improve_holdout["results"]["D+C features"]["macro_auc"]
+    assert math.isclose(auc["dc_unfiltered"], dc_readout["macro_auc"], rel_tol=0, abs_tol=1e-12)
+    assert math.isclose(hauc["dc_unfiltered"], holdout_dc, rel_tol=0, abs_tol=1e-12)
     filter_cost, filter_gain = auc["dc_unfiltered"] - auc["dc"], hauc["dc"] - hauc["dc_unfiltered"]
     assert filter_cost > 0 and filter_gain > 0  # the filter cost D+C on development and helped it on the holdout
     per_repeat_gap = rep_mean["curves"] - rep_mean["dc"]
@@ -460,6 +533,37 @@ def main() -> None:
     assert per_repeat_gap < diff < 0 and all(value > 0 for value in gain.values())
     assert gain["curves"] == max(gain.values()) and repeat_sd["curves"] == max(repeat_sd.values())
     assert repeat_sd["curves"] > repeat_sd["dc"]
+    # Each repeat scored alone: the curves, at the chosen k and at k = 4, fall below D+C in every repeat. At k = 4,
+    # their probabilities vary less between the repeats than D+C's, and averaging lifts them less than at the chosen k.
+    gaps = {  # each repeat's macro AUC minus D+C's
+        arm: np.subtract(arms_dev[arm]["auc_per_repeat"], arms_dev["dc"]["auc_per_repeat"])
+        for arm in ("curves", "curves4")
+    }
+    assert all(gap.size == len(per_repeat["curves"]) and np.all(gap < 0) for gap in gaps.values())
+    assert repeat_sd["curves4"] < repeat_sd["dc"] and gain["dc"] < gain["curves4"] < gain["curves"]
+    below = f"by {num(-gaps['curves'].max())} to {num(-gaps['curves'].min())}"  # how far below D+C the repeats fell
+    below4 = f"by {num(-gaps['curves4'].max())} to {num(-gaps['curves4'].min())}"
+    every_readout = (  # the curves' gap to D+C in every readout, all negative (asserted above)
+        f"the averaged one by {num(-diff)}, each of the {n_repeats} repeats {below}, and the holdout by {num(-hdiff)}"
+    )
+    fixed_k4 = (
+        f"k = 4 they vary less ({num(repeat_sd['curves4'])}), and averaging lifts them by only {num(gain['curves4'])}"
+    )
+
+    # ---------------- post hoc: the per-repeat paired difference, with its interval over the readouts' draws
+    assert (readouts["bootstrap"]["draws"], readouts["bootstrap"]["seed"]) == (c.N_BOOT, c.BOOT_SEED)
+    draws = c.celltype.stratified_bootstrap(y, c.N_BOOT, np.random.default_rng(c.BOOT_SEED))
+    weights = draw_weights(draws)
+    boot = {arm: repeat_macro_aucs(p, y, weights) for arm, p in per_repeat.items()}
+    itself = {arm: repeat_macro_aucs(p, y, np.ones((1, y.size)))[:, 0] for arm, p in per_repeat.items()}
+    for arm, p in per_repeat.items():  # repeat_macro_aucs against celltype.macro_auc: unresampled, and on 20 draws
+        assert np.allclose(itself[arm], arms_dev[arm]["auc_per_repeat"], rtol=0, atol=1e-12)
+        on_draws = [[c.celltype.macro_auc(p[r][rows], y[rows])[0] for rows in draws[:20]] for r in range(len(p))]
+        assert np.allclose(boot[arm][:, :20], on_draws, rtol=0, atol=1e-12)
+    post_hoc = float(np.mean(itself["curves"] - itself["dc"]))
+    post_lo, post_hi = (float(v) for v in np.percentile((boot["curves"] - boot["dc"]).mean(axis=0), [2.5, 97.5]))
+    assert math.isclose(post_hoc, per_repeat_gap, rel_tol=0, abs_tol=1e-12) and post_lo < post_hoc < post_hi < 0
+    post_hoc_text = f"{signed(post_hoc)}, 95% interval {interval([post_lo, post_hi])}"
 
     # ---------------- the drops
     trained = split[:, None, :] != np.arange(n_splits)[None, :, None]  # (repeat, fold, slide): a training slide there
@@ -475,13 +579,19 @@ def main() -> None:
     assert len(set(trains.tolist())) == 1  # every slide trains in the same number of outer folds
     n_trains = int(trains[0])
     never, ever, always = int(np.sum(drops == 0)), int(np.sum(drops > 0)), int(np.sum(drops == trains))
-    smallest_kept = np.array(
+    kept_groups = np.array(  # (outer fold, group): the training slides the filter kept
         [
             [np.sum(trained[r, f] & ~dropped[r, f] & (y == g)) for g in range(len(GROUPS))]
             for r, f in np.ndindex(trained.shape[:2])
         ]
-    ).min(axis=0)
+    )
+    smallest_kept = kept_groups.min(axis=0)
     assert smallest_kept.min() >= n_splits  # every group can fill the inner folds
+    smallest = int(np.argmin(smallest_kept))  # the group section 3 names: the smallest after the filter in every fold
+    assert np.all(kept_groups[:, smallest] == kept_groups.min(axis=1))
+    tied = kept_groups == kept_groups[:, [smallest]]  # the folds in which another group keeps as few
+    tied[:, smallest] = False
+    n_tied, tied_with = int(tied.any(axis=1).sum()), [GROUPS[g] for g in np.flatnonzero(tied.any(axis=0))]
     hold_drop_group = np.array([np.sum(hold_dropped & (y == g)) for g in range(len(GROUPS))])
     assert hold_drop_group.tolist() == list(hold_json["fit"]["dropped_per_group"].values())
     n_hold_dropped = int(hold_dropped.sum())
@@ -498,6 +608,9 @@ def main() -> None:
     k_never = [k for k in c.K_GRID if k not in k_values]
     k_top = sorted(k_values[np.argsort(-k_counts, kind="stable")[:2]].tolist())
     k_top_share = int(k_counts[np.isin(k_values, k_top)].sum())
+    k_lo, k_hi = int(k_values.min()), int(k_values.max())  # the curves' model changes from fold to fold
+    assert k_lo < k_hi
+    k_range = f"k from {k_lo} to {k_hi}"
 
     # ---------------- the curves, described
     share0 = curves["fractions"][:, :, 0]  # each group's mean class shares at t = 0 (every cell)
@@ -515,6 +628,7 @@ def main() -> None:
     runs = {log: resources(log) for log, _, _ in STAGES}
     built = dt.datetime.now().astimezone().strftime("%Y-%m-%d %H:%M")
     head = git("log", "-1", "--format=%h", "--", ".") or "uncommitted"
+    dirty = ", with uncommitted changes" if git("status", "--porcelain", "--", ".") else ""
     versions = {**dev_json["versions"], "h5py": gram_json["versions"]["h5py"], "matplotlib": matplotlib.__version__}
     assert dev_json["versions"] == readouts["versions"] == hold_json["versions"]
 
@@ -524,26 +638,34 @@ def main() -> None:
     summary = f"""
 <p><strong>Verdict, by the rule fixed before any result: {html.escape(verdict)}.</strong> On the {n_dev} development
 slides ({n_repeats} repeats of stratified {n_splits}-fold), the fPCA of the class curves at the chosen k reaches macro
-AUC {num(auc["curves"])} against {num(auc["dc"])} for D+C trained on the same cleaned slides: a difference of
-{signed(diff)}, 95% interval {interval([lo, hi])}, which contains 0. On the {n_hold}-slide holdout, scored once, the
-curves reach {num(hauc["curves"])} against {num(hauc["dc"])} ({signed(hdiff)}, {interval([hlo, hhi])}); with the
-development interval containing 0, the rule does not read the holdout, which leans the same way.</p>
+AUC {num(auc["curves"])} against {num(auc["dc"])} for D+C trained on the same cleaned slides, from the out-of-fold
+probabilities averaged over the repeats: a difference of {signed(diff)}, 95% interval {interval([lo, hi])}, which
+contains 0. Level means that this readout, the one the rule reads, cannot tell the two apart, not that they are equal:
+the curves scored below D+C in all {n_repeats} repeats and on the {n_hold}-slide holdout, scored once,
+{num(hauc["curves"])} against {num(hauc["dc"])} ({signed(hdiff)}, {interval([hlo, hhi])}). With the development
+interval containing 0, the rule does not read the holdout.</p>
 <p><strong>The outlier filter dropped {pct(n_dropped, places)} of the training slides</strong> in the development
 folds: {n_dropped:,} of {places:,} training-slide places in the {n_folds} outer folds, {per_fold.min()}–{per_fold.max()}
 per fold. By group: {group_drops}. <strong>The holdout fit dropped {n_hold_dropped} of the {n_dev} development
 slides</strong> ({pct(n_hold_dropped, n_dev)}): {hold_drops}. Both arms of the comparison train on the same cleaned
 slides; the test slides are always scored.</p>
-<p><strong>Per repeat, the gap is larger.</strong> The pre-registered readout scores the out-of-fold probabilities
-averaged over the {n_repeats} repeats. Scored repeat by repeat, the curves reach {num(rep_mean["curves"])} ±
-{num(rep_sd["curves"])} against {num(rep_mean["dc"])} ± {num(rep_sd["dc"])} for D+C (mean ± SD over the repeats). The
-curves' probabilities vary more from repeat to repeat (a slide's probability has an SD over the repeats of
-{num(repeat_sd["curves"])} on average, D+C's {num(repeat_sd["dc"])}), and averaging raises their macro AUC by
-{num(gain["curves"])}, D+C's by {num(gain["dc"])}.</p>
+<p><strong>Per repeat, the curves scored below D+C every time.</strong> The pre-registered readout scores the
+out-of-fold probabilities averaged over the {n_repeats} repeats. Scored repeat by repeat, the curves reach
+{num(rep_mean["curves"])} ± {num(rep_sd["curves"])} against {num(rep_mean["dc"])} ± {num(rep_sd["dc"])} for D+C (mean
+± SD over the repeats), below it in each of the {n_repeats} repeats, {below}; at k = 4 {below4}. Averaging narrows the
+gap: it lifts the curves' macro AUC by {num(gain["curves"])} and D+C's by {num(gain["dc"])}. The curves' model changes
+from fold to fold ({k_range}), and their probabilities vary more from repeat to repeat (a slide's probability has an
+SD over the repeats of {num(repeat_sd["curves"])} on average, D+C's {num(repeat_sd["dc"])}); at a fixed {fixed_k4}.</p>
+<p><strong>Post hoc</strong>, outside the rule fixed in advance, so it cannot change the verdict: the per-repeat paired
+difference, the mean over the {n_repeats} repeats of the curves' macro AUC minus D+C's, is {post_hoc_text} over the
+readouts' {c.N_BOOT:,} bootstrap draws of the development slides (each draw scores all {n_repeats} repeats on its
+slides). This interval lies below 0.</p>
 <p>Beside the verdict: the curves at k = 4 reach {num(auc["curves4"])} ({signed(diff4)}, {interval([lo4, hi4])}) on
 the development slides and {num(hauc["curves4"])} on the holdout ({signed(hdiff4)}, {interval([hlo4, hhi4])}). The
 filter cost D+C {num(filter_cost)} of development macro AUC ({num(auc["dc"])} against {num(auc["dc_unfiltered"])}
 unfiltered) and gained it {num(filter_gain)} on the holdout ({num(hauc["dc"])} against
-{num(hauc["dc_unfiltered"])}).</p>
+{num(hauc["dc_unfiltered"])}). It is defined in the curves' own space, so any bias it introduces favours the curves:
+"not better" is a conservative reading.</p>
 """
 
     # ---------------- section 1: the question and the rulings
@@ -669,16 +791,16 @@ counts every cell)</summary>{table(decile_header, decile_rows)}</details>
         ]
         for i in order
     ]
+    tie = f" (tied with {' and '.join(tied_with)} in {n_tied})" if n_tied else ""
     drops_section = f"""
 <p>In every outer fold the filter reads only the training slides' labels. Over the {n_folds} outer folds it dropped
 {n_dropped:,} of the {places:,} training-slide places ({pct(n_dropped, places)}): {per_fold.min()}–{per_fold.max()}
 per fold (median {np.median(per_fold):.0f}) of {n_train.min()}–{n_train.max()} training slides
-({pct(share_fold.min(), 1)}–{pct(share_fold.max(), 1)}), leaving {kept_fold.min()}–{kept_fold.max()}. The smallest
-group, {html.escape(GROUPS[int(np.argmin(smallest_kept))])}, kept at least {smallest_kept.min()} of its training slides
-in every fold, enough for the inner {n_splits}-fold. By group the share dropped runs from {
-        pct(group_dropped[low], group_places[low])
-    }
-({html.escape(GROUPS[low])}) to {pct(group_dropped[high], group_places[high])} ({html.escape(GROUPS[high])}).</p>
+({pct(share_fold.min(), 1)}–{pct(share_fold.max(), 1)}), leaving {kept_fold.min()}–{kept_fold.max()}. After the
+filter, {html.escape(GROUPS[smallest])} is the smallest group in every fold{html.escape(tie)}, and it kept at least
+{smallest_kept.min()} of its training slides, enough for the inner {n_splits}-fold. By group the share dropped runs
+from {pct(group_dropped[low], group_places[low])} ({html.escape(GROUPS[low])}) to
+{pct(group_dropped[high], group_places[high])} ({html.escape(GROUPS[high])}).</p>
 <p>Each development slide trains in {n_trains} of the {n_folds} outer folds. Of the {n_dev}, {never} were never
 dropped, {ever} at least once and {always} in all {n_trains}. The holdout fit, on all {n_dev} development slides,
 dropped {n_hold_dropped} ({pct(n_hold_dropped, n_dev)}): all {always} that every development fold dropped, and
@@ -824,11 +946,23 @@ AUCs, {num(readouts["gate"]["macro_auc"], 4)} and {num(hold_json["gate"]["macro_
 """
 
     # ---------------- section 7: the verdict
+    few = [g for g in range(len(GROUPS)) if hold_n[g] < 5]  # the holdout's small groups, which its note names
+    assert few and all(f"{GROUPS[g]} {hold_n[g]}" in hold_json["note"] for g in few)
+    few_sizes = " and ".join(str(n) for n in sorted(int(hold_n[g]) for g in few))
     verdict_section = f"""
 <p><strong>{html.escape(verdict[0].upper() + verdict[1:])}.</strong> The rule reads the development interval of curves
-at the chosen k minus D+C, {interval([lo, hi])}, which contains 0: the curves' fPCA neither beats D+C nor falls below
-it on the development slides. The holdout difference enters the rule only when the interval lies above 0; it was
-{signed(hdiff)} ({interval([hlo, hhi])}).</p>
+at the chosen k minus D+C, {interval([lo, hi])}, which contains 0: the pre-registered readout, from the probabilities
+averaged over the repeats, cannot tell the curves' fPCA from D+C on the development slides. Level does not mean equal:
+every readout puts the curves below D+C, {every_readout}. The holdout difference enters the rule only when the
+interval lies above 0; it was {signed(hdiff)} ({interval([hlo, hhi])}, an interval that the holdout's groups of
+{few_sizes} slides make too narrow).</p>
+<p><strong>Post hoc</strong> (not in the design, so it cannot change the verdict): the per-repeat paired difference of
+the curves at the chosen k minus D+C, the mean over the {n_repeats} repeats of each repeat's difference in macro AUC,
+is {post_hoc_text}: the 2.5 and 97.5 percentiles over the readouts' {c.N_BOOT:,} bootstrap draws of the development
+slides, stratified by group (seed {c.BOOT_SEED}), each draw scoring all {n_repeats} repeats on the drawn slides. Unlike
+the averaged readout's interval, it lies below 0. The two readouts differ because averaging each slide's probabilities
+over the repeats lifts the curves by {num(gain["curves"])} and D+C by {num(gain["dc"])}: the curves' model changes
+from fold to fold ({k_range}).</p>
 <p>The rule as <code>holdout.json</code> records it: {html.escape(hold_json["verdict"]["rule"])}</p>
 """
 
@@ -842,6 +976,24 @@ it on the development slides. The holdout difference enters the rule only when t
         )
     provenance = next(ch for ch in verify["checks"] if ch["check"].startswith("the script md5s"))
     commit_of = {(row[0], row[1]): row[3] for row in provenance["measured"]}
+    code_commit = commit_of[("holdout.json", "run_study.py")]  # the code the readouts and the holdout ran
+    assert commit_of[("development.json readouts", "run_study.py")] == code_commit
+    committed = int(git("log", "-1", "--format=%ct", code_commit))
+    for log in ("readouts.log", "holdout.log"):  # each log was created as its stage began
+        assert committed < (c.LOGS / log).stat().st_birthtime, f"{code_commit} was committed after {log} began"
+    (projection,) = [ch for ch in verify["checks"] if "BlockFPCA scores" in ch["check"]]  # the design's 4.2 gate
+    projection_gap = max(gap for _, gap in projection["measured"].values())
+    assert projection["ok"] and projection_gap <= projection["tolerance"]
+    check_readme(  # README.md states these as this report does
+        {
+            "the post-hoc difference": post_hoc_text,
+            "every readout's gap": every_readout,
+            "k = 4's gaps": below4,
+            "the chosen k's range": k_range,
+            "k = 4's spread and lift": fixed_k4,
+            "the projection gate": f"within {scientific(projection_gap)}",
+        }
+    )
     check_rows = [
         [html.escape(ch["check"]), html.escape(json.dumps(ch["measured"], ensure_ascii=False))]
         for ch in verify["checks"]
@@ -858,7 +1010,14 @@ at the ten deciles equal the cell-type study's <code>composition.npz</code>. The
 development folds ({n_repeats} repeats of stratified {n_splits}-fold, seed {dev_json["folds"]["seed"]}); in each, the
 filter on the training slides, then each block's fPCA by topocyte's <code>fpca_from_gram</code> on the kept slides
 ({c.N_COMPONENTS} components) with an exact projection of the other slides, then the MFA (each block divided by the SD
-of its first component, up to {max(c.K_GRID)} components by SVD), and the four arms' logistic regressions.</li>
+of its first component, up to {max(c.K_GRID)} components by SVD), and the four arms' logistic regressions. Two
+departures from <code>design.md</code>, neither with any effect. The MFA's signs follow the cell-type study's
+<code>pca</code>, each left singular vector's largest-magnitude entry positive, where the design (Pipeline 4.3) named
+each component's largest-magnitude loading: the logistic regression on standardized features gives the same
+probabilities under a flip of sign, and no MFA score is reported. The design's projection gate (Pipeline 4.2) ran in
+<code>verify_results.py</code> and a synthetic test, not inside the run: on repeat 0, fold 0, every block's projection
+agrees with topocyte's <code>FPCA.transform</code> within {scientific(projection_gap)}, relative to the block's
+largest score.</li>
 <li><strong>Readouts:</strong> each arm's macro AUC over the {len(CONDITIONS)} conditions from the probabilities
 averaged over the repeats; the paired differences with 95% intervals over {readouts["bootstrap"]["draws"]:,} stratified
 bootstrap draws (seed {readouts["bootstrap"]["seed"]}). The holdout stage fitted everything once on the {n_dev}
@@ -872,8 +1031,8 @@ wrote <code>holdout.json</code> with mode "x".</li>
 {versions["matplotlib"]}; topocyte {c.TOPOCYTE_COMMIT} from a clean checkout first on <code>PYTHONPATH</code>. The
 development run's json names <code>run_study.py</code> as committed in
 {commit_of[("development.json", "run_study.py")]}; the readouts and the holdout ran the current file, committed in
-{commit_of[("holdout.json", "run_study.py")]} before either ran (<code>verify_results.py</code> checks each md5
-against its commit).</p>
+{code_commit} before either ran (<code>verify_results.py</code> checks each md5 against its commit; the commit
+precedes the creation of both logs).</p>
 <h3>Checks</h3>
 <p><code>verify_results.py</code>'s docstring says what each check takes another route for and what it does not
 redo.</p>
@@ -884,7 +1043,7 @@ redo.</p>
 <h1>Class-density curves against density and composition</h1>
 <p class="subtitle">The fPCA of each slide's four class curves over the {curves["k_nn"]}-NN density threshold, against
 D+C, on {n_all} GTEx liver slides in {len(GROUPS)} pathology groups</p>
-<p class="meta">Built {built} from the study folder at {html.escape(head)}; {len(verify["checks"])} checks of
+<p class="meta">Built {built} from the study folder at {html.escape(head)}{dirty}; {len(verify["checks"])} checks of
 <code>verify_results.py</code> pass.</p>
 <div class="summary">{summary}</div>
 <h2>1. The question and the rulings</h2>

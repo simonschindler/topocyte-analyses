@@ -137,7 +137,7 @@ The local studies take the closed disc of radius **150 µm** around each cell
 | 2026-11-19/20 | [gtex-liver-celltype-slices](gtex-liver-celltype-slices/README.md) | verdict and holdout | topology per cell type helps only through the cell counts |
 | 2026-11-20 to 23 | [gtex-liver-chromatic-domains](gtex-liver-chromatic-domains/README.md) | verdict (pilot) | local arrangement of cell types gives no recurring domains |
 | 2026-11-23 | [gtex-liver-emeans-neighbourhoods](gtex-liver-emeans-neighbourhoods/README.md) | descriptive | every cell's neighbourhood clustered; three broad types |
-| 2026-11-23 | [gtex-liver-class-curves-fpca](gtex-liver-class-curves-fpca/README.md) | verdict and holdout | the fPCA of each class's density curve is level with D+C |
+| 2026-11-23 | [gtex-liver-class-curves-fpca](gtex-liver-class-curves-fpca/README.md) | verdict and holdout | the fPCA of each class's density curve does not beat D+C: level by the rule, below it in every repeat |
 | 2026-11-18 | [gtex-graphcode-gnn](gtex-graphcode-gnn/README.md) | planned | design and related-work survey only |
 
 "Verdict" studies fixed their decision rule before seeing any result;
@@ -154,11 +154,11 @@ adopt the function-Delaunay bifiltration.
 cirrhosis). Per slice: H0 and H1 Betti curves, four fPCA models (H0 and H1, raw
 and cosine), classification on four scores over 20 repeated splits. Each slice,
 and their combination, was compared with a density-only control. Two follow-ups
-came after the first verdict:
+came after the first verdict, sections 7 and 8 of that study's report:
 
-- section 7 asked whether topology adds anything beyond density at all;
-- section 8 tested, against a rule written before the run, the H1 death/birth
-  ratio, a summary built to escape density.
+- its section 7 asked whether topology adds anything beyond density at all;
+- its section 8 tested, against a rule written before the run, the H1
+  death/birth ratio, a summary built to escape density.
 
 **Results.**
 
@@ -451,20 +451,27 @@ than D+C? The rule was fixed before any result.
 | D+C on the same cleaned training slides | 0.756 | 0.779 |
 | D+C on all training slides | 0.764 | 0.774 |
 
-- **Verdict: level with D+C.** The development difference, −0.0064 (−0.0241
-  to +0.0116), contains 0. The holdout leans the same way: −0.0101 (−0.0421
-  to +0.0169).
+- **Verdict: level with D+C,** by the rule fixed in advance: the development
+  difference of the repeat-averaged readout, −0.0064 (−0.0241 to +0.0116),
+  contains 0, so that readout cannot tell the two apart. The holdout leans the
+  same way: −0.0101 (−0.0421 to +0.0169), an interval that the holdout's groups
+  of 2 and 4 slides make too narrow.
 - **The filter dropped 11.7% of the training slides** in the development folds
   (from 4.5% of fibrosis's to 17.6% of necrosis's), and 55 of the 476 in the
   holdout fit. It cost D+C 0.008 on the development slides and gained it 0.005
   on the holdout.
-- **Scored repeat by repeat, the curves trail further,** 0.722 against 0.749:
-  their predictions vary more between repeats, and averaging over the repeats
-  helps them more.
+- **Scored repeat by repeat, the curves fall below D+C in all 20 repeats,** by
+  0.006 to 0.049 (0.722 against 0.749 on average). Their model changes from
+  fold to fold (k from 4 to 32), so averaging each slide's probabilities over
+  the repeats lifts them by 0.028 and D+C by only 0.007: this is why the
+  averaged readout's gap is smaller.
 
-**Learned.** The fPCA of the continuous class curves separates the conditions
-about as well as D+C, not better: the curves show no gain over the counts at
-ten density deciles, and D+C stays the representation to beat.
+**Learned.** The fPCA of the continuous class curves does not beat D+C. The
+rule calls the two level, which means that its readout cannot tell them apart,
+not that they are equal: the curves scored below D+C in all 20 repeats, by
+0.006 to 0.049, and on the holdout, at the chosen k and at k = 4 alike. The
+whole curves show no gain over the counts at ten density deciles, and D+C
+stays the representation to beat.
 
 ### 8. Planned: graphcode GNN on all GTEx slides
 
@@ -519,6 +526,8 @@ It reads everything read only and writes nothing.
    the number of cells of each type at each density level, not through their
    topology. Density plus composition (D+C) is the representation to beat:
    0.774 on unseen slides, and nothing with topology beat it beyond the noise.
+   Nor does composition gain from its functional form: the fPCA of each class's
+   whole curve over density does not beat D+C's 51 features (study 7).
 3. **Topology is not a mere copy of density.** Some signal survives regressing
    density out, mostly among the densest cells. It just does not improve the
    classifications tried here.
@@ -541,7 +550,7 @@ shown added value here, not that it cannot.
   They are cheap, and here they were decisive.
 - **Fix the rule before the result, and keep a holdout you score once.** Study 4
   held 118 slides back from the start. Several rules were written before any
-  run: studies 4 and 5 for their verdicts, study 1 for the death/birth ratio,
+  run: studies 4, 5 and 7 for their verdicts, study 1 for the death/birth ratio,
   and studies 2 and 3 for the PC2 check. This kept the conclusions from
   drifting with the data.
 - **Cluster-number rules can be fooled.**
@@ -631,8 +640,10 @@ shown added value here, not that it cannot.
   - `progress.md`, the ledger of every ruling and result;
   - `verify_results.py` and `build_report.py`.
 - **Not in git:** large outputs (`*.npz`, `*.npy`, reports and logs). The
-  scripts regenerate them; the copies the reports were built from stay on
-  Simon's machine and go to Zenodo at publication.
+  scripts regenerate them, except where a study's README says that its holdout
+  was scored once and its outputs are the kept copy (study 7); the copies the
+  reports were built from stay on Simon's machine and go to Zenodo at
+  publication.
 - **The cohort** (`~/data/gtex_liver_cells/`) is always opened read only.
 - **Visibility:** the repository is private until the topocyte paper is
   published. As of 2026-11-23 its commits are on local `main`, and Simon

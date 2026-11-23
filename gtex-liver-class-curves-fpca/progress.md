@@ -190,3 +190,36 @@ classification." Then: "cohort means pathology group. i want to know if it beats
   folder with its own provenance rows. The recipe now runs the tests after `curves.py gram`, and the real-fold test
   skips without `results/gram.npz` (checked with `common.RESULTS` patched to an empty folder: 1 skipped); 41 tests
   pass. `verify_results.py` and `build_report.py` are unchanged.
+- 2026-11-23, after the final review (one fix wave). `run_study.py`, `folds.py`, `curves.py`, `common.py` and
+  `verify_results.py` are unchanged; no stage and no verifier ran again, and the holdout was not scored again.
+  - **Level does not mean equal.** The write-ups had read the rule's "level with D+C" as "as good as D+C". The rule's
+    readout, from the probabilities averaged over the repeats, cannot tell the two apart. But the curves scored
+    below D+C on the cleaned slides in all 20 repeats, by 0.006 to 0.049 (at k = 4 by 0.004 to 0.033), and on the
+    holdout (−0.0101; at k = 4 −0.0144). Averaging lifts the curves by 0.028 and D+C by 0.007, because the curves'
+    k changes from fold to fold (4 to 32): at a fixed k = 4, their probabilities vary less between the repeats than
+    D+C's (SD 0.026 against 0.035), and averaging lifts them by 0.011. `README.md`, the report's summary and
+    section 7, `EXPERIMENTS.md` (section 7, its line in the studies table, the synthesis) and the repository's
+    `README.md` now say so.
+  - **Post hoc** (ruling R15), labelled so, and unable to change the verdict: the mean over the 20 repeats of each
+    repeat's macro AUC difference, curves at the chosen k minus D+C, is −0.0277, 95% interval [−0.0447, −0.0102],
+    over the readouts' 4000 stratified bootstrap draws (seed 12345), each draw scoring every repeat on its slides.
+    `build_report.py` computes it from `development.npz`, each draw as weights on the slides, which reproduces
+    `celltype.macro_auc` exactly on the 20 saved per-repeat AUCs of both arms and on the first 20 draws; it checks
+    that `README.md` states it.
+  - **Smaller fixes:** the holdout interval's caveat (its groups of 2 and 4 slides) in `EXPERIMENTS.md` and the
+    repository's `README.md`; study 1's sections 7 and 8 named as its report's; the holdout as a first look for the
+    curves only (the cell-type study had scored D+C and its other views on it); two departures from the design
+    without effect, stated in `README.md` and the report (the MFA's signs follow `celltype.pca`; the projection gate
+    ran in the verifier, 3.3e-9); any bias of the filter, defined in the curves' own space, favours the curves; the
+    run block no longer says that the tests ran where it lists them; and the repository's note that the scripts
+    regenerate the outputs now names this study as the exception.
+  - **`build_report.py` now also asserts:** that `verify.json`'s sha256 of each of `gram.npz`, `development.npz`
+    and `holdout.npz` is the file's; that inflammation/hepatitis is the smallest group after the filter in every
+    fold (tied with necrosis in 2); that a58c812 was committed (20:06:31) before `logs/readouts.log` (20:06:36) and
+    `logs/holdout.log` (20:07:17) were created; that the unfiltered D+C's macro AUCs equal `improve_dev.json`'s and
+    `improve_holdout.json`'s; and that d0 equals the cohort's smallest density. Its meta line says when the study
+    folder has uncommitted changes. It takes about 9 s.
+  - **Tests:** a new test pins `choose_k`'s rule that the highest pooled inner macro AUC wins (stub fits that write
+    their k, a macro AUC that peaks at k = 10); on a scratch copy of `run_study.py`, it fails for argmin, for the
+    first k and for scoring only the last inner fold. `_group_grams` lost its unused `far`. 42 tests pass with
+    `-W error`.

@@ -170,17 +170,9 @@ def test_curve_space_scores_a_fit_slide_alike_as_another_slide():
     np.testing.assert_allclose(Z_other[2:], Z_fit[[0, 9]], rtol=0, atol=1e-8 * np.abs(Z_fit).max())
 
 
-def _group_grams(rng: np.random.Generator, labels: np.ndarray, far: tuple[int, ...] = ()) -> dict[str, np.ndarray]:
-    """Grams of synthetic class curves whose densities rise with the slide's group; the slides ``far`` lie far away."""
-    return _grams(
-        {
-            name: [
-                _rho(rng, far=True) if s in far else rng.uniform(1000 + 200 * g, 2000 + 200 * g, 100)
-                for s, g in enumerate(labels)
-            ]
-            for name in c.CLASSES
-        }
-    )
+def _group_grams(rng: np.random.Generator, labels: np.ndarray) -> dict[str, np.ndarray]:
+    """Grams of synthetic class curves whose densities rise with the slide's group."""
+    return _grams({name: [rng.uniform(1000 + 200 * g, 2000 + 200 * g, 100) for g in labels] for name in c.CLASSES})
 
 
 def _two_curve_grams(rng: np.random.Generator, patterns: list[np.ndarray]) -> dict[str, np.ndarray]:
@@ -361,6 +353,28 @@ def test_choose_k_prefers_the_smaller_k_on_ties(monkeypatch):
     assert len(spaces) == 5
     for (fit_idx, other_idx), (fit, out) in zip(spaces, inner, strict=True):
         assert fit_idx.tolist() == train[fit].tolist() and other_idx.tolist() == train[out].tolist()
+
+
+def test_choose_k_picks_the_highest_pooled_inner_macro_auc(monkeypatch):
+    rng = np.random.default_rng(15)
+    labels = np.repeat(np.arange(8), 10)
+    grams = _group_grams(rng, labels)  # random curves: every inner fold has 51 columns, so every k is tried
+    train = np.arange(80)
+    received = []
+
+    def k_as_probability(Z_train, y_train, Z_test):
+        return np.full((len(Z_test), 8), float(Z_train.shape[1]))  # each row names the k of the fit that scored it
+
+    def peak_at_ten(proba, labels):
+        received.append((proba.shape[0], labels.shape[0]))
+        k = proba[0, 0]
+        assert np.all(proba == k)  # every training slide is scored, each by an inner fit on this one k
+        return -((k - 10.0) ** 2), np.zeros(7)
+
+    monkeypatch.setattr(rs, "fit_predict", k_as_probability)
+    monkeypatch.setattr(c.celltype, "macro_auc", peak_at_ten)
+    assert rs.choose_k(grams, train, labels, seed=1000) == 10
+    assert received == [(len(train), len(train))] * len(c.K_GRID)  # one pooled readout per k, over all of train
 
 
 def _development_inputs() -> dict:
