@@ -6,6 +6,10 @@ the ledger of how it was decided, and the builder of its report. The repository
 is private until the topocyte paper is published; then it becomes public and the
 large outputs are deposited on Zenodo.
 
+[EXPERIMENTS.md](EXPERIMENTS.md) recaps every study below for a reader new to
+the project: the background, what each study did and found, and what they
+have taught us together.
+
 ## Layout
 
 One folder per study. Each holds
