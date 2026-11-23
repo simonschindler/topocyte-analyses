@@ -715,3 +715,119 @@ Claude's calls:
 - **The composition null's multinomial is drawn in one vectorized call,** which equals the reviewer's loop draw for draw (checked on 50 rows).
 - **`zscore` refuses a constant column,** and `same_slide_neighbours` a slide with five centres or fewer; neither occurs here.
 - **The classifier's defaults include early stopping above 10,000 training rows** (scikit-learn's "auto"), with its validation split seeded by `random_state=0`. The design asks for default settings and a fixed seed.
+
+## Task 8: verifier and report (2026-11-23)
+
+- **Verifier:** `verify_results.py`, run with no arguments. It writes `results/verify.json` (tracked): every check with its sample, tolerance and measured value, the run's time, peak RSS and versions, and the sampled rows.
+  - **The run** (`logs/verify.log`): 02:16–02:47 on 2026-11-23, on AC power inside `caffeinate -is`. **ALL CHECKS PASSED**: 59 checks and 1 descriptive count, in 1,833 s (arrays 5 s, clustering 274 s, balls 256 s, blocks 1,296 s). Peak RSS 9.17 GB, peak memory footprint 12.0 GB.
+  - **Trial runs before it,** on subsets: the arrays (6 s); the balls of two slides (14 s); blocks 7 (42 s) and 1 (353 s, peak RSS 8.52 GB, the heaviest block with its all-slides fit); the clustering (275 s). Every check passed in each.
+  - **Independent routes** (the controller's rulings):
+    - chalc 15.0.1 for the six-packs;
+    - brute-force shuffles for the pair expectation;
+    - topocyte's `betti_inner_product_matrix` for the inner products, with the weighted residual curves composed from the unit-weight inner products of each centre's 20 labelling curves;
+    - an integer-count sweep and topocyte's 19 × 19 Gram matrices for the spreads;
+    - `fpca_from_gram` for the components and scores;
+    - a numpy eigendecomposition for the MFA and its sign rule;
+    - the verifier's own gap statistic, stopping rule and prediction strength on scikit-learn's `KMeans`.
+  - **Samples:**
+    - 200 balls from one draw over all 45,000 rows, key `[SEED, 0xBA11, 0, 1]`, in draw order;
+    - the first 20 of them for the pair counts and the brute-force spreads;
+    - per block, the 10 of them with the most bars for the inner products;
+    - one ball per slide, key `[SEED, 0xB17, slide_index, 1]`, recomputed bit for bit;
+    - the j-th pair-count ball's 10,000 shuffles, key `[SEED, 0x5AFF, j, 1]`.
+
+    Every key has 4 entries and a non-zero last entry; the second entry marks the purpose and lies above every slide index, so none meets a study key.
+
+    | check | sample | tolerance | measured |
+    |---|---|---|---|
+    | every array of `features.npz` and `domains.npz` finite | 36 and 3 arrays | 0 arrays | 0 |
+    | pilot: 30 slides, 15 per half, 5 per condition in both halves | `results/pilot.csv` | exact | 0 |
+    | bars files: every array finite; owners, offsets, sort order, counts, centre draw and json | 30 slides, 447,050,046 bars and 13,355,202 codomain bars | 0 | 0 |
+    | `features.npz`: slides, halves, centre rows, positions and fit samples redrawn; `L1` from the class counts; `P` from exact rational expectations | 45,000 rows | exact | 0 |
+    | level 1, the control and level 2: k, k_A and k_B | three rule applications | exact | 0 |
+    | level 1, the control and level 2: gap and s curves | k = 1..k_max | 1e-12 | 1.8e-15 at most |
+    | level 1, the control and level 2: prediction-strength curves and the rule's values | k = 2..k_max, both directions | 1e-12 | 0 |
+    | level 1: z-scoring of each fitting set; the strata labels | means and SDs; 45,000 rows | 1e-12; exact | 0 |
+    | control k and passed; the verdict from the recomputed k's; the guard absent | `domains.json`, `domains.npz` | exact | 0 |
+    | balls by brute force against the saved cell and class counts | 200 sampled balls and one per slide | 0 | 0 |
+    | saved labelling-0 domain, image and codomain bars against chalc 15.0.1 | 200 balls, 3,600 diagrams | equal counts, bottleneck ≤ 1e-9 of the ball's scale | 7.6e-16 |
+    | the port, faces to dimension 3 and to dimension 2, every module, against chalc | 200 balls, 8,110 diagrams each | as above | 7.6e-16 |
+    | saved codomain against topocyte's alpha PH | 200 balls, 400 diagrams | as above | 6.5e-14 |
+    | diagrams whose raw bar counts differed before bars under 1e-12 of the scale were dropped | 20,220 diagrams | descriptive | 0 |
+    | the three Betti identities at every endpoint | 200 balls, faces to dimension 2 and 3 | 0 | 0 |
+    | one ball per slide recomputed with `ball_sixpacks`, bit for bit | 30 balls × 20 labellings × 16 blocks (287,965 bars), codomain, pair counts | 0 balls | 0 |
+    | Qhull's Delaunay edges and class-pair counts; the expectation as a fraction | first 20 sampled balls | 0 balls | 0 |
+    | the expectation against 10,000 shuffles, largest \|z\| | first 20 sampled balls × 10 pairs | 5 SE | 2.85 |
+    | s0 per block and fit, from every fit centre's s² by the integer-count sweep | 16 blocks × 3 fits | 1e-12 relative | 5.3e-16 |
+    | zero-spread non-zero residuals over every centre | 16 blocks × 45,000 centres | exact | 0 |
+    | s² by brute force (topocyte's 19 × 19 Gram) against `curves.spread2` and the sweep; s² = 0 exactly when the references are one diagram | first 20 sampled balls × 16 blocks, observed and control | 1e-10 of the mean squared reference norm; 0 | 1.5e-15; 0 |
+    | inner products: unit weights, cross matrices, composed scaled residuals, exact zeros | 10 sampled centres × 20 labellings × 16 blocks | 1e-10 | 2.5e-15, 2.4e-15, 1.4e-15, 0 |
+    | fPCA A and B: fit-sample scores against `fpca_from_gram`; fractions of variance; 9 kept; the kernel route on the 200 sampled centres | 16 blocks each | 1e-9 of the largest score; 1e-9; 0 | 2.6e-13 (A), 2.2e-13 (B); 8.9e-16; 0; 9.8e-15 |
+    | fPCA all: the same | blocks 1 and 11 | as above | 5.9e-13; 1.9e-16; 0; 3.1e-15 |
+    | MFA A, B and all: every level-2 row and the fractions by eigendecomposition | 45,000 rows × 20 | 1e-9 | 1.1e-12 at most; 7.6e-16 |
+    | MFA A and B: the control's level-2 rows of the sampled centres (kernel route, then the MFA) | 200 centres × 16 blocks | 1e-9 | 7.4e-14 (A), 2.3e-13 (B) |
+
+  - **Subsets, stated:**
+    - the all-slides fPCA was refitted for blocks 1 (the most distinct endpoints) and 11 (the largest gate-2 error) only: a refit of all 16 takes about 40 min more, and the rule reads only the halves' bases;
+    - `L2_ctl_all` is not checked: no script reads it (`domains.py` reads the control in the halves' bases only), and the control's rows in those bases are checked on the 200 sampled centres;
+    - the guard's balanced accuracies reduce to asserting the guard is absent (ruling T8-c).
+- **Report:** `build_report.py` writes `report.html` (0.3 MB) in 80 s, peak RSS 6.52 GB, with no warning under `-W error` (`logs/build_report.log`). Sections follow ruling T8-a:
+  1. question and rulings, with the k-rule correction, the 0.03 floor and the strata ruling dated;
+  2. pilot slides and compute;
+  3. the one composition stratum: its profile, both halves' gap and prediction-strength curves with the composition null for contrast, the halves' level-1 differences, the mechanism and the post-hoc random splits; no maps;
+  4. no subdomains: the level-2 curves and the stratum's mean residual curves;
+  5. the control;
+  6. the guard did not run, and the verdict;
+  7. contiguity not computed;
+  8. the H&E atlas, Simon's decision;
+  9. methods: the phimaker threads, the effective rank threshold, the per-block and MFA tables, the verification and the provenance.
+  - **Mean residual curves (T8-b):** the exact mean, every bar kept with weight 1/n (`curves.combine`), of the 12,000 fit-sample centres' scaled residual curves per block, as `features.py` builds them. The step table comes from `curves._steps`; the curves are drawn with `drawstyle="steps-post"` and matplotlib's own path simplification, on topocyte's logarithmic filtration axis.
+    - **Profile of block 1 first:** 23.0M bars, 11,289,801 breakpoints, built in 13 s and plotted in 1.5 s, peak RSS 5.3 GB.
+    - **All 16 blocks:** 214,420 to 11,289,801 breakpoints (42.0M in all), 76 s. The 16-panel figure fits in memory, so it is one figure.
+    - **What they show:**
+      - in degree 0, the domain and image curves of the stromal, immune and other classes have negative integrals and dip furthest at α² of 154 to 315 px² (radii 6.1 to 8.8 µm);
+      - in degree 1, the image curves of all four classes have positive integrals and peak at α² of 264 to 898 px² (radii 8.0 to 14.8 µm);
+      - the domain H1 curves of all four classes rise above 0 (at 185 to 897 px²) before they fall below it (at 2,702 to 3,701 px²).
+  - **The mechanism (T8-d),** both halves in the training half's z-coordinates at k = 2:
+
+    | direction | \|cos\| | training half's minority | test half's own minority | boundary offset, z-units | crossings | PS(2) |
+    |---|---|---|---|---|---|---|
+    | A→B | 0.993 | 17.5% of A | 15.7% of B (3,526) | +0.46 | 797 of B's 3,526 minority on A's majority side; 0 of 18,974 the other way | 0.650 |
+    | B→A | 0.993 | 16.1% of B | 17.6% of A (3,964) | −0.51 | 711 of A's 18,536 majority on B's minority side; 0 of 3,964 the other way | 0.926 |
+
+    - Every minority holds fuller balls with fewer epithelial and more stromal, immune and other cells: half B's own minority in A→B has log10 cells 2.216 against 2.113 and an epithelial fraction of 0.390 against 0.798.
+    - Half A's boundary lies further toward the minority than half B's, in both coordinate systems; the boundary offset is where each 2-means boundary crosses the training half's split direction.
+    - The task reviewer's numbers (|cos| 0.993, a 16% minority, 797 of 3,526) are reproduced, and PS(2) recomputed from the crossings equals the saved value in both directions.
+  - **Post hoc, outside the rule (T8-e):** PS(2) on three random half/half splits of all 45,000 centres (keys `[SEED, 0x5B17, i, 1]`), each random half holding centres of all 30 slides:
+
+    | halves | level 1 | level 2 (all-slides basis) |
+    |---|---|---|
+    | random split 1 | 0.977 / 0.997 | 0.986 / 0.976 |
+    | random split 2 | 0.994 / 0.966 | 0.955 / 0.990 |
+    | random split 3 | 0.990 / 0.952 | 0.957 / 0.992 |
+    | slide halves, the rule's bases | 0.650 / 0.926 | 0.737 / 0.926 |
+    | slide halves, the all-slides basis | — | 0.741 / 0.934 |
+
+    The 2-means split is stable within a mixed set of slides and moves between the two slide halves, at both levels and in either basis. It cannot change the verdict.
+  - **The look,** in the browser pane (the report served from a scratch copy on 127.0.0.1, dark theme), at 1,024 px and at the 375 px mobile preset: no horizontal page overflow, all five figures load, every table scrolls inside its wrapper. Fixed after the look:
+    - the prediction-strength panels' threshold label sat on the curves at k = 2 and 3; it moved to the right end;
+    - Helvetica Neue has no arrow glyph, so the legends say "trained on half A, tested on half B";
+    - the verification table's first column wraps, and the per-block tables' labels are left-aligned.
+- **Code edits beyond the two new files:** `chromatic.py`'s header comment only, checked identical below the docstring by its syntax tree. It now says that phimaker 0.5.0 runs up to 10 threads per call despite `num_threads=1`, and that the match with chalc holds up to bars shorter than about 1e-12 of the scale, which exactly tied clouds pair differently. No behaviour change anywhere; the edit invalidates numba's cache of `chromatic.py` once.
+- **README:** the status is the outcome; the run table names every script with its code, topocyte commit and date; the venv recipe, the run order and the outputs are updated. `../README.md`'s Studies row has the verdict.
+- **Tests:** the study suite, 118 tests in 123 s, pass with warnings as errors. Task 8 adds no test: the verifier is itself the check of the saved results. Lint: ruff (E, F, W, B, UP, SIM, I, line length 120) is clean and `ruff format` leaves both new files unchanged.
+
+Claude's calls:
+- **`results/verify.json` is tracked,** like the other small results; the report's verification table and methods read it. Cost: 15 kB.
+- **The spreads' independent route is an integer-count sweep.** On each interval between consecutive endpoints of a centre's 19 references, R·Σβ_r² − (Σβ_r)² is an exact integer, so s² is 0 exactly when the references agree, as with `curves.spread2` and unlike the inner-product form. It matched `spread2` to about 3e-15 on one slide's blocks before the run, with identical zero sets, and gives s0 for every block and fit and the zero-spread counts over all 45,000 centres. Cost: about a second per slide and block.
+- **The halves' fits are refitted with the Gram matrix of `curves.inner_matrix`,** itself checked against topocyte on 10 sampled centres per block; the components and scores come from `fpca_from_gram` alone. A topocyte Gram matrix of 6,000 weighted curves would need 120,000² unit-weight inner products.
+- **The kernel route** scores the 200 sampled centres, observed and control, from `fpca_from_gram`'s eigenvectors and the cross inner products, apart from `curves.components` and `curves.score`.
+- **Balls by brute force** (squared distance ≤ δ²) rather than a KD-tree. The 20 pair-count balls are checked to hold no two cells at one position before Qhull triangulates them.
+- **Shuffles within 5 standard errors:** 200 tests, a false-alarm rate of about 1e-4; the seeded draws fix the result.
+- **ECDFs, not histograms, for the halves' level-1 features:** exact steps at the data, no bins.
+- **topocyte's private `_log_x_axis`** for the mean curves' logarithmic filtration axis: the topocyte figures' plain 1-2-5 labels (Simon's ruling for topocyte). The pinned checkout fixes it.
+- **Constants in `build_report.py` without a results file,** named as such and checked where they can be: the provenance (the md5 sums of `features.py` and `domains.py`, the git blob, the commits); the serial time per centre measured in Task 5 (0.50 s) and phimaker's 10 threads; the design's estimates (12 h serial, 2 h on 8 processes).
+- **`build_report.py` reads `logs/features.log`** for the features run's time, CPU and peak RSS, after checking that its first line names the md5 of this `features.py`. No results file holds them; the README says so.
+- **T8-e adds the slide halves in the all-slides basis** as a reference row (0.741 / 0.934), so the random splits and the slide halves are compared in one basis at level 2.
+- **T8-d adds the boundary offset,** which says on which side the crossings fall.
+- **The report's mean residual curves are recomputed at every build** (76 s): a cache of 670 MB served development only and went to the Trash.

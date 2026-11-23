@@ -15,8 +15,13 @@ chalc (Abhinav Natarajan, https://github.com/abhinavnatarajan/Chalc,
 GPL-3.0-or-later), which implements the chromatic alpha complexes of
 di Montesano, Draganov, Edelsbrunner and Saghafian (arXiv:2212.03128). The
 numba port is copied from chalc-scaling commit 8f370c6
-(``report/port/chromatic_port.py``), where it matched chalc 15.0.1 on random
-and degenerate clouds; chalc 15.0.1 stays the oracle of ``test_chromatic.py``.
+(``report/port/chromatic_port.py``), where it was checked against chalc
+15.0.1 on random and degenerate clouds. The match holds up to bars shorter
+than about 1e-12 of the scale: on exactly tied clouds, such as a lattice, the
+port's floating-point radii and chalc's exact arithmetic pair such near-zero
+bars differently (progress.md, Task 2), so ``verify_results.py`` drops them
+before it compares bar counts. chalc 15.0.1 stays the oracle of
+``test_chromatic.py`` and ``verify_results.py``.
 
 The port's pipeline:
 
@@ -50,9 +55,11 @@ Changes from the port:
 - **Planar only:** the port's 3D miniball, its Qhull engine and its value
   snapping (off in the port) are left out.
 
-Threads: the numba kernels are serial and phimaker runs on one thread. numba's
-default threading layer aborts when ``parallel=True`` code is entered from
-several Python threads, so a run spreads balls over processes.
+Threads: the numba kernels are serial. phimaker is passed ``num_threads=1``,
+yet phimaker 0.5.0 runs up to 10 threads inside each six-pack call
+(progress.md, Task 5); the pairing, and so every result, does not depend on
+them. numba's default threading layer aborts when ``parallel=True`` code is
+entered from several Python threads, so a run spreads balls over processes.
 """
 
 from __future__ import annotations

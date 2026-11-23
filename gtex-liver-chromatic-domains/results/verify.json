@@ -1,0 +1,651 @@
+{
+ "passed": true,
+ "n_checks": 60,
+ "checks": [
+  {
+   "check": "features.npz: every array finite",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "0 arrays",
+   "sample": "36 arrays"
+  },
+  {
+   "check": "domains.npz: every array finite",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "0 arrays",
+   "sample": "3 arrays"
+  },
+  {
+   "check": "pilot: 30 slides, 15 per half, 5 per condition in both halves",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "exact",
+   "sample": "results/pilot.csv"
+  },
+  {
+   "check": "bars files: every array finite",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "0 arrays",
+   "sample": "30 slides, every array"
+  },
+  {
+   "check": "bars files: owners, offsets, sort order, counts, centre draw and json",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "0 slides",
+   "sample": "30 slides, 447,050,046 bars and 13,355,202 codomain bars"
+  },
+  {
+   "check": "features.npz: slides, halves, centre rows, positions and fit samples redrawn",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "exact",
+   "sample": "45,000 rows; fit keys [SEED, slide, 0, 0xF17]"
+  },
+  {
+   "check": "features.npz: L1 from the class counts",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "exact",
+   "sample": "45,000 rows"
+  },
+  {
+   "check": "features.npz: P = pair counts - exact rational expectation",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "exact",
+   "sample": "45,000 rows \u00d7 10 pairs"
+  },
+  {
+   "check": "level 1: k, k_A and k_B recomputed",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "exact",
+   "sample": "k 1, k_A 10, k_B 10"
+  },
+  {
+   "check": "level 1: both halves' gap and s curves",
+   "passed": true,
+   "measured": 1.7763568394002505e-15,
+   "tolerance": "1e-12",
+   "sample": "k = 1..k_max"
+  },
+  {
+   "check": "level 1: prediction-strength curves and the rule's values",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "1e-12",
+   "sample": "k = 2..k_max, both directions"
+  },
+  {
+   "check": "level 1: z-scoring of each fitting set",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "1e-12",
+   "sample": "means and SDs, ddof 0"
+  },
+  {
+   "check": "level 1: composition strata labels",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "exact",
+   "sample": "45,000 rows, 1 stratum or strata"
+  },
+  {
+   "check": "stratum 0, control: k, k_A and k_B recomputed",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "exact",
+   "sample": "k 1, k_A 1, k_B 1"
+  },
+  {
+   "check": "stratum 0, control: both halves' gap and s curves",
+   "passed": true,
+   "measured": 1.1535911115245767e-16,
+   "tolerance": "1e-12",
+   "sample": "k = 1..k_max"
+  },
+  {
+   "check": "stratum 0, control: prediction-strength curves and the rule's values",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "1e-12",
+   "sample": "k = 2..k_max, both directions"
+  },
+  {
+   "check": "stratum 0, level 2: k, k_A and k_B recomputed",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "exact",
+   "sample": "k 1, k_A 6, k_B 6"
+  },
+  {
+   "check": "stratum 0, level 2: both halves' gap and s curves",
+   "passed": true,
+   "measured": 3.382710778154774e-17,
+   "tolerance": "1e-12",
+   "sample": "k = 1..k_max"
+  },
+  {
+   "check": "stratum 0, level 2: prediction-strength curves and the rule's values",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "1e-12",
+   "sample": "k = 2..k_max, both directions"
+  },
+  {
+   "check": "control: k per stratum and passed",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "exact",
+   "sample": "control k [1]"
+  },
+  {
+   "check": "verdict recomputed from the recomputed k's",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "exact",
+   "sample": "does not add (no compartment with subdomains)"
+  },
+  {
+   "check": "guard: absent, as the control passed and every stratum has k = 1 (no balanced accuracies to recompute)",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "exact",
+   "sample": "domains.npz and domains.json"
+  },
+  {
+   "check": "balls: cells by brute force equal the saved counts",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "0 balls",
+   "sample": "200 sampled balls and one per slide"
+  },
+  {
+   "check": "six-packs: saved labelling-0 domain, image and codomain bars against chalc 15.0.1",
+   "passed": true,
+   "measured": 7.643456227186921e-16,
+   "tolerance": "equal counts, bottleneck <= 1e-09 of the ball's scale",
+   "sample": "200 balls, 3,600 diagrams"
+  },
+  {
+   "check": "six-packs: the port, faces to dimension 3, every module, against chalc",
+   "passed": true,
+   "measured": 7.643456227186921e-16,
+   "tolerance": "equal counts, bottleneck <= 1e-09 of the ball's scale",
+   "sample": "200 balls, 8,110 diagrams"
+  },
+  {
+   "check": "six-packs: the port, faces to dimension 2 (the study's), every module, against chalc",
+   "passed": true,
+   "measured": 7.643456227186921e-16,
+   "tolerance": "equal counts, bottleneck <= 1e-09 of the ball's scale",
+   "sample": "200 balls, 8,110 diagrams"
+  },
+  {
+   "check": "six-packs: saved codomain against topocyte's alpha persistent homology",
+   "passed": true,
+   "measured": 6.517389886338441e-14,
+   "tolerance": "equal counts, bottleneck <= 1e-09 of the ball's scale",
+   "sample": "200 balls, 400 diagrams"
+  },
+  {
+   "check": "six-packs: diagrams whose raw bar counts differed (before bars under 1e-12 of the scale were dropped)",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "descriptive",
+   "sample": "20,220 diagrams"
+  },
+  {
+   "check": "six-packs: Betti identities (dom = ker + im, cod = im + cok, rel = cok + ker) at every endpoint",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "0",
+   "sample": "200 balls, faces to dimension 2 and 3, every class present"
+  },
+  {
+   "check": "bars bit for bit: one ball per slide recomputed with ball_sixpacks",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "0 balls",
+   "sample": "30 balls \u00d7 20 labellings \u00d7 16 blocks (287,965 bars), codomain, pair counts"
+  },
+  {
+   "check": "pair counts: Qhull Delaunay edges and class-pair counts equal the saved; expectation exact",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "0 balls",
+   "sample": "first 20 sampled balls"
+  },
+  {
+   "check": "pair counts: expectation against 10,000 shuffles, largest |z|",
+   "passed": true,
+   "measured": 2.8488714624102625,
+   "tolerance": "5 SE",
+   "sample": "first 20 sampled balls \u00d7 10 pairs"
+  },
+  {
+   "check": "spreads: s0 per block and fit from every fit centre's s\u00b2 (integer-count sweep)",
+   "passed": true,
+   "measured": 5.293476965895115e-16,
+   "tolerance": "1e-12 relative",
+   "sample": "16 blocks \u00d7 3 fits, 12,000 fit centres"
+  },
+  {
+   "check": "spreads: zero-spread non-zero residuals counted over every centre",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "exact",
+   "sample": "16 blocks \u00d7 45,000 centres"
+  },
+  {
+   "check": "spreads: s\u00b2 by brute force (topocyte's 19 \u00d7 19 Gram) against curves.spread2 and the sweep",
+   "passed": true,
+   "measured": 1.4831891431302542e-15,
+   "tolerance": "1e-10 of the mean squared reference norm",
+   "sample": "first 20 sampled balls \u00d7 16 blocks, observed and control"
+  },
+  {
+   "check": "spreads: s\u00b2 = 0 exactly when all references are the same diagram",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "0",
+   "sample": "first 20 sampled balls \u00d7 16 blocks, observed and control"
+  },
+  {
+   "check": "inner products: unit weights against betti_inner_product_matrix",
+   "passed": true,
+   "measured": 2.515425247591602e-15,
+   "tolerance": "1e-10 relative, entry by entry",
+   "sample": "10 sampled centres \u00d7 20 labellings \u00d7 16 blocks"
+  },
+  {
+   "check": "inner products: cross matrices against betti_inner_product_matrix",
+   "passed": true,
+   "measured": 2.3486857076869434e-15,
+   "tolerance": "1e-10 relative, entry by entry",
+   "sample": "the same curves in two sets, 16 blocks"
+  },
+  {
+   "check": "inner products: scaled residual curves against topocyte's unit-weight inner products, composed",
+   "passed": true,
+   "measured": 1.4284103354463535e-15,
+   "tolerance": "1e-10 of the composition's absolute terms",
+   "sample": "10 sampled centres \u00d7 16 blocks"
+  },
+  {
+   "check": "inner products: exact zeros where topocyte has them",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "0 entries",
+   "sample": "16 blocks"
+  },
+  {
+   "check": "fPCA A: fit-sample scores against fpca_from_gram",
+   "passed": true,
+   "measured": 2.6237111560508285e-13,
+   "tolerance": "1e-9 of the largest score",
+   "sample": "16 blocks"
+  },
+  {
+   "check": "fPCA A: fractions of variance",
+   "passed": true,
+   "measured": 8.881784197001252e-16,
+   "tolerance": "1e-9",
+   "sample": "16 blocks"
+  },
+  {
+   "check": "fPCA A: 9 components kept, no block dropped",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "0 blocks",
+   "sample": "16 blocks"
+  },
+  {
+   "check": "fPCA A: sampled centres' scores by the kernel route",
+   "passed": true,
+   "measured": 9.811897585717047e-15,
+   "tolerance": "1e-9 of the largest score",
+   "sample": "200 sampled centres, 16 blocks"
+  },
+  {
+   "check": "fPCA B: fit-sample scores against fpca_from_gram",
+   "passed": true,
+   "measured": 2.191140270679484e-13,
+   "tolerance": "1e-9 of the largest score",
+   "sample": "16 blocks"
+  },
+  {
+   "check": "fPCA B: fractions of variance",
+   "passed": true,
+   "measured": 8.881784197001252e-16,
+   "tolerance": "1e-9",
+   "sample": "16 blocks"
+  },
+  {
+   "check": "fPCA B: 9 components kept, no block dropped",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "0 blocks",
+   "sample": "16 blocks"
+  },
+  {
+   "check": "fPCA B: sampled centres' scores by the kernel route",
+   "passed": true,
+   "measured": 4.592898027631321e-15,
+   "tolerance": "1e-9 of the largest score",
+   "sample": "200 sampled centres, 16 blocks"
+  },
+  {
+   "check": "fPCA all: fit-sample scores against fpca_from_gram",
+   "passed": true,
+   "measured": 5.912415319221193e-13,
+   "tolerance": "1e-9 of the largest score",
+   "sample": "2 blocks (1, 11; the others not refitted)"
+  },
+  {
+   "check": "fPCA all: fractions of variance",
+   "passed": true,
+   "measured": 1.942890293094024e-16,
+   "tolerance": "1e-9",
+   "sample": "2 blocks (1, 11; the others not refitted)"
+  },
+  {
+   "check": "fPCA all: 9 components kept, no block dropped",
+   "passed": true,
+   "measured": 0.0,
+   "tolerance": "0 blocks",
+   "sample": "2 blocks (1, 11; the others not refitted)"
+  },
+  {
+   "check": "fPCA all: sampled centres' scores by the kernel route",
+   "passed": true,
+   "measured": 3.0879036408404016e-15,
+   "tolerance": "1e-9 of the largest score",
+   "sample": "200 sampled centres, 2 blocks (1, 11; the others not refitted)"
+  },
+  {
+   "check": "MFA A: every level-2 row by eigendecomposition",
+   "passed": true,
+   "measured": 3.9248980284382333e-13,
+   "tolerance": "1e-9 of the largest score",
+   "sample": "45,000 rows \u00d7 20 components"
+  },
+  {
+   "check": "MFA A: fractions of variance",
+   "passed": true,
+   "measured": 3.2612801348363973e-16,
+   "tolerance": "1e-9",
+   "sample": "20 components"
+  },
+  {
+   "check": "MFA A: control level-2 rows of the sampled centres (kernel route, then the MFA)",
+   "passed": true,
+   "measured": 7.358401327638188e-14,
+   "tolerance": "1e-9 of the largest observed score",
+   "sample": "200 sampled centres \u00d7 16 blocks"
+  },
+  {
+   "check": "MFA B: every level-2 row by eigendecomposition",
+   "passed": true,
+   "measured": 7.278588860228294e-13,
+   "tolerance": "1e-9 of the largest score",
+   "sample": "45,000 rows \u00d7 20 components"
+  },
+  {
+   "check": "MFA B: fractions of variance",
+   "passed": true,
+   "measured": 6.800116025829084e-16,
+   "tolerance": "1e-9",
+   "sample": "20 components"
+  },
+  {
+   "check": "MFA B: control level-2 rows of the sampled centres (kernel route, then the MFA)",
+   "passed": true,
+   "measured": 2.263442343214261e-13,
+   "tolerance": "1e-9 of the largest observed score",
+   "sample": "200 sampled centres \u00d7 16 blocks"
+  },
+  {
+   "check": "MFA all: every level-2 row by eigendecomposition",
+   "passed": true,
+   "measured": 1.1216382203286668e-12,
+   "tolerance": "1e-9 of the largest score",
+   "sample": "45,000 rows \u00d7 20 components"
+  },
+  {
+   "check": "MFA all: fractions of variance",
+   "passed": true,
+   "measured": 7.563394355258879e-16,
+   "tolerance": "1e-9",
+   "sample": "20 components"
+  }
+ ],
+ "seconds": {
+  "arrays": 5.3,
+  "clustering": 274.5,
+  "balls": 256.1,
+  "blocks": 1296.5,
+  "total": 1832.9
+ },
+ "peak_rss_gb": 9.17,
+ "topocyte_commit": "18e3aa5",
+ "date": "2026-11-23",
+ "versions": {
+  "python": "3.13.9",
+  "numpy": "2.5.5",
+  "scipy": "1.18.1",
+  "scikit-learn": "1.9.1",
+  "gudhi": "3.13.0"
+ },
+ "samples": {
+  "balls": [
+   41552,
+   483,
+   21123,
+   12484,
+   18069,
+   13269,
+   23513,
+   14007,
+   7639,
+   25,
+   34641,
+   10088,
+   34162,
+   7879,
+   17114,
+   2945,
+   11175,
+   2141,
+   19204,
+   8609,
+   41916,
+   8358,
+   16414,
+   42390,
+   23002,
+   36667,
+   18538,
+   33505,
+   15028,
+   4589,
+   25424,
+   10513,
+   36798,
+   37789,
+   38275,
+   22691,
+   8607,
+   28769,
+   4564,
+   24002,
+   13746,
+   21552,
+   24320,
+   32863,
+   28257,
+   7288,
+   5534,
+   19232,
+   27611,
+   20588,
+   5113,
+   6717,
+   14617,
+   30784,
+   17163,
+   8834,
+   24096,
+   37067,
+   37869,
+   15433,
+   1726,
+   1528,
+   1142,
+   36905,
+   36251,
+   44740,
+   38004,
+   34926,
+   41171,
+   17893,
+   34661,
+   1395,
+   41151,
+   16797,
+   7057,
+   39579,
+   44993,
+   17917,
+   20531,
+   42052,
+   25434,
+   31914,
+   16640,
+   43744,
+   2651,
+   26312,
+   32112,
+   9677,
+   6353,
+   33970,
+   25890,
+   15087,
+   34244,
+   13801,
+   177,
+   5558,
+   38907,
+   33088,
+   12625,
+   27038,
+   4445,
+   24151,
+   42724,
+   40218,
+   2825,
+   8147,
+   15708,
+   18743,
+   33517,
+   1023,
+   27060,
+   8039,
+   32395,
+   36283,
+   4568,
+   6539,
+   27061,
+   9389,
+   16568,
+   22454,
+   5967,
+   22169,
+   6086,
+   28754,
+   17165,
+   12932,
+   4092,
+   5842,
+   7313,
+   33656,
+   11641,
+   11180,
+   18063,
+   3898,
+   43762,
+   10621,
+   26226,
+   16108,
+   10685,
+   8893,
+   42227,
+   37774,
+   26641,
+   28973,
+   36649,
+   38567,
+   38620,
+   23480,
+   15270,
+   20968,
+   28718,
+   15328,
+   24244,
+   37448,
+   28048,
+   19928,
+   30335,
+   9317,
+   5706,
+   28797,
+   9079,
+   44264,
+   5081,
+   38784,
+   32736,
+   40276,
+   40074,
+   38687,
+   3760,
+   1346,
+   36522,
+   20038,
+   36883,
+   43753,
+   13592,
+   33781,
+   41548,
+   11496,
+   6461,
+   17968,
+   15774,
+   20372,
+   38599,
+   16111,
+   19984,
+   12060,
+   28752,
+   20763,
+   4553,
+   12568,
+   10589,
+   35835,
+   10667,
+   15863,
+   23272,
+   16954,
+   22302,
+   41435,
+   32514,
+   31661
+  ],
+  "all_fit_blocks": [
+   1,
+   11
+  ]
+ }
+}
