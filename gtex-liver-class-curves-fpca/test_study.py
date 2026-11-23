@@ -4,8 +4,9 @@ Run them from this folder in topocyte's main-checkout venv, with the pinned
 checkout first on ``PYTHONPATH`` (``progress.md``, Rulings). The input tests
 read the sibling studies' saved results, read only; the fold and arm tests
 use synthetic curves, but for one that runs the first development fold on
-this study's ``results/gram.npz``; the readout and holdout tests use synthetic
-probabilities, scored against scikit-learn's ``roc_auc_score``.
+this study's ``results/gram.npz`` and is skipped until ``curves.py gram`` has
+written it; the readout and holdout tests use synthetic probabilities, scored
+against scikit-learn's ``roc_auc_score``.
 """
 
 from __future__ import annotations
@@ -250,7 +251,10 @@ def test_test_labels_never_change_test_predictions():
 
 def test_hidden_test_labels_leave_the_real_first_fold_unchanged():
     """On the real Grams and D+C, the first development fold's filter, k and arms are the same when its test slides'
-    labels are -1, as the holdout stage hides the holdout slides'."""
+    labels are -1, as the holdout stage hides the holdout slides'. Skipped before ``curves.py gram`` has written
+    ``results/gram.npz``."""
+    if not (c.RESULTS / "gram.npz").exists():
+        pytest.skip("needs this study's results/gram.npz, which curves.py gram writes")
     inputs = c.load_inputs()
     grams = rs.load_grams(inputs["slide_ids"])
     labels, dev = inputs["labels"], np.flatnonzero(inputs["dev"])

@@ -97,14 +97,16 @@ Needs:
 - no study venv: the scripts run in topocyte's main-checkout venv (Python 3.14.0), as the cell-type study's readouts
   did. `requirements.txt` records its versions; nothing is installed.
 
+The run's commands, in the order they ran; they are a record, not a recipe to repeat here (below):
+
 ```bash
 git -C /Users/simon/rep/lbi/reindero/topocyte worktree add --detach ../topocyte-18e3aa5 18e3aa5   # once
 export PYTHONPATH=/Users/simon/rep/lbi/reindero/topocyte-18e3aa5
 PY=/Users/simon/rep/lbi/reindero/topocyte/.venv/bin/python
 mkdir -p logs
-$PY -m pytest -q -W error test_study.py                                                  # a few seconds
 caffeinate -is /usr/bin/time -l $PY curves.py spike > logs/spike.log 2>&1
 caffeinate -is /usr/bin/time -l $PY curves.py gram > logs/gram.log 2>&1                  # about 10 min
+$PY -m pytest -q -W error test_study.py   # seconds; the real-fold test needs results/gram.npz, skipped without it
 caffeinate -is /usr/bin/time -l $PY run_study.py development > logs/development.log 2>&1 # under a minute
 caffeinate -is /usr/bin/time -l $PY run_study.py readouts > logs/readouts.log 2>&1
 caffeinate -is /usr/bin/time -l $PY run_study.py holdout > logs/holdout.log 2>&1         # once only: see below
@@ -112,12 +114,24 @@ caffeinate -is /usr/bin/time -l $PY verify_results.py > logs/verify.log 2>&1    
 $PY build_report.py
 ```
 
-**The holdout was scored once,** at 2026-11-23 20:07:22: `run_study.py holdout` wrote `results/holdout.npz` and then
-`results/holdout.json`, opening the json with mode "x". The stage refuses to start when `holdout.json` exists, and
-that is its only guard: it does not look at `holdout.npz`, and the `development` and `readouts` stages would rewrite
-`results/development.json`, whose interval the verdict read. So none of the three stages may be run again in this
-folder; a rerun belongs in a fresh copy. `verify_results.py` and `build_report.py` read the saved results only and
-score nothing.
+**This folder holds the study's one run, and its outputs cannot be regenerated.**
+
+- **The holdout was scored once,** at 2026-11-23 20:07:22: `run_study.py holdout` wrote `results/holdout.npz` and
+  then `results/holdout.json`, opening the json with mode "x". The stage refuses to start when `holdout.json` exists,
+  and that is its only guard: it does not look at `holdout.npz`, and the `development` and `readouts` stages would
+  rewrite `results/development.json`, whose interval the verdict read. So no stage may be run again in this folder.
+- **A clone cannot regenerate the outputs either.** It carries the tracked `results/holdout.json`, so its holdout
+  stage refuses, and `holdout.npz` could be remade only by deleting the committed result.
+- **The verifier and the report are tied to this run.** `verify_results.py`'s holdout check reads
+  `logs/holdout.log` and the files' creation times, and its provenance rows pin each md5 to the commit this run used
+  (the development run's `run_study.py` to 727667e); after a rerun both checks fail, and `build_report.py`, which
+  refuses a `verify.json` with a failed check, refuses too. Both read the saved results only and score nothing.
+- **So the gitignored outputs in this folder on Simon's machine are the kept copy:** `results/*.npz`, identified by
+  the sha256 sums in `results/verify.json`, `report.html`, and `logs/`, which must be kept: the holdout check and the
+  report's run table read it.
+- **A rerun is a new run:** the scripts in a new folder without `results/*.json`, every stage run there in order, and
+  `verify_results.py` given that run's provenance rows (the commits its md5s name). Its holdout stage would look at
+  the same 118 slides a second time, so its holdout score would not be a first look.
 
 | stage | ran | wall time | peak RSS | md5 (named in its json) |
 |---|---|---:|---:|---|
@@ -150,6 +164,6 @@ On an M4 with 10 cores and 16 GB. The development, readouts and holdout records 
 - `results/verify.json`: every check of `verify_results.py` with its measured value and tolerance, the md5 of the
   script and of the cell-type study's `common.py`, and the sha256 of every data file it read.
 
-Tracked: `results/*.json`. Not in git: `results/*.npz`, `logs/` and `report.html`. A fresh copy regenerates them with
-the scripts; the copy the report was built from is in this folder on Simon's machine, and `verify.json` holds its
-sha256 sums.
+Tracked: `results/*.json`. Not in git: `results/*.npz`, `logs/` and `report.html`. They are the kept copy in this
+folder on Simon's machine, which a clone cannot regenerate (Run, above); `verify.json` holds the sha256 of every npz
+file the verifier read.

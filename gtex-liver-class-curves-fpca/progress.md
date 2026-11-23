@@ -183,3 +183,10 @@ classification." Then: "cohort means pathology group. i want to know if it beats
   against a rerun, and the outputs. `requirements.txt` now also records pillow and topocyte's own dependencies. The
   repository's `README.md` and `EXPERIMENTS.md` (section 7) list the study. A new test runs the real first development
   fold with its test slides' labels set to −1 and gets the same filter, k and arms; 41 tests pass with `-W error`.
+- 2026-11-23, after the review: `README.md` no longer says that a fresh copy regenerates the outputs. This folder
+  holds the study's one run: a clone carries `results/holdout.json`, so its holdout stage refuses; the verifier's
+  holdout and provenance checks fit this run only, and the report needs them to pass. So `results/*.npz` (their
+  sha256 in `verify.json`), `report.html` and `logs/` here are the kept copy, and a rerun is a new run in a new
+  folder with its own provenance rows. The recipe now runs the tests after `curves.py gram`, and the real-fold test
+  skips without `results/gram.npz` (checked with `common.RESULTS` patched to an empty folder: 1 skipped); 41 tests
+  pass. `verify_results.py` and `build_report.py` are unchanged.
