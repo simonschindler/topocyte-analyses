@@ -1,0 +1,15 @@
+# The study venv, Python 3.13 (README.md gives the recipe). The study does not import topocyte.
+
+# e-means, the authors' code (Bessa et al. 2026, arXiv:2611.09501).
+faiss-cpu==1.16.0
+
+# The numerical stack, pinned as the chromatic pilot's venv.
+numpy==2.5.5
+scipy==1.18.1
+scikit-learn==1.9.1
+h5py==3.16.0
+matplotlib==3.11.2
+pillow==13.0.0
+
+# Tools.
+pytest==9.2.0

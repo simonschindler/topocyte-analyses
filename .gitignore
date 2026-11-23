@@ -1,6 +1,7 @@
 # Generated outputs stay out of git; each study's README says how to rebuild
 # them and where the copy its report was built from is kept.
 *.npz
+*.npy
 *.html
 # ...except a viewer's page, which is source, not output.
 !*/viewer/static/*.html

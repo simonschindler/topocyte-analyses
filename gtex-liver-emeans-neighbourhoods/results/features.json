@@ -1,0 +1,46 @@
+{
+ "description": "every cohort cell's closed 150 \u00b5m ball: cells per class, and cells kept at density thresholds",
+ "columns": [
+  "n epithelial",
+  "n stromal",
+  "n immune",
+  "n other",
+  "kept at threshold 1",
+  "kept at threshold 2",
+  "kept at threshold 3",
+  "kept at threshold 4",
+  "kept at threshold 5",
+  "kept at threshold 6",
+  "kept at threshold 7",
+  "kept at threshold 8",
+  "kept at threshold 9"
+ ],
+ "n_cells": 126219124,
+ "n_slides": 594,
+ "radius_um": 150.0,
+ "radius_px": 303.52084176446783,
+ "px_um": 0.4942,
+ "k_nn": 10,
+ "thresholds_cells_per_mm2": [
+  0.24713836751567456,
+  1202.8189999823853,
+  1454.5047739446582,
+  1665.2869164736455,
+  1871.0879869216897,
+  2090.7329980996506,
+  2344.55895421218,
+  2665.4206435880046,
+  3133.6036559869212,
+  4059.551924416354
+ ],
+ "max_count": 966,
+ "mean_cells_per_ball": 151.2487075730299,
+ "seconds": 457.9,
+ "script_md5": "ad8cfb3f563554a181cf9af12d984ac4",
+ "versions": {
+  "python": "3.13.9",
+  "numpy": "2.5.5",
+  "scipy": "1.18.1",
+  "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+ }
+}

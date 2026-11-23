@@ -1,0 +1,565 @@
+{
+ "all_ok": true,
+ "checks": [
+  {
+   "check": "counts.npy: cells × columns, uint16",
+   "ok": true,
+   "measured": [
+    [
+     126219124,
+     13
+    ],
+    "uint16"
+   ],
+   "tolerance": null
+  },
+  {
+   "check": "counts.npy: balls without their cell, kept counts rising or above the ball's, kept cells missing from their ball",
+   "ok": true,
+   "measured": [
+    0,
+    0,
+    0,
+    0
+   ],
+   "tolerance": null
+  },
+  {
+   "check": "counts.npy: maximum count and mean cells per ball as features.json",
+   "ok": true,
+   "measured": {
+    "max": 966,
+    "mean": 151.2487075730299
+   },
+   "tolerance": 1e-12
+  },
+  {
+   "check": "features.json: thresholds as density.npz's deciles",
+   "ok": true,
+   "measured": 10,
+   "tolerance": null
+  },
+  {
+   "check": "ball counts of 1,200 sampled cells recounted from every distance (exact, within the boundary's rounding, wrong)",
+   "ok": true,
+   "measured": [
+    1200,
+    0,
+    0
+   ],
+   "tolerance": 1e-12
+  },
+  {
+   "check": "gap.json and clusters.json as the per-set files",
+   "ok": true,
+   "measured": 3,
+   "tolerance": null
+  },
+  {
+   "check": "md5 of features.py and cluster.py as the results name them",
+   "ok": true,
+   "measured": [
+    "ad8cfb3f563554a181cf9af12d984ac4",
+    "5d8c55b4ebbb2be32974294667396653"
+   ],
+   "tolerance": null
+  },
+  {
+   "check": "composition: columns used and the constant ones left out",
+   "ok": true,
+   "measured": {
+    "used": 4,
+    "left out": [],
+    "smallest SD used": 0.07530236816108687
+   },
+   "tolerance": null
+  },
+  {
+   "check": "composition: column means and SDs (relative)",
+   "ok": true,
+   "measured": [
+    4.207421198709402e-12,
+    7.861735405128803e-12
+   ],
+   "tolerance": 1e-09
+  },
+  {
+   "check": "composition: block weights 1/√(block columns) in the combined set, else 1",
+   "ok": true,
+   "measured": 0.0,
+   "tolerance": null
+  },
+  {
+   "check": "labels_composition.npz: every cell, k = 2..10, each label below its k",
+   "ok": true,
+   "measured": {
+    "cells": 126219124,
+    "arrays": 10
+   },
+   "tolerance": null
+  },
+  {
+   "check": "composition: every saved label is its nearest saved centroid, up to float32 ties (k: relabelled, beyond ties)",
+   "ok": true,
+   "measured": {
+    "2": [
+     0,
+     0
+    ],
+    "3": [
+     1,
+     0
+    ],
+    "4": [
+     1,
+     0
+    ],
+    "5": [
+     0,
+     0
+    ],
+    "6": [
+     0,
+     0
+    ],
+    "7": [
+     1,
+     0
+    ],
+    "8": [
+     2,
+     0
+    ],
+    "9": [
+     0,
+     0
+    ],
+    "10": [
+     3,
+     0
+    ]
+   },
+   "tolerance": 1e-05
+  },
+  {
+   "check": "composition: W_k, k = 1..10, from the labels (relative)",
+   "ok": true,
+   "measured": [
+    1e-09,
+    4.2e-08,
+    1.1e-08,
+    2e-09,
+    2.7e-08,
+    3.4e-08,
+    2.9e-08,
+    7.5e-08,
+    1.14e-07,
+    1.13e-07
+   ],
+   "tolerance": 1e-05
+  },
+  {
+   "check": "composition: log W_k as the fits' mse",
+   "ok": true,
+   "measured": 0.0,
+   "tolerance": null
+  },
+  {
+   "check": "composition: cluster sizes, shares, cells per ball and fractions (largest error)",
+   "ok": true,
+   "measured": {
+    "n": 0,
+    "share": 0.0,
+    "cells per ball": 0.0,
+    "fractions": 4.9887600660381004e-05
+   },
+   "tolerance": {
+    "share": 1e-12,
+    "cells per ball": 1e-09,
+    "fractions": 5.0000001000000005e-05
+   }
+  },
+  {
+   "check": "composition: Gap(k) and s_k from the saved W_k and references",
+   "ok": true,
+   "measured": 0.0,
+   "tolerance": null
+  },
+  {
+   "check": "composition: k̂, Tibshirani's rule and the pilot's",
+   "ok": true,
+   "measured": [
+    10,
+    10
+   ],
+   "tolerance": null
+  },
+  {
+   "check": "composition: reference 1 redrawn, log W*_k within √(B − 1) SDs of the saved mean",
+   "ok": true,
+   "measured": {
+    "deviation": [
+     0.000189,
+     0.00012,
+     5.9e-05,
+     3.5e-05,
+     0.00193,
+     0.000843,
+     5.8e-05,
+     5.9e-05,
+     0.00037,
+     0.000383
+    ],
+    "bound": [
+     0.001217,
+     0.000949,
+     0.00093,
+     0.000978,
+     0.012409,
+     0.005697,
+     0.001014,
+     0.000914,
+     0.003206,
+     0.003547
+    ]
+   },
+   "tolerance": 0.0001
+  },
+  {
+   "check": "density: columns used and the constant ones left out",
+   "ok": true,
+   "measured": {
+    "used": 9,
+    "left out": [
+     "kept fraction, threshold 0"
+    ],
+    "smallest SD used": 0.15502473056617108
+   },
+   "tolerance": null
+  },
+  {
+   "check": "density: column means and SDs (relative)",
+   "ok": true,
+   "measured": [
+    2.1009955315349897e-12,
+    1.1166130893973271e-10
+   ],
+   "tolerance": 1e-09
+  },
+  {
+   "check": "density: block weights 1/√(block columns) in the combined set, else 1",
+   "ok": true,
+   "measured": 0.0,
+   "tolerance": null
+  },
+  {
+   "check": "labels_density.npz: every cell, k = 2..10, each label below its k",
+   "ok": true,
+   "measured": {
+    "cells": 126219124,
+    "arrays": 10
+   },
+   "tolerance": null
+  },
+  {
+   "check": "density: every saved label is its nearest saved centroid, up to float32 ties (k: relabelled, beyond ties)",
+   "ok": true,
+   "measured": {
+    "2": [
+     1,
+     0
+    ],
+    "3": [
+     3,
+     0
+    ],
+    "4": [
+     1,
+     0
+    ],
+    "5": [
+     11,
+     0
+    ],
+    "6": [
+     8,
+     0
+    ],
+    "7": [
+     10,
+     0
+    ],
+    "8": [
+     12,
+     0
+    ],
+    "9": [
+     16,
+     0
+    ],
+    "10": [
+     14,
+     0
+    ]
+   },
+   "tolerance": 1e-05
+  },
+  {
+   "check": "density: W_k, k = 1..10, from the labels (relative)",
+   "ok": true,
+   "measured": [
+    1e-09,
+    3e-09,
+    1.01e-07,
+    7.4e-08,
+    2e-09,
+    1.95e-07,
+    3.45e-07,
+    1.17e-07,
+    5.6e-08,
+    1.83e-07
+   ],
+   "tolerance": 1e-05
+  },
+  {
+   "check": "density: log W_k as the fits' mse",
+   "ok": true,
+   "measured": 0.0,
+   "tolerance": null
+  },
+  {
+   "check": "density: cluster sizes, shares, cells per ball and fractions (largest error)",
+   "ok": true,
+   "measured": {
+    "n": 0,
+    "share": 0.0,
+    "cells per ball": 0.0,
+    "fractions": 4.9967652280602515e-05
+   },
+   "tolerance": {
+    "share": 1e-12,
+    "cells per ball": 1e-09,
+    "fractions": 5.0000001000000005e-05
+   }
+  },
+  {
+   "check": "density: Gap(k) and s_k from the saved W_k and references",
+   "ok": true,
+   "measured": 0.0,
+   "tolerance": null
+  },
+  {
+   "check": "density: k̂, Tibshirani's rule and the pilot's",
+   "ok": true,
+   "measured": [
+    7,
+    7
+   ],
+   "tolerance": null
+  },
+  {
+   "check": "density: reference 1 redrawn, log W*_k within √(B − 1) SDs of the saved mean",
+   "ok": true,
+   "measured": {
+    "deviation": [
+     0.000177,
+     1.6e-05,
+     0.000182,
+     0.00656,
+     0.000303,
+     0.000314,
+     0.000192,
+     0.000228,
+     0.000251,
+     0.000388
+    ],
+    "bound": [
+     0.001086,
+     0.001002,
+     0.000931,
+     0.051089,
+     0.000912,
+     0.000943,
+     0.000881,
+     0.000895,
+     0.000861,
+     0.005435
+    ]
+   },
+   "tolerance": 0.0001
+  },
+  {
+   "check": "composition+density: columns used and the constant ones left out",
+   "ok": true,
+   "measured": {
+    "used": 13,
+    "left out": [
+     "kept fraction, threshold 0"
+    ],
+    "smallest SD used": 0.07530236816108687
+   },
+   "tolerance": null
+  },
+  {
+   "check": "composition+density: column means and SDs (relative)",
+   "ok": true,
+   "measured": [
+    4.207421198709402e-12,
+    1.1166130893973271e-10
+   ],
+   "tolerance": 1e-09
+  },
+  {
+   "check": "composition+density: block weights 1/√(block columns) in the combined set, else 1",
+   "ok": true,
+   "measured": 0.0,
+   "tolerance": null
+  },
+  {
+   "check": "labels_composition_density.npz: every cell, k = 2..10, each label below its k",
+   "ok": true,
+   "measured": {
+    "cells": 126219124,
+    "arrays": 10
+   },
+   "tolerance": null
+  },
+  {
+   "check": "composition+density: every saved label is its nearest saved centroid, up to float32 ties (k: relabelled, beyond ties)",
+   "ok": true,
+   "measured": {
+    "2": [
+     0,
+     0
+    ],
+    "3": [
+     0,
+     0
+    ],
+    "4": [
+     6,
+     0
+    ],
+    "5": [
+     13,
+     0
+    ],
+    "6": [
+     5,
+     0
+    ],
+    "7": [
+     7,
+     0
+    ],
+    "8": [
+     11,
+     0
+    ],
+    "9": [
+     11,
+     0
+    ],
+    "10": [
+     15,
+     0
+    ]
+   },
+   "tolerance": 1e-05
+  },
+  {
+   "check": "composition+density: W_k, k = 1..10, from the labels (relative)",
+   "ok": true,
+   "measured": [
+    0.0,
+    1.3e-08,
+    2.7e-08,
+    2e-08,
+    9.2e-08,
+    1.3e-07,
+    2.7e-08,
+    5.8e-08,
+    1.1e-07,
+    1.09e-07
+   ],
+   "tolerance": 1e-05
+  },
+  {
+   "check": "composition+density: log W_k as the fits' mse",
+   "ok": true,
+   "measured": 0.0,
+   "tolerance": null
+  },
+  {
+   "check": "composition+density: cluster sizes, shares, cells per ball and fractions (largest error)",
+   "ok": true,
+   "measured": {
+    "n": 0,
+    "share": 0.0,
+    "cells per ball": 0.0,
+    "fractions": 4.969565219713895e-05
+   },
+   "tolerance": {
+    "share": 1e-12,
+    "cells per ball": 1e-09,
+    "fractions": 5.0000001000000005e-05
+   }
+  },
+  {
+   "check": "composition+density: Gap(k) and s_k from the saved W_k and references",
+   "ok": true,
+   "measured": 0.0,
+   "tolerance": null
+  },
+  {
+   "check": "composition+density: k̂, Tibshirani's rule and the pilot's",
+   "ok": true,
+   "measured": [
+    3,
+    3
+   ],
+   "tolerance": null
+  },
+  {
+   "check": "composition+density: reference 1 redrawn, log W*_k within √(B − 1) SDs of the saved mean",
+   "ok": true,
+   "measured": {
+    "deviation": [
+     4e-06,
+     0.00011,
+     0.000126,
+     0.000269,
+     0.001756,
+     0.003674,
+     0.001334,
+     0.000125,
+     0.0003,
+     8e-05
+    ],
+    "bound": [
+     0.000725,
+     0.000774,
+     0.000812,
+     0.000797,
+     0.02579,
+     0.018335,
+     0.012926,
+     0.000751,
+     0.00197,
+     0.003159
+    ]
+   },
+   "tolerance": 0.0001
+  }
+ ],
+ "script_md5": "aa9d297bd78553121e4225d62055d3ec",
+ "sha256": {
+  "/Users/simon/rep/lbi/reindero/topocyte-analyses/gtex-liver-emeans-neighbourhoods/results/counts.npy": "1536d340bb818177dbd42980d8075cd309041cbb97bbba1f4409b8fa422a97c0",
+  "/Users/simon/rep/lbi/reindero/topocyte-analyses/gtex-liver-emeans-neighbourhoods/results/labels_composition.npz": "8d12066116787f8b16b41cd7825166d3dbae19f14dc52ea8c880f56ad701105c",
+  "/Users/simon/rep/lbi/reindero/topocyte-analyses/gtex-liver-emeans-neighbourhoods/results/labels_density.npz": "6f1b489fdd74647347b1fdd28edf750fb02eb14d555185866ce315519598ee9c",
+  "/Users/simon/rep/lbi/reindero/topocyte-analyses/gtex-liver-emeans-neighbourhoods/results/labels_composition_density.npz": "6bb956afbb1ad997f9400a6cc3159cae4da2e2f3ea40109d505c06ab3fc3f191",
+  "/Users/simon/rep/lbi/reindero/topocyte-analyses/gtex-liver-pathology-slices/results/density.npz": "0003da4c4dea0f482884cbcf8514849e0d67e8b23ed2fb755a6c4a5f8fdec87a",
+  "/Users/simon/data/gtex_liver_cells/gtex_liver_cells/gtex_liver_cells.h5ad": "e65b38af4b6c3889e93ca9f6440dd6107255d308157b70eda5ce6890962cdfd8"
+ },
+ "seconds": 844.5
+}
