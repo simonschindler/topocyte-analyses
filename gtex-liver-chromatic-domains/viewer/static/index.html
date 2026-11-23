@@ -25,6 +25,7 @@
     display: flex; flex-direction: column; gap: 12px; padding: 14px 16px; overflow-y: auto;
     border-right: 1px solid var(--rule); background: var(--page);
   }
+  aside > * { flex: none; } /* the sidebar scrolls rather than squeezing the slide list */
   h1 { margin: 0; font-size: 15px; font-weight: 600; }
   .sub { color: var(--ink2); font-size: 12px; margin-top: 2px; }
   label.field { display: flex; flex-direction: column; gap: 4px; color: var(--ink2); font-size: 12px; }
@@ -83,6 +84,29 @@
   }
   #scalebar[hidden] { display: none; }
   #scalebar .bar { height: 5px; margin-top: 2px; border: 2px solid var(--ink); border-top: 0; }
+  #curves {
+    position: absolute; right: 16px; bottom: 16px; z-index: 6; padding: 8px 10px 6px; border-radius: 6px;
+    background: color-mix(in srgb, var(--surface) 94%, transparent); box-shadow: 0 0 0 1px var(--rule);
+    color: var(--ink); font-size: 12px;
+  }
+  #curves[hidden], #curves-open[hidden] { display: none; }
+  .curves-head { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+  .curves-head select { flex: 1; padding: 2px 4px; }
+  #curves-close { padding: 0 8px; cursor: pointer; }
+  #curves-chart svg { display: block; }
+  #curves-chart svg text { fill: var(--ink2); font-size: 10px; font-variant-numeric: tabular-nums; }
+  .curves-legend { display: flex; gap: 12px; color: var(--ink2); font-size: 11px; padding-left: 36px; }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 4px; vertical-align: -1px; }
+  .curves-tip {
+    position: absolute; pointer-events: none; padding: 4px 7px; border-radius: 4px; font-size: 11px;
+    background: var(--surface); box-shadow: 0 0 0 1px var(--rule); font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .curves-tip[hidden] { display: none; }
+  .curves-tip .tip-head { color: var(--ink2); margin-bottom: 2px; }
+  #curves-open {
+    position: absolute; right: 16px; bottom: 16px; z-index: 6; padding: 3px 10px; cursor: pointer;
+  }
 </style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/openseadragon/4.0.0/openseadragon.min.js"></script>
 </head>
@@ -148,6 +172,16 @@
 <main id="stage">
   <div id="viewer"></div>
   <div id="scalebar" hidden><div class="label"></div><div class="bar"></div></div>
+  <section id="curves" aria-label="Class curves over the density threshold" hidden>
+    <div class="curves-head">
+      <select id="curves-view" aria-label="Curve"></select>
+      <button type="button" id="curves-close" title="Hide the class curves">×</button>
+    </div>
+    <div id="curves-chart"></div>
+    <div id="curves-legend" class="curves-legend"></div>
+    <div id="curves-tip" class="curves-tip" hidden></div>
+  </section>
+  <button type="button" id="curves-open" hidden>Class curves</button>
 </main>
 <script type="module" src="/static/app.js"></script>
 </body>

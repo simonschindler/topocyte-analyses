@@ -131,6 +131,24 @@ and Hardy scale (the circumstances of death, from the cohort table
 quality flag where there is one; the slide list shows the categories and notes
 as a tooltip.
 
+The panel in the slide view's bottom-right corner (it can be closed and
+reopened) draws, for the shown slide, how each class thins out as the density
+threshold rises, on the slider's scale with the slider's threshold marked. Its
+menu has three views:
+
+- **stacked** (the default): of the slide's cells, the share that is of each
+  class and at or above the threshold, stacked, so the stack starts at 1 and its
+  height is the share of the slide's cells kept;
+- **among the cells kept:** the share of each class among the cells at or above
+  the threshold (the curves add up to 1; faded where fewer than 1% of the
+  slide's cells are left);
+- **each class's own cells:** the share of each class's cells at or above the
+  threshold (each curve falls from 1).
+
+Hovering gives the values at a threshold. The counts are computed in the
+browser from the densities and bins the slider uses, by the same rule, so at
+the density slices they are the studies' kept counts.
+
 "Composition clusters on this slide" runs k-means with the chosen k (2 to 10)
 on every cell of the shown slide: the pilot's level-1 features of the cell's
 ball (log10 cells, unless "with density" is off, and the four class fractions;

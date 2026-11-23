@@ -1,5 +1,6 @@
 // The viewer's page: the slide list filtered by pathology group, an OpenSeadragon canvas (the slide's H&E
 // tiles, or a blank canvas of the cloud's size) and the WebGL layer of the slide's cells.
+import { CurvesPanel, binOf, classCounts } from "/static/curves.js";
 import { PointsOverlay } from "/static/overlay.js";
 import { CLUSTERS, DENSITY, PALETTE, rgb } from "/static/palette.js";
 
@@ -27,6 +28,7 @@ const state = {
 };
 let viewer = null;
 let overlay = null;
+let curves = null; // the class curves panel
 
 function setStatus(text) { $("status").textContent = text; }
 
@@ -49,6 +51,19 @@ function setTheme(theme) {
   document.documentElement.dataset.theme = theme;
   try { localStorage.setItem("theme", theme); } catch { /* private window: the theme is not remembered */ }
   applyColors();
+  curves?.setColours(classColours(), state.meta.classes);
+}
+
+// The class colours of the page's theme, for the curves panel (it sits on the page surface, not on the H&E).
+function classColours() {
+  const theme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+  return state.meta.classes.map((name) => PALETTE.classes[theme][name]);
+}
+
+function showCurves(open) {
+  $("curves").hidden = !open;
+  $("curves-open").hidden = open;
+  try { localStorage.setItem("curves", open ? "shown" : "hidden"); } catch { /* not remembered */ }
 }
 
 // Light colours on the light theme and on H&E, dark colours on the dark canvas.
@@ -427,7 +442,7 @@ async function runClusters() {
 function thresholdAt(step) {
   const { curve, deciles } = state.meta.density;
   const t = curve[step];
-  return { t, bin: deciles.slice(1).filter((d) => d <= t).length };
+  return { t, bin: binOf(t, deciles) };
 }
 
 // Hide the cells below the threshold in every layer, as the overlay decides it: by bin where the bins differ,
@@ -436,6 +451,7 @@ function applyThreshold() {
   const step = Number($("threshold").value);
   const { t, bin } = thresholdAt(step);
   overlay?.setThreshold(bin, t);
+  curves?.setMarker(step / 10);
   const bins = state.density;
   const rho = state.rho;
   if (!bins) {
@@ -533,6 +549,11 @@ async function loadSlide(id) {
       overlay.cellPx = CELL_UM / info.um_per_px;
       overlay.setPoints(xy, codesOf(state.layer), bins, rho);
       applyThreshold();
+      const classes = new Uint8Array(n);
+      for (let i = 0; i < n; i++) classes[i] = state.meta.type_class[types[i]];
+      const { curve, deciles } = state.meta.density;
+      const nClasses = state.meta.classes.length;
+      curves.setData({ counts: classCounts({ classes, bins, rho, nClasses, curve, deciles }), nCells: n });
       $("hne").disabled = !info.wsi;
       applyHne();
       applyColors();
@@ -588,6 +609,19 @@ async function init() {
   $("k").addEventListener("keydown", (event) => { if (event.key === "Enter") runClusters(); });
   clearClusters();
   $("threshold").addEventListener("input", applyThreshold);
+  curves = new CurvesPanel({
+    chart: $("curves-chart"),
+    legend: $("curves-legend"),
+    tip: $("curves-tip"),
+    select: $("curves-view"),
+    describe: (s) => `percentile ${(s / 10).toFixed(1)} · ≥ ${fmt(Math.round(state.meta.density.curve[s]))} cells per mm²`,
+  });
+  curves.setColours(classColours(), state.meta.classes);
+  $("curves-close").addEventListener("click", () => showCurves(false));
+  $("curves-open").addEventListener("click", () => showCurves(true));
+  let stored = null;
+  try { stored = localStorage.getItem("curves"); } catch { /* private window */ }
+  showCurves(stored !== "hidden");
   $("size").addEventListener("input", (event) => overlay?.setPointScale(Number(event.target.value)));
   $("alpha").addEventListener("input", (event) => overlay?.setAlpha(Number(event.target.value)));
   $("hne").addEventListener("change", () => {
