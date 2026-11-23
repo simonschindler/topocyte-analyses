@@ -93,3 +93,59 @@ classification." Then: "cohort means pathology group. i want to know if it beats
   - Checked before the run (scratch, not kept): the unfiltered D+C arm over the 100 folds equalled the reference
     bitwise, both under default threading and with one BLAS thread. One outer fold took 0.39 s.
   - No AUC was computed and no arm was compared with another: the readouts are Task 5's.
+- 2026-11-23: the `readouts` and `holdout` stages, their tests and the verdict function were committed as a58c812
+  before either stage ran, so both result files name committed code (run_study.py md5 034e0ad5…; folds.py and
+  common.py unchanged since the development run). The holdout fit gets the labels with the holdout slides' set to
+  −1, so that no holdout label can reach it.
+- 2026-11-23: `run_study.py readouts`, in the foreground (`caffeinate -is /usr/bin/time -l`, `logs/readouts.log`):
+  6.9 s wall (5.5 s in the json), peak RSS 0.31 GB. It added `readouts` to `results/development.json` and kept the
+  development run's metadata unchanged.
+  - **The D+C gate passed.** The unfiltered D+C, averaged over the repeats, has development macro AUC 0.7645, the
+    improvement phase's 0.764.
+  - **Macro AUC over the seven conditions, from the probabilities averaged over the 20 repeats.** The per-repeat
+    macro AUCs follow in parentheses (mean ± SD over the repeats).
+    - Curves at the chosen `k`: 0.750 (0.722 ± 0.013).
+    - Curves at `k = 4`: 0.740 (0.729 ± 0.013).
+    - D+C on the cleaned training slides: 0.756 (0.749 ± 0.011).
+    - D+C on all the training slides: 0.764 (0.759 ± 0.009).
+  - **Paired differences against D+C on the cleaned training slides,** with 95% intervals over 4000 bootstrap draws
+    stratified by group (`default_rng(12345)`):
+    - curves at the chosen `k`: −0.0064 [−0.0241, +0.0116]. The interval contains 0.
+    - curves at `k = 4`: −0.0164 [−0.0398, +0.0078] (reported beside, with no verdict).
+  - Each arm's per-condition AUCs and per-repeat macro AUCs are in the json.
+  - Checked after the run (a scratch script, not kept): scikit-learn's `roc_auc_score` reproduces the four macro
+    AUCs within 1e-12 from `development.npz`, with the labels read directly from `spaces.npz` and `holdout.csv`. A
+    rewrite of the stratified bootstrap gives, on its first 400 draws, intervals within 0.001 of the json's.
+- 2026-11-23 20:07: **`run_study.py holdout`, run once,** in the foreground (`logs/holdout.log`): 5.5 s wall (4.0 s in
+  the json), peak RSS 0.33 GB. No warning, and no logistic fit failed to converge. Nothing failed, so there was no
+  rerun.
+  - **The fit on the 476 development slides:**
+    - the filter dropped 55 (11.6%): healthy 7 of 53, congestion 15 of 124, steatosis 19 of 162, necrosis 3 of 14,
+      inflammation/hepatitis 1 of 10, fibrosis 1 of 40, cirrhosis 6 of 46, unclassified 3 of 27;
+    - `choose_k` (inner seed 999) chose `k = 6`.
+  - **The D+C gate passed.**
+    - The unfiltered D+C holdout probabilities equal the cell-type study's `improve_holdout.npz` "D+C features"
+      (`e2__proba`) exactly (largest absolute difference 0; gate `rtol=0`, `atol=1e-12`).
+    - That file lists the same holdout slides with the same groups, in the same order.
+    - Their macro AUC is 0.7739, the improvement phase's 0.774.
+  - **Holdout macro AUCs:**
+    - curves at the chosen `k`: 0.769;
+    - curves at `k = 4`: 0.765;
+    - D+C on the cleaned development slides: 0.779;
+    - D+C on all of them: 0.774.
+  - **Paired differences against D+C on the cleaned development slides,** with 95% intervals over 4000 bootstrap
+    draws of the holdout slides, stratified by group (`default_rng(12345)`):
+    - curves at the chosen `k`: −0.0101 [−0.0421, +0.0169];
+    - curves at `k = 4`: −0.0144 [−0.0537, +0.0183].
+    - The holdout's groups of 2 (inflammation/hepatitis) and 4 (necrosis) slides make these intervals too narrow;
+      `holdout.json` says so.
+  - **Verdict, by the rule fixed in advance: level with D+C.**
+    - The development interval of curves minus D+C, [−0.0241, +0.0116], contains 0.
+    - In that case the holdout difference does not enter the rule. It was negative too (−0.010).
+  - Beside the verdict: the filter cost D+C 0.008 of development macro AUC (0.756 against 0.764) and gained it 0.005
+    on the holdout (0.779 against 0.774).
+  - Checked after the run (a scratch script, not kept):
+    - `results/holdout.npz` (gitignored) holds the four arms (118 × 8; every row sums to 1), `k`, `dropped` (476),
+      and the holdout and development slide IDs and holdout labels, in the order of `holdout.csv`.
+    - Its unfiltered D+C equals `e2__proba` bitwise.
+    - scikit-learn's `roc_auc_score` reproduces the four holdout macro AUCs within 1e-12.

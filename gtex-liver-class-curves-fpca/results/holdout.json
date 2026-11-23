@@ -1,0 +1,136 @@
+{
+ "description": "the holdout, scored once: each arm fitted on the development slides predicts the holdout slides",
+ "scored_at": "2026-11-23 20:07:22",
+ "n_development": 476,
+ "n_holdout": 118,
+ "holdout_per_group": {
+  "healthy": 13,
+  "congestion": 31,
+  "steatosis": 40,
+  "necrosis": 4,
+  "inflammation/hepatitis": 2,
+  "fibrosis": 10,
+  "cirrhosis": 11,
+  "unclassified": 7
+ },
+ "fit": {
+  "inner_seed": 999,
+  "chosen_k": 6,
+  "dropped": 55,
+  "dropped_per_group": {
+   "healthy": 7,
+   "congestion": 15,
+   "steatosis": 19,
+   "necrosis": 3,
+   "inflammation/hepatitis": 1,
+   "fibrosis": 1,
+   "cirrhosis": 6,
+   "unclassified": 3
+  }
+ },
+ "gate": {
+  "reference": "gtex-liver-celltype-slices/results/improve_holdout.npz D+C features (e2__proba)",
+  "rtol": 0,
+  "atol": 1e-12,
+  "max_abs_difference": 0.0,
+  "macro_auc": 0.7739110031854152,
+  "expected": 0.774
+ },
+ "arms": {
+  "curves": {
+   "macro_auc": 0.7692505225161304,
+   "auc_per_condition": {
+    "healthy": 0.7189952904238619,
+    "congestion": 0.575,
+    "steatosis": 0.7619718309859155,
+    "necrosis": 0.927570093457944,
+    "inflammation/hepatitis": 0.7981651376146789,
+    "fibrosis": 0.6039603960396039,
+    "cirrhosis": 0.9990909090909091
+   }
+  },
+  "curves4": {
+   "macro_auc": 0.7650300979134182,
+   "auc_per_condition": {
+    "healthy": 0.7025117739403454,
+    "congestion": 0.5435483870967742,
+    "steatosis": 0.7397887323943662,
+    "necrosis": 0.9906542056074766,
+    "inflammation/hepatitis": 0.8073394495412844,
+    "fibrosis": 0.5722772277227722,
+    "cirrhosis": 0.9990909090909091
+   }
+  },
+  "dc": {
+   "macro_auc": 0.7793958133102562,
+   "auc_per_condition": {
+    "healthy": 0.7370486656200942,
+    "congestion": 0.6092741935483871,
+    "steatosis": 0.7753521126760563,
+    "necrosis": 0.9672897196261683,
+    "inflammation/hepatitis": 0.7981651376146789,
+    "fibrosis": 0.5722772277227722,
+    "cirrhosis": 0.9963636363636363
+   }
+  },
+  "dc_unfiltered": {
+   "macro_auc": 0.7739110031854152,
+   "auc_per_condition": {
+    "healthy": 0.7551020408163265,
+    "congestion": 0.5854838709677419,
+    "steatosis": 0.7943661971830986,
+    "necrosis": 0.9626168224299065,
+    "inflammation/hepatitis": 0.8165137614678899,
+    "fibrosis": 0.5069306930693069,
+    "cirrhosis": 0.9963636363636363
+   }
+  }
+ },
+ "comparisons": {
+  "curves - dc": {
+   "difference": -0.01014529079412585,
+   "interval": [
+    -0.04210572979800932,
+    0.01692075407755962
+   ]
+  },
+  "curves4 - dc": {
+   "difference": -0.014365715396837953,
+   "interval": [
+    -0.05365301710899207,
+    0.01830736496283974
+   ]
+  }
+ },
+ "bootstrap": {
+  "draws": 4000,
+  "seed": 12345,
+  "stratified_by": "group"
+ },
+ "note": "The intervals are too narrow: the bootstrap resamples the holdout slides within their groups, and groups of few slides (necrosis 4, inflammation/hepatitis 2) vary little across the draws.",
+ "verdict": {
+  "rule": "beats D+C: the development interval of curves - dc lies above 0 and its holdout difference is positive; not confirmed: the interval lies above 0 and the holdout difference is not positive; level with D+C: the interval contains 0; below D+C: it lies below 0. curves4 - dc is reported beside, with no verdict.",
+  "development_interval": [
+   -0.02406541316924912,
+   0.011567146728145248
+  ],
+  "holdout_difference": -0.01014529079412585,
+  "verdict": "level with D+C"
+ },
+ "convergence_warnings": 0,
+ "seconds": 4.0,
+ "peak_rss_gb": 0.33,
+ "md5": {
+  "run_study.py": "034e0ad569f7d6d79ea0f480f4ea00a5",
+  "folds.py": "c6b1d6546bbda28c9986d88204289133",
+  "common.py": "db4b4915cadc80c815832b6ce97c6b77"
+ },
+ "topocyte_commit": "18e3aa5",
+ "versions": {
+  "python": "3.14.0",
+  "numpy": "2.5.1",
+  "scipy": "1.18.0",
+  "scikit-learn": "1.9.0"
+ },
+ "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+}
