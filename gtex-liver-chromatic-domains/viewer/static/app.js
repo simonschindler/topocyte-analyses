@@ -1,7 +1,7 @@
 // The viewer's page: the slide list filtered by pathology group, an OpenSeadragon canvas (the slide's H&E
 // tiles, or a blank canvas of the cloud's size) and the WebGL layer of the slide's cells.
 import { PointsOverlay } from "/static/overlay.js";
-import { PALETTE, rgb } from "/static/palette.js";
+import { CLUSTERS, PALETTE, rgb } from "/static/palette.js";
 
 const BLANK = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 const CELL_UM = 10; // a cell's drawn diameter once zoomed in far enough
@@ -14,8 +14,10 @@ const state = {
   slide: null, // the slide being shown or loading
   info: null, // /api/slide/<id> of the shown slide
   counts: null, // cells per type code on the shown slide
-  layer: "types", // "types" | "classes"
-  hidden: { types: new Set(), classes: new Set() },
+  types: null, // the shown slide's type code per cell
+  clusters: null, // /api/cluster/<id> of the shown slide, with its labels decoded
+  layer: "types", // "types" | "classes" | "clusters"
+  hidden: { types: new Set(), classes: new Set(), clusters: new Set() },
 };
 let viewer = null;
 let overlay = null;
@@ -53,6 +55,17 @@ function legendEntries() {
   const { types, type_class: typeClass, classes } = state.meta;
   const mode = paletteMode();
   const count = (t) => (state.counts ? state.counts[t] : 0);
+  if (state.layer === "clusters") {
+    return state.clusters.clusters.map((cluster, j) => ({
+      key: j,
+      label: `C${j + 1}`,
+      hex: CLUSTERS[mode][j],
+      n: cluster.n,
+      mix: cluster.fractions.map((f, k) => ({ f, hex: PALETTE.classes[mode][classes[k]] })),
+      title: `${Math.round(cluster.cells_per_ball)} cells per ball on average; `
+        + cluster.fractions.map((f, k) => `${classes[k]} ${f.toFixed(2)}`).join(", "),
+    }));
+  }
   if (state.layer === "types") {
     return Object.keys(PALETTE.types[mode]).map((name) => {
       const t = types.indexOf(name);
@@ -73,6 +86,14 @@ function applyColors() {
   const { types, type_class: typeClass, classes } = state.meta;
   const mode = paletteMode();
   const table = new Float32Array(16 * 4);
+  if (state.layer === "clusters") {
+    state.clusters.clusters.forEach((_, j) => {
+      table.set([...rgb(CLUSTERS[mode][j]), state.hidden.clusters.has(j) ? 0 : 1], j * 4);
+    });
+    overlay?.setColors(table);
+    renderLegend();
+    return;
+  }
   types.forEach((name, t) => {
     const k = typeClass[t];
     const hex = state.layer === "types" ? PALETTE.types[mode][name] : PALETTE.classes[mode][classes[k]];
@@ -109,6 +130,18 @@ function renderLegend() {
     n.className = "count";
     n.textContent = state.counts ? `${fmt(e.n)} · ${total ? ((100 * e.n) / total).toFixed(1) : "0.0"}%` : "";
     label.append(box, swatch, name, n);
+    if (e.mix) {
+      const mix = document.createElement("span");
+      mix.className = "mix";
+      mix.append(...e.mix.map(({ f, hex }) => {
+        const part = document.createElement("span");
+        part.style.width = `${(100 * f).toFixed(2)}%`;
+        part.style.background = hex;
+        return part;
+      }));
+      label.append(mix);
+      label.title = e.title;
+    }
     const only = document.createElement("button");
     only.type = "button";
     only.className = "only";
@@ -165,6 +198,70 @@ function renderSlides() {
   } else {
     list.value = slides[0].slide_id;
     loadSlide(slides[0].slide_id);
+  }
+}
+
+// The per-cell codes follow the layer: cluster labels for "clusters", type codes otherwise.
+function setLayer(layer) {
+  const codesChange = (layer === "clusters") !== (state.layer === "clusters");
+  state.layer = layer;
+  document.querySelector(`input[name=layer][value=${layer}]`).checked = true;
+  if (codesChange && overlay && state.types) {
+    overlay.setCodes(layer === "clusters" ? state.clusters.labels : state.types);
+  }
+  applyColors();
+}
+
+// --- composition clusters ---------------------------------------------------------------------------------
+
+function clusterMethod(r) {
+  const scale = r.um_source === "assumed" ? `, ${r.um_per_px} µm/px assumed` : "";
+  return `k-means (k = ${r.k}, ${r.n_init} starts, seed ${r.seed}) of ${r.features.join(", ")} in every cell's `
+    + `${r.radius_um} µm ball, z-scored on this slide${scale}; ${r.seconds} s.`;
+}
+
+function clearClusters() {
+  state.clusters = null;
+  state.hidden.clusters.clear();
+  $("layer-clusters").disabled = true;
+  if (state.layer === "clusters") state.layer = "types";
+  document.querySelector(`input[name=layer][value=${state.layer}]`).checked = true;
+  const { radius_um: radius } = state.meta.cluster;
+  $("cluster-note").textContent = `Clusters every cell by its ${radius} µm ball: log10 cells (with density) and `
+    + "the four class fractions, as the pilot's level 1.";
+}
+
+async function runClusters() {
+  const id = state.slide;
+  const { k_min: kMin, k_max: kMax } = state.meta.cluster;
+  const k = Number($("k").value);
+  if (!state.info || state.info.slide_id !== id) return;
+  if (!Number.isInteger(k) || k < kMin || k > kMax) {
+    $("cluster-note").textContent = `k must be a whole number from ${kMin} to ${kMax}.`;
+    return;
+  }
+  const density = $("density").checked;
+  $("run").disabled = true;
+  $("cluster-note").textContent = `Clustering ${fmt(state.info.n_cells)} cells with k = ${k} …`;
+  try {
+    const result = await fetchOk(`/api/cluster/${encodeURIComponent(id)}?k=${k}&density=${density ? 1 : 0}`)
+      .then((r) => r.json());
+    if (state.slide !== id) return;
+    const bytes = atob(result.labels);
+    const labels = new Uint8Array(bytes.length);
+    for (let i = 0; i < bytes.length; i++) labels[i] = bytes.charCodeAt(i);
+    if (labels.length !== state.types.length) throw new Error(`${labels.length} labels for ${state.types.length} cells`);
+    if (state.layer === "clusters") overlay.setCodes(state.types); // the old labels leave before the new ones come
+    state.layer = "types";
+    state.clusters = { ...result, labels };
+    state.hidden.clusters.clear();
+    $("layer-clusters").disabled = false;
+    $("cluster-note").textContent = clusterMethod(result);
+    setLayer("clusters");
+  } catch (err) {
+    if (state.slide === id) $("cluster-note").textContent = `Could not cluster: ${err.message}`;
+  } finally {
+    $("run").disabled = false;
   }
 }
 
@@ -229,6 +326,8 @@ async function loadSlide(id) {
       if (state.slide !== id) return;
       state.info = info;
       state.counts = counts;
+      state.types = types;
+      clearClusters();
       overlay ??= new PointsOverlay(viewer, CELL_UM / info.um_per_px);
       overlay.cellPx = CELL_UM / info.um_per_px;
       overlay.setPoints(xy, types);
@@ -268,9 +367,13 @@ async function init() {
   $("hne-only").addEventListener("change", renderSlides);
   $("slides").addEventListener("change", (event) => loadSlide(event.target.value));
   document.querySelectorAll("input[name=layer]").forEach((radio) => radio.addEventListener("change", () => {
-    state.layer = radio.value;
-    applyColors();
+    setLayer(radio.value);
   }));
+  $("k").min = String(state.meta.cluster.k_min);
+  $("k").max = String(state.meta.cluster.k_max);
+  $("run").addEventListener("click", runClusters);
+  $("k").addEventListener("keydown", (event) => { if (event.key === "Enter") runClusters(); });
+  clearClusters();
   $("size").addEventListener("input", (event) => overlay?.setPointScale(Number(event.target.value)));
   $("alpha").addEventListener("input", (event) => overlay?.setAlpha(Number(event.target.value)));
   $("hne").addEventListener("change", () => {

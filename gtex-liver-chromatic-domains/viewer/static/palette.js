@@ -33,6 +33,15 @@ export const PALETTE = {
   },
 };
 
+// Composition clusters, largest first: the dataviz reference palette's eight categorical slots in its fixed
+// order (validated on adjacent pairs; in a scatter only the first three stay apart on every pair), then two
+// darker (light) or lighter (dark) steps of slots 1 and 2 for k = 9 and 10. The legend's toggles and "only"
+// buttons separate clusters that look alike.
+export const CLUSTERS = {
+  light: ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948", "#184f95", "#ab3d06"],
+  dark: ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#0ca30c", "#9085e9", "#e66767", "#86b6ef", "#fe9068"],
+};
+
 export function rgb(hex) {
   const v = parseInt(hex.slice(1), 16);
   return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255];

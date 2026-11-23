@@ -111,6 +111,15 @@ The scale bar in µm (1, 2 or 5 × 10^k) uses the slide file's pixel size where
 there is one, else the cohort's assumed 0.4942 µm per pixel; the status line
 says which.
 
+"Composition clusters on this slide" runs k-means with the chosen k (2 to 10)
+on every cell of the shown slide: the pilot's level-1 features of the cell's
+150 µm ball (log10 cells, unless "with density" is off, and the four class
+fractions; `features.level1`), z-scored on that slide, with `domains.py`'s
+`KMeans(k, n_init=20, random_state=0)`. Clusters are numbered by size, largest
+first, and the legend shows each cluster's mean composition. The first run on
+a slide counts the balls; on the largest slide (about a million cells) k = 10
+takes about 13 s.
+
 ## Outputs
 
 Tracked: `results/pilot.csv` (the 30 slides with their condition, half and

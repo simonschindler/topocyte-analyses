@@ -107,7 +107,16 @@ export class PointsOverlay {
     this.draw();
   }
 
-  // colors: Float32Array of MAX_TYPES × (r, g, b, shown), indexed by type code.
+  // Replace the per-cell codes the colour table is indexed by (type codes, or cluster labels), one per cell.
+  setCodes(codes) {
+    const gl = this.gl;
+    if (codes.length !== this.count) throw new Error(`${codes.length} codes for ${this.count} cells`);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.types);
+    gl.bufferData(gl.ARRAY_BUFFER, codes, gl.STATIC_DRAW);
+    this.draw();
+  }
+
+  // colors: Float32Array of MAX_TYPES × (r, g, b, shown), indexed by type code or cluster label.
   setColors(colors) {
     this.colors.fill(0);
     this.colors.set(colors.subarray(0, MAX_TYPES * 4));

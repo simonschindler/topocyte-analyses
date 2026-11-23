@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 """Browser viewer of the GTEx liver cohort's cells: every slide's point cloud, coloured by HistoPLUS cell type
-or by the study's four classes, with the slides filtered by pathology group.
+or by the study's four classes, with the slides filtered by pathology group. On one slide at a time it also
+clusters every cell by the composition of its 150 µm ball (the pilot's level-1 features) with a chosen k.
 
 Adapted from ``tissuegeometry/web/cosine_viewer`` (its DeepZoom tile serving and WebGL point overlay) without
 its local-homology endpoints, its FastAPI backend or its tissuegraphs and Rust imports.
@@ -21,17 +22,19 @@ Nothing is written.
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import math
 import struct
 import sys
 import threading
+import time
 from collections import OrderedDict
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import parse_qs, unquote, urlparse
 
 import numpy as np
 import pandas as pd
@@ -48,6 +51,10 @@ WSI_SUFFIXES = (".svs", ".tif", ".tiff", ".ndpi", ".mrxs", ".scn", ".bif", ".vms
 TILE_SIZE = 256  # DeepZoom tiles without overlap, as in cosine_viewer
 MARGIN_PX = 256  # blank border around a point cloud shown without its slide
 CACHE = 4  # slides whose cells, and slide files whose tile generators, stay in memory
+# Composition clusters: the pilot's level 1 (features.level1, domains.kmeans) on every cell of one slide.
+K_MIN, K_MAX = 2, 10
+N_INIT, KMEANS_SEED = 20, 0
+FEATURES = ("log10 cells", *(f"{name} fraction" for name in c.CLASSES))
 STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css"}
 
 
@@ -92,7 +99,7 @@ def cell_types() -> list[str]:
 
 
 def read_cells(slide_id: str, start: int, end: int, n_types: int) -> tuple[np.ndarray, np.ndarray]:
-    """One slide's cells, read only: level-0 px coordinates (n, 2) as float32 and HistoPLUS type codes as uint8.
+    """One slide's cells, read only: level-0 px coordinates (n, 2) as float64 and HistoPLUS type codes as uint8.
 
     The cohort file must name the slide at the first and the last of its rows, and every cell must have a
     finite position and a type.
@@ -111,7 +118,7 @@ def read_cells(slide_id: str, start: int, end: int, n_types: int) -> tuple[np.nd
         raise RuntimeError(f"{slide_id}: obsm/spatial has shape {xy.shape} or non-finite values")
     if codes.min() < 0 or codes.max() >= n_types:
         raise RuntimeError(f"{slide_id}: a cell has no cell type")
-    return xy.astype(np.float32), codes.astype(np.uint8)
+    return xy, codes.astype(np.uint8)
 
 
 def cells_blob(xy: np.ndarray, types: np.ndarray) -> bytes:
@@ -161,27 +168,99 @@ def slide_um_per_px(properties: dict[str, str]) -> tuple[float, str]:
     return c.PX_UM, "assumed"
 
 
+def ball_class_counts(xy: np.ndarray, classes: np.ndarray, radius_px: float) -> np.ndarray:
+    """(n, 4): the cells of each class in every cell's closed ball of ``radius_px``, the cell itself included.
+
+    The balls of run_pilot.py: ``cKDTree.query_ball_point``, whose ball is closed.
+    """
+    from scipy.spatial import cKDTree
+
+    counts = np.zeros((len(xy), len(c.CLASSES)), np.int64)
+    for k in range(len(c.CLASSES)):
+        members = xy[classes == k]
+        if len(members):
+            counts[:, k] = cKDTree(members).query_ball_point(xy, r=radius_px, return_length=True, workers=-1)
+    return counts
+
+
+def level1(counts: np.ndarray) -> np.ndarray:
+    """(n, 5): log10 of each ball's cells, then its four class fractions (features.level1)."""
+    cells = counts.sum(axis=1)
+    if np.any(cells < 1):
+        raise ValueError("every ball holds at least its centre cell")
+    return np.column_stack([np.log10(cells), counts / cells[:, None]])
+
+
+def composition_clusters(features: np.ndarray, k: int) -> tuple[np.ndarray, list[int]]:
+    """k-means of the z-scored columns (ddof 0) of ``features``: ``KMeans(k, n_init=20, random_state=0)``.
+
+    Columns that are constant on the slide carry nothing and are left out. The labels are renumbered by cluster
+    size, largest first. Returns the labels (uint8) and the indices of the columns used.
+    """
+    from sklearn.cluster import KMeans
+
+    if not K_MIN <= k <= K_MAX:
+        raise ValueError(f"k must be from {K_MIN} to {K_MAX}")
+    sd = features.std(axis=0)
+    used = [j for j in range(features.shape[1]) if sd[j] > 0]
+    if not used:
+        raise ValueError("every feature is constant on this slide")
+    z = (features[:, used] - features[:, used].mean(axis=0)) / sd[used]
+    labels = KMeans(n_clusters=k, n_init=N_INIT, random_state=KMEANS_SEED).fit_predict(z)
+    order = np.argsort(-np.bincount(labels, minlength=k), kind="stable")
+    rank = np.empty(k, np.int64)
+    rank[order] = np.arange(k)
+    return rank[labels].astype(np.uint8), used
+
+
+def cluster_profiles(features: np.ndarray, labels: np.ndarray, k: int) -> list[dict]:
+    """Each cluster's cells, mean cells per ball and mean class fractions."""
+    profiles = []
+    for j in range(k):
+        members = features[labels == j]
+        profiles.append(
+            {
+                "n": len(members),
+                "cells_per_ball": float(np.mean(10 ** members[:, 0])) if len(members) else 0.0,
+                "fractions": [float(v) for v in members[:, 1:].mean(axis=0)] if len(members) else [0.0] * 4,
+            }
+        )
+    return profiles
+
+
+def remember(cache: OrderedDict, key, value, size: int):
+    """Put ``value`` in the LRU ``cache`` under ``key``, dropping the oldest entries beyond ``size``."""
+    cache[key] = value
+    cache.move_to_end(key)
+    while len(cache) > size:
+        cache.popitem(last=False)
+    return value
+
+
 class Cohort:
-    """The slide table, the cell types and two small caches: cells blobs and DeepZoom generators."""
+    """The slide table, the cell types and small caches: cells, slide files, ball features and clusterings."""
 
     def __init__(self, wsi_dir: Path | None) -> None:
         self.slides = load_slide_table()
         self.by_id = {row.slide_id: row for row in self.slides.itertuples(index=False)}
         self.types = cell_types()
-        self.type_class = [int(k) for k in c.class_codes(self.types)]
+        self.type_class = np.array([int(k) for k in c.class_codes(self.types)], dtype=np.int64)
         self.wsis = find_wsis(wsi_dir, set(self.by_id)) if wsi_dir else {}
         self._lock = threading.Lock()
-        self._cells: OrderedDict[str, tuple[bytes, tuple[int, int]]] = OrderedDict()
+        self._cells: OrderedDict[str, dict] = OrderedDict()  # slide ID -> xy, types, blob, extent
         self._zooms: OrderedDict[str, tuple] = OrderedDict()  # slide ID -> (OpenSlide, DeepZoomGenerator)
+        self._features: OrderedDict[tuple, np.ndarray] = OrderedDict()  # (slide ID, µm/px) -> level-1 features
+        self._clusters: OrderedDict[tuple, dict] = OrderedDict()  # (slide ID, k, density) -> clustering
 
     def meta(self) -> dict:
         counts = self.slides["group"].value_counts()
         return {
             "groups": [{"name": g, "n_slides": int(counts.get(g, 0))} for g in GROUPS],
             "types": self.types,
-            "type_class": self.type_class,
+            "type_class": self.type_class.tolist(),
             "classes": list(c.CLASSES),
             "um_per_px": c.PX_UM,
+            "cluster": {"k_min": K_MIN, "k_max": K_MAX, "radius_um": c.DELTA_UM, "n_init": N_INIT},
             "slides": [
                 {
                     "slide_id": r.slide_id,
@@ -194,19 +273,64 @@ class Cohort:
             ],
         }
 
-    def cells(self, slide_id: str) -> tuple[bytes, tuple[int, int]]:
+    def cells(self, slide_id: str) -> dict:
+        """The slide's cells: ``xy`` (level-0 px), HistoPLUS ``types``, the ``blob`` for the page and the ``extent``."""
         with self._lock:
             if slide_id in self._cells:
                 self._cells.move_to_end(slide_id)
                 return self._cells[slide_id]
         row = self.by_id[slide_id]
         xy, types = read_cells(slide_id, int(row.start), int(row.end), len(self.types))
-        entry = (cells_blob(xy, types), cloud_extent(xy))
+        entry = {"xy": xy, "types": types, "blob": cells_blob(xy, types), "extent": cloud_extent(xy)}
         with self._lock:
-            self._cells[slide_id] = entry
-            while len(self._cells) > CACHE:
-                self._cells.popitem(last=False)
-        return entry
+            return remember(self._cells, slide_id, entry, CACHE)
+
+    def um_per_px(self, slide_id: str) -> tuple[float, str]:
+        """µm per level-0 px of the slide, and where the value comes from."""
+        if slide_id in self.wsis:
+            return slide_um_per_px(dict(self.opened(slide_id)[0].properties))
+        return slide_um_per_px({})
+
+    def features(self, slide_id: str, um_per_px: float) -> np.ndarray:
+        """The level-1 features of every cell's ``DELTA_UM`` ball (log10 cells, four class fractions)."""
+        key = (slide_id, um_per_px)
+        with self._lock:
+            if key in self._features:
+                self._features.move_to_end(key)
+                return self._features[key]
+        cells = self.cells(slide_id)
+        counts = ball_class_counts(cells["xy"], self.type_class[cells["types"]], c.DELTA_UM / um_per_px)
+        with self._lock:
+            return remember(self._features, key, level1(counts), 2)
+
+    def cluster(self, slide_id: str, k: int, density: bool) -> dict:
+        """Composition clusters of every cell of the slide, with each cluster's profile, as JSON-ready data."""
+        key = (slide_id, k, density)
+        with self._lock:
+            if key in self._clusters:
+                self._clusters.move_to_end(key)
+                return self._clusters[key]
+        started = time.perf_counter()
+        um_per_px, source = self.um_per_px(slide_id)
+        features = self.features(slide_id, um_per_px)
+        columns = [0, 1, 2, 3, 4] if density else [1, 2, 3, 4]
+        labels, used = composition_clusters(features[:, columns], k)
+        result = {
+            "slide_id": slide_id,
+            "k": k,
+            "density": density,
+            "radius_um": c.DELTA_UM,
+            "um_per_px": um_per_px,
+            "um_source": source,
+            "features": [FEATURES[columns[j]] for j in used],
+            "n_init": N_INIT,
+            "seed": KMEANS_SEED,
+            "clusters": cluster_profiles(features, labels, k),
+            "labels": base64.b64encode(labels.tobytes()).decode("ascii"),
+            "seconds": round(time.perf_counter() - started, 1),
+        }
+        with self._lock:
+            return remember(self._clusters, key, result, 8)
 
     def opened(self, slide_id: str) -> tuple:
         """The slide file opened with OpenSlide, and its DeepZoom generator over the whole slide (limit_bounds
@@ -238,13 +362,12 @@ class Cohort:
             "wsi": slide_id in self.wsis,
         }
         if out["wsi"]:
-            slide, zoom = self.opened(slide_id)
+            zoom = self.zoom(slide_id)
             out["width"], out["height"] = zoom.level_dimensions[-1]
             out["max_level"] = zoom.level_count - 1
-            out["um_per_px"], out["um_source"] = slide_um_per_px(dict(slide.properties))
         else:
-            out["width"], out["height"] = self.cells(slide_id)[1]
-            out["um_per_px"], out["um_source"] = slide_um_per_px({})
+            out["width"], out["height"] = self.cells(slide_id)["extent"]
+        out["um_per_px"], out["um_source"] = self.um_per_px(slide_id)
         return out
 
     def tile(self, slide_id: str, level: int, col: int, row: int) -> bytes:
@@ -277,16 +400,19 @@ def make_handler(cohort: Cohort) -> type[BaseHTTPRequestHandler]:
             self.send(status, json.dumps({"error": message}).encode(), "application/json")
 
         def do_GET(self) -> None:  # noqa: N802 (the stdlib's name)
-            parts = [unquote(p) for p in urlparse(self.path).path.split("/") if p]
+            url = urlparse(self.path)
+            parts = [unquote(p) for p in url.path.split("/") if p]
             try:
-                self.route(parts)
+                self.route(parts, parse_qs(url.query))
             except KeyError as err:
                 self.fail(HTTPStatus.NOT_FOUND, f"not found: {err}")
+            except ValueError as err:
+                self.fail(HTTPStatus.BAD_REQUEST, str(err))
             except Exception as err:  # a slide that cannot be read must not stop the server
                 self.log_error("%s: %r", self.path, err)
                 self.fail(HTTPStatus.INTERNAL_SERVER_ERROR, str(err))
 
-        def route(self, parts: list[str]) -> None:
+        def route(self, parts: list[str], query: dict[str, list[str]]) -> None:
             if parts in ([], ["index.html"]):
                 self.send(HTTPStatus.OK, (STATIC / "index.html").read_bytes(), STATIC_TYPES[".html"])
             elif len(parts) == 2 and parts[0] == "static":
@@ -299,7 +425,12 @@ def make_handler(cohort: Cohort) -> type[BaseHTTPRequestHandler]:
             elif len(parts) == 3 and parts[:2] == ["api", "slide"] and parts[2] in cohort.by_id:
                 self.send(HTTPStatus.OK, json.dumps(cohort.info(parts[2])).encode(), "application/json")
             elif len(parts) == 3 and parts[:2] == ["api", "cells"] and parts[2] in cohort.by_id:
-                self.send(HTTPStatus.OK, cohort.cells(parts[2])[0], "application/octet-stream")
+                self.send(HTTPStatus.OK, cohort.cells(parts[2])["blob"], "application/octet-stream")
+            elif len(parts) == 3 and parts[:2] == ["api", "cluster"] and parts[2] in cohort.by_id:
+                k = int(query.get("k", [""])[0])
+                density = query.get("density", ["1"])[0] == "1"
+                result = cohort.cluster(parts[2], k, density)
+                self.send(HTTPStatus.OK, json.dumps(result).encode(), "application/json")
             elif len(parts) == 5 and parts[:2] == ["api", "tile"] and parts[2] in cohort.wsis:
                 col, row = parts[4].removesuffix(".jpeg").split("_")
                 tile = cohort.tile(parts[2], int(parts[3]), int(col), int(row))

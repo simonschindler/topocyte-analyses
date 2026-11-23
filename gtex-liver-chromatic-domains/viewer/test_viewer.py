@@ -83,3 +83,29 @@ def test_um_per_px_comes_from_the_slide_file_else_the_cohorts_assumption():
     assert serve.slide_um_per_px({"openslide.mpp-x": "0.2527"}) == (0.2527, "slide file")
     for properties in ({}, {"openslide.mpp-x": "0"}, {"openslide.mpp-x": "n/a"}, {"openslide.mpp-x": "inf"}):
         assert serve.slide_um_per_px(properties) == (c.PX_UM, "assumed")
+
+
+def test_ball_class_counts_use_closed_balls_with_the_cell_itself():
+    xy = np.array([[0.0, 0.0], [3.0, 0.0], [3.0, 4.0], [100.0, 0.0]])
+    classes = np.array([0, 2, 2, 1])
+    counts = serve.ball_class_counts(xy, classes, radius_px=5.0)
+    assert counts.tolist() == [[1, 0, 2, 0], [1, 0, 2, 0], [1, 0, 2, 0], [0, 1, 0, 0]]
+    features = serve.level1(counts)
+    assert np.allclose(features[0], [np.log10(3), 1 / 3, 0, 2 / 3, 0], rtol=0, atol=1e-15)
+    assert np.allclose(features[3], [0, 0, 1, 0, 0], rtol=0, atol=1e-15)
+
+
+def test_composition_clusters_number_clusters_by_size_and_skip_constant_columns():
+    rng = np.random.default_rng(0)
+    big = rng.normal(0.0, 0.1, size=(300, 2))
+    small = rng.normal(5.0, 0.1, size=(100, 2))
+    features = np.column_stack([np.vstack([small, big]), np.full(400, 0.25)])  # the third column is constant
+    labels, used = serve.composition_clusters(features, 2)
+    assert used == [0, 1]
+    assert labels.dtype == np.uint8 and labels[:100].tolist() == [1] * 100 and labels[100:].tolist() == [0] * 300
+    profiles = serve.cluster_profiles(np.column_stack([np.zeros(400), features[:, :2], np.zeros((400, 2))]), labels, 2)
+    assert [p["n"] for p in profiles] == [300, 100]
+    with pytest.raises(ValueError, match="k must be"):
+        serve.composition_clusters(features, 11)
+    with pytest.raises(ValueError, match="constant"):
+        serve.composition_clusters(np.ones((10, 3)), 2)
