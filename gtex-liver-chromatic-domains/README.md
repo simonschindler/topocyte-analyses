@@ -9,7 +9,8 @@ the level-1 strata were to give the planned second study its regions, and there
 is one stratum. The pilot gives that study no regions at either level; where
 they come from instead is Simon's decision. The H&E atlas was planned for
 compartments and subdomains; with one stratum and no subdomains there are no
-groups to compare, and whether to build it is Simon's decision.
+groups to compare, so Simon decided on 2026-11-23 not to build it, and the
+pilot ends here.
 
 `verify_results.py` recomputes, for every centre or fit, the level-1 and
 pairwise features from the saved class and pair counts, every centre's spreads,
