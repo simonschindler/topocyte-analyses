@@ -3,7 +3,8 @@
 Run them from this folder in topocyte's main-checkout venv, with the pinned
 checkout first on ``PYTHONPATH`` (``progress.md``, Rulings). The input tests
 read the sibling studies' saved results, read only; the fold and arm tests
-use synthetic curves, and the readout and holdout tests synthetic
+use synthetic curves, but for one that runs the first development fold on
+this study's ``results/gram.npz``; the readout and holdout tests use synthetic
 probabilities, scored against scikit-learn's ``roc_auc_score``.
 """
 
@@ -242,6 +243,24 @@ def test_test_labels_never_change_test_predictions():
     permuted[test] = (labels[test] + 1) % 8  # a permutation of the test labels (two per group) that changes each one
     assert sorted(permuted[test]) == sorted(labels[test]) and np.all(permuted[test] != labels[test])
     again = rs.outer_fold(grams, DC, permuted, train, test, seed=1000)
+    assert again.keys() == fold.keys()
+    for key in fold:
+        np.testing.assert_array_equal(again[key], fold[key])
+
+
+def test_hidden_test_labels_leave_the_real_first_fold_unchanged():
+    """On the real Grams and D+C, the first development fold's filter, k and arms are the same when its test slides'
+    labels are -1, as the holdout stage hides the holdout slides'."""
+    inputs = c.load_inputs()
+    grams = rs.load_grams(inputs["slide_ids"])
+    labels, dev = inputs["labels"], np.flatnonzero(inputs["dev"])
+    split = c.celltype.make_folds(labels[dev], rs.N_REPEATS, rs.N_SPLITS, seed=c.DEV_FOLD_SEED)
+    train, test = dev[split[0] != 0], dev[split[0] == 0]
+    hidden = labels.copy()
+    hidden[test] = -1
+    fold = rs.outer_fold(grams, inputs["DC"], labels, train, test, seed=1000)
+    assert 0 < np.sum(~fold["keep"]) < train.size and fold["k"] in c.K_GRID
+    again = rs.outer_fold(grams, inputs["DC"], hidden, train, test, seed=1000)
     assert again.keys() == fold.keys()
     for key in fold:
         np.testing.assert_array_equal(again[key], fold[key])

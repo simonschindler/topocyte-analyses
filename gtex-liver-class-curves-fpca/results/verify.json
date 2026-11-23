@@ -1,0 +1,375 @@
+{
+ "all_ok": true,
+ "checks": [
+  {
+   "check": "sum_of_minima, the Gram check's oracle, against np.minimum.outer(a, b).sum()",
+   "ok": true,
+   "measured": {
+    "ties": [
+     32.0,
+     32.0
+    ],
+    "a empty": [
+     0.0,
+     0.0
+    ],
+    "b empty": [
+     0.0,
+     0.0
+    ],
+    "both empty": [
+     0.0,
+     0.0
+    ],
+    "integer values, many ties": [
+     651084.0,
+     651084.0
+    ],
+    "uniform": 2.220446049250313e-16
+   },
+   "tolerance": 1e-12
+  },
+  {
+   "check": "gram.npz: 4 finite, exactly symmetric 594 × 594 matrices, its slides in the study's order",
+   "ok": true,
+   "measured": {
+    "epithelial": [
+     594,
+     594
+    ],
+    "stromal": [
+     594,
+     594
+    ],
+    "immune": [
+     594,
+     594
+    ],
+    "other": [
+     594,
+     594
+    ]
+   },
+   "tolerance": null
+  },
+  {
+   "check": "gram.npz: 30 entries per class (25 off the diagonal, 5 on it) against sum_of_minima of the two slides' densities (largest relative difference)",
+   "ok": true,
+   "measured": {
+    "epithelial": 1.3988810110276972e-14,
+    "stromal": 6.217248937900877e-15,
+    "immune": 2.220446049250313e-15,
+    "other": 1.9984014443252818e-15
+   },
+   "tolerance": 1e-12
+  },
+  {
+   "check": "cells of each class at or above each decile: one flat bincount per decile, and curves.decile_counts (the gram stage's gate), against the cell-type study's composition.npz kept_by_group",
+   "ok": true,
+   "measured": {
+    "cells at decile 0": 126219124,
+    "entries differing, bincount": 0,
+    "entries differing, decile_counts": 0
+   },
+   "tolerance": null
+  },
+  {
+   "check": "development.npz and holdout.npz agree with the jsons: slides, labels, the chosen k, the drops (never a test slide of their fold), probabilities summing to 1",
+   "ok": true,
+   "measured": {
+    "development": true,
+    "holdout": true,
+    "drops of test slides": 0,
+    "largest |row sum - 1|": 4.440892098500626e-16
+   },
+   "tolerance": 1e-12
+  },
+  {
+   "check": "development folds: RepeatedStratifiedKFold (5 splits, 20 repeats) built here with the improvement phase's fold_seed from its improve_dev.json, each repeat a partition that spreads every group evenly",
+   "ok": true,
+   "measured": {
+    "fold_seed": 1,
+    "development slides": 476,
+    "entries differing": 0,
+    "largest spread of a group over the folds": 1
+   },
+   "tolerance": null
+  },
+  {
+   "check": "repeat 0, fold 0 (340 slides kept, 96 test slides): each block's BlockFPCA scores of the kept slides and projection of the test slides against topocyte's FPCA(eigen_solver='dense') fitted on the kept slides' curves and its transform ([fit, projection], largest difference over the block's largest score)",
+   "ok": true,
+   "measured": {
+    "epithelial none": [
+     0.0,
+     3.3387974985502813e-09
+    ],
+    "epithelial cosine": [
+     0.0,
+     1.122617324288647e-09
+    ],
+    "stromal none": [
+     0.0,
+     3.1389336405157042e-09
+    ],
+    "stromal cosine": [
+     0.0,
+     2.8950068649233364e-10
+    ],
+    "immune none": [
+     0.0,
+     6.665782005077538e-10
+    ],
+    "immune cosine": [
+     0.0,
+     2.718808227672031e-10
+    ],
+    "other none": [
+     0.0,
+     1.3499292643431438e-09
+    ],
+    "other cosine": [
+     0.0,
+     3.7257083903672187e-10
+    ]
+   },
+   "tolerance": 1e-07
+  },
+  {
+   "check": "repeat 0, fold 0: curve_space's MFA scores of the kept and the test slides against an eigendecomposition of the sum of the 8 blocks' weighted, centred Gram matrices (largest difference over the component's largest fitted score)",
+   "ok": true,
+   "measured": {
+    "components": [
+     51,
+     51
+    ],
+    "kept slides": 1.2349780614548818e-11,
+    "test slides": 4.308483475016538e-11
+   },
+   "tolerance": 1e-08
+  },
+  {
+   "check": "the D+C gates: the unfiltered D+C, averaged over the repeats on the development slides, equals the improvement phase's improve_dev.npz; on the holdout, its improve_holdout.npz (same slides and groups)",
+   "ok": true,
+   "measured": {
+    "development": 0.0,
+    "holdout": 0.0
+   },
+   "tolerance": 1e-12
+  },
+  {
+   "check": "celltype.auc (rank formula) against a count of every positive-negative pair, each condition of every arm (development averaged over the repeats, and holdout)",
+   "ok": true,
+   "measured": {
+    "AUCs": 56,
+    "largest difference": 0.0
+   },
+   "tolerance": 1e-12
+  },
+  {
+   "check": "development AUCs from development.npz by celltype.auc: each arm's macro and per-condition AUCs of the probabilities averaged over the repeats, each repeat's macro AUC, their mean and SD, and the gate",
+   "ok": true,
+   "measured": {
+    "AUCs": 121,
+    "largest difference": 0.0
+   },
+   "tolerance": 1e-12
+  },
+  {
+   "check": "holdout AUCs from holdout.npz by celltype.auc: each arm's macro and per-condition AUCs, and the gate",
+   "ok": true,
+   "measured": {
+    "AUCs": 33,
+    "largest difference": 0.0
+   },
+   "tolerance": 1e-12
+  },
+  {
+   "check": "paired differences and 95% intervals from the saved probabilities on the pre-registered bootstrap draws (4000, stratified by group, seed 12345), redrawn ([difference, 2.5%, 97.5%])",
+   "ok": true,
+   "measured": {
+    "development": {
+     "curves - dc": [
+      -0.00642,
+      -0.024065,
+      0.011567
+     ],
+     "curves4 - dc": [
+      -0.01638,
+      -0.039752,
+      0.007825
+     ]
+    },
+    "holdout": {
+     "curves - dc": [
+      -0.010145,
+      -0.042106,
+      0.016921
+     ],
+     "curves4 - dc": [
+      -0.014366,
+      -0.053653,
+      0.018307
+     ]
+    },
+    "largest difference": 0.0
+   },
+   "tolerance": 1e-12
+  },
+  {
+   "check": "verdict: the rule fixed in advance on the recomputed development interval and holdout difference of curves at the chosen k minus D+C, against holdout.json's, which read development.json's interval",
+   "ok": true,
+   "measured": {
+    "development interval": [
+     -0.02406541316924912,
+     0.011567146728145248
+    ],
+    "holdout difference": -0.01014529079412585,
+    "verdict": "level with D+C"
+   },
+   "tolerance": null
+  },
+  {
+   "check": "the holdout scored once: logs/holdout.log, holdout.npz and holdout.json created in that order within one run, each file last modified within a second of its creation, scored_at within that run, before the one commit that holds holdout.json, unchanged since; development.json last written before scored_at",
+   "ok": true,
+   "measured": {
+    "commits": [
+     "7b1fa2e"
+    ],
+    "committed at": "2026-11-23 20:08:49",
+    "unchanged since": true,
+    "holdout.log created": "2026-11-23 20:07:17",
+    "holdout.npz created, modified": [
+     "2026-11-23 20:07:23",
+     "2026-11-23 20:07:23"
+    ],
+    "holdout.json created, modified": [
+     "2026-11-23 20:07:23",
+     "2026-11-23 20:07:23"
+    ],
+    "scored_at": "2026-11-23 20:07:22",
+    "development.json modified": "2026-11-23 20:06:42"
+   },
+   "tolerance": "10 s"
+  },
+  {
+   "check": "the script md5s the results name: each equals the script at the commit that holds that version, and the working tree's where the script has not changed since ([result, script, md5, commit, working tree])",
+   "ok": true,
+   "measured": [
+    [
+     "spike.json",
+     "curves.py",
+     "e014819e",
+     "64919fe",
+     true
+    ],
+    [
+     "gram.json",
+     "curves.py",
+     "e014819e",
+     "64919fe",
+     true
+    ],
+    [
+     "development.json",
+     "run_study.py",
+     "319f1f10",
+     "727667e",
+     false
+    ],
+    [
+     "development.json",
+     "folds.py",
+     "c6b1d654",
+     "c050e34",
+     true
+    ],
+    [
+     "development.json",
+     "common.py",
+     "db4b4915",
+     "ba2dcca",
+     true
+    ],
+    [
+     "development.json readouts",
+     "run_study.py",
+     "034e0ad5",
+     "a58c812",
+     true
+    ],
+    [
+     "development.json readouts",
+     "folds.py",
+     "c6b1d654",
+     "c050e34",
+     true
+    ],
+    [
+     "development.json readouts",
+     "common.py",
+     "db4b4915",
+     "ba2dcca",
+     true
+    ],
+    [
+     "holdout.json",
+     "run_study.py",
+     "034e0ad5",
+     "a58c812",
+     true
+    ],
+    [
+     "holdout.json",
+     "folds.py",
+     "c6b1d654",
+     "c050e34",
+     true
+    ],
+    [
+     "holdout.json",
+     "common.py",
+     "db4b4915",
+     "ba2dcca",
+     true
+    ]
+   ],
+   "tolerance": null
+  },
+  {
+   "check": "the cell-type study's common.py (celltype): last committed before this study's design and unchanged since",
+   "ok": true,
+   "measured": {
+    "md5": "54b1dff9233a076962f0758f69266c66",
+    "last commit": "0207c6d",
+    "design commit": "e07c262"
+   },
+   "tolerance": null
+  }
+ ],
+ "script_md5": "ea8bf2bdccf206e22fb6b6e46bdd5bf5",
+ "celltype_common_md5": "54b1dff9233a076962f0758f69266c66",
+ "sha256": {
+  "gtex-liver-celltype-slices/results/spaces.npz": "a33f31bc3bdbf2518d4cc17831fb8d7828df7ff1ae415a4ba1c19afd2e02e65d",
+  "gtex-liver-celltype-slices/results/holdout.csv": "a07b8371dc0b08c82f9b222e6fcac7fd67051ee87da7843cc09fa090f035852d",
+  "gtex-liver-pathology-slices/results/density.npz": "0003da4c4dea0f482884cbcf8514849e0d67e8b23ed2fb755a6c4a5f8fdec87a",
+  "gtex-liver-class-curves-fpca/results/gram.npz": "cf14ce8e7904ff22ef3a546e9bbfb941353a3452edc9dae7a9751c2a7223af49",
+  "~/data/gtex_liver_cells/gtex_liver_cells/gtex_liver_cells.h5ad": "e65b38af4b6c3889e93ca9f6440dd6107255d308157b70eda5ce6890962cdfd8",
+  "gtex-liver-celltype-slices/results/composition.npz": "b7938afdfcf755a136b20703c7567b449981bc791ae03c22e29db0ecbc30a79a",
+  "gtex-liver-class-curves-fpca/results/development.npz": "08dbac3054d936b64c567b988d8336f40b42ae9b79a3e46fa0614ea67aec8c38",
+  "gtex-liver-class-curves-fpca/results/holdout.npz": "2858eac2e16d99f44fbcb3db66ed3cbc22926caf4ed01e65d4136ef846c565d3",
+  "gtex-liver-celltype-slices/results/improve_dev.json": "e56b9b97a901db45f9d40461ac9534de4f6fdf53aa4764fd87b8cbbd97d7ce05",
+  "gtex-liver-celltype-slices/results/improve_dev.npz": "faf42c4564dae4832407fcb3abb8f2a080051e21e82ad9901f21aa544c828e7d",
+  "gtex-liver-celltype-slices/results/improve_holdout.npz": "06460656993ef5de8e6afd7900568f2c864136b8d91c99dc6462770c0dee7dd7"
+ },
+ "seconds": 450.1,
+ "peak_rss_gb": 5.19,
+ "topocyte_commit": "18e3aa5",
+ "versions": {
+  "python": "3.14.0",
+  "numpy": "2.5.1",
+  "scipy": "1.18.0",
+  "scikit-learn": "1.9.0",
+  "h5py": "3.16.0"
+ },
+ "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+}

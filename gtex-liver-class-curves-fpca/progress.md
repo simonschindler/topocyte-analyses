@@ -48,9 +48,10 @@ classification." Then: "cohort means pathology group. i want to know if it beats
 - 2026-11-23: `curves.py spike`, the Gram matrix of the first 20 slides per class (210 pairs, 10 threads): epithelial
   3,030,629 bars in 0.58 s, stromal 0.12 s, immune 0.07 s, other 0.07 s. Extrapolated by pair count to the 594
   slides (176,715 pairs): **0.20 h in all** (epithelial 0.14 h), far below the plan's 6-hour limit. The estimate
-  leans high: 20 rows over 10 threads leave the busiest thread 30 of the 210 pairs. The first 20 slides are typical:
-  their mean bars per slide are within 1% (epithelial) to 25% (immune) of all 594 slides'. 3.0 s wall and peak RSS
-  3.0 GB (`/usr/bin/time -l`); `results/spike.json` names curves.py md5 e014819e….
+  leans high: 20 rows over 10 threads leave the busiest thread 30 of the 210 pairs. The first 20 slides are larger
+  than average, which leans it high too: their mean bars per slide exceed all 594 slides' by 0.4% (epithelial),
+  8.4% (stromal), 5.9% (other) and 24.6% (immune). (Corrected after the holdout; the entry first called them
+  typical.) 3.0 s wall and peak RSS 3.0 GB (`/usr/bin/time -l`); `results/spike.json` names curves.py md5 e014819e….
   - Checked ad hoc on the real data before the `gram` stage (a scratch script, not kept): the decile gate passes
     (`decile_counts` in 3.6 s); `rho`'s minimum equals decile 0 exactly, so `rho >= d_0` keeps every cell, as the
     cell-type study's slice 0 does; every slide has at least 668 cells of every class (no zero curve); and on four
@@ -149,3 +150,36 @@ classification." Then: "cohort means pathology group. i want to know if it beats
       and the holdout and development slide IDs and holdout labels, in the order of `holdout.csv`.
     - Its unfiltered D+C equals `e2__proba` bitwise.
     - scikit-learn's `roc_auc_score` reproduces the four holdout macro AUCs within 1e-12.
+- 2026-11-23: `verify_results.py`, in the background (`caffeinate -is /usr/bin/time -l`, `logs/verify.log`): **17 of
+  17 checks pass**, 451.9 s wall, peak RSS 5.19 GB. It runs no stage and fits no classifier: every AUC it computes
+  comes from the saved probabilities, so the holdout is not scored again.
+  - `sum_of_minima`, the Gram check's oracle, equals `np.minimum.outer(a, b).sum()` exactly on ties and empty arrays
+    (within 2.2e-16 on random values). 30 Gram entries per class equal `sum_of_minima` within a relative 1.4e-14.
+  - The decile counts, by one flat bincount per decile and by `decile_counts`, equal `composition.npz`.
+  - Repeat 0, fold 0 (340 kept, 96 test slides): topocyte's `FPCA(eigen_solver="dense")`, fitted on the kept
+    slides' curves, gives every block's fitted scores exactly (it computes its own Gram matrix of those curves), and
+    its `transform` gives the test slides' projections within 3.3e-9 of the block's largest score. `curve_space`'s
+    MFA equals an eigendecomposition of the summed block Gram matrices within 4.3e-11.
+  - Every saved AUC equals its recount by `celltype.auc` from the saved probabilities (121 development and 33
+    holdout values, difference 0), and `celltype.auc` equals a count of pairs. The intervals on the redrawn bootstrap
+    and the verdict are reproduced exactly, and the D+C gates are exact.
+  - The holdout was scored once: `logs/holdout.log` (20:07:17), `holdout.npz` and `holdout.json` (20:07:23) were
+    created in that order within one run, each written once, before 7b1fa2e (20:08:49) committed `holdout.json`,
+    unchanged since. `development.json` was last written at 20:06:42.
+  - Every md5 the results name equals the script at its commit: `run_study.py` 319f1f10… at 727667e for the
+    development run, 034e0ad5… at a58c812 for the readouts and the holdout, the current file. The cell-type study's
+    `common.py` (54b1dff9…) was last committed in 0207c6d, before this study's design, and is unchanged.
+    `verify.json` records the sha256 of the 11 data files read, the cohort's .h5ad included.
+  - An earlier draft of the script also passed 17 of 17; it changed only in its check names and docstrings, and
+    this run's `verify.json` replaced that draft's.
+- 2026-11-23: `build_report.py` wrote `report.html` (0.2 MB, about 6 s); every number in its prose is formatted from
+  the results and asserted. It computes two descriptive results that no stage saved and no verdict uses:
+  - each group's mean class curves on the development slides, counted exactly at thresholds 25 cells per mm² apart
+    up to 15,000 (the plots' grid), with the counts at the deciles asserted equal to `composition.npz`;
+  - each block's fractions of variance, from `BlockFPCA` on all 476 development slides: the first component holds
+    86.1–95.5% in the raw blocks and 79.9–82.6% in the cosine blocks.
+  - Looked at in the browser pane: the summary, eight sections, three figures and the tables render.
+- 2026-11-23: `README.md` written: status, run recipe, the holdout's single scoring and the stages' missing guard
+  against a rerun, and the outputs. `requirements.txt` now also records pillow and topocyte's own dependencies. The
+  repository's `README.md` and `EXPERIMENTS.md` (section 7) list the study. A new test runs the real first development
+  fold with its test slides' labels set to −1 and gets the same filter, k and arms; 41 tests pass with `-W error`.

@@ -137,6 +137,7 @@ The local studies take the closed disc of radius **150 µm** around each cell
 | 2026-11-19/20 | [gtex-liver-celltype-slices](gtex-liver-celltype-slices/README.md) | verdict and holdout | topology per cell type helps only through the cell counts |
 | 2026-11-20 to 23 | [gtex-liver-chromatic-domains](gtex-liver-chromatic-domains/README.md) | verdict (pilot) | local arrangement of cell types gives no recurring domains |
 | 2026-11-23 | [gtex-liver-emeans-neighbourhoods](gtex-liver-emeans-neighbourhoods/README.md) | descriptive | every cell's neighbourhood clustered; three broad types |
+| 2026-11-23 | [gtex-liver-class-curves-fpca](gtex-liver-class-curves-fpca/README.md) | verdict and holdout | the fPCA of each class's density curve is level with D+C |
 | 2026-11-18 | [gtex-graphcode-gnn](gtex-graphcode-gnn/README.md) | planned | design and related-work survey only |
 
 "Verdict" studies fixed their decision rule before seeing any result;
@@ -413,7 +414,59 @@ statistic for k = 1 to 10.
 
 The liver cell viewer (below) can colour any slide by these clusters.
 
-### 7. Planned: graphcode GNN on all GTEx slides
+### 7. Class-density curves: does their fPCA beat D+C?
+
+**Question.** For one slide and one cell class, the *class curve* counts the
+class's cells whose 10-NN density is at or above a threshold t, for every t;
+the liver cell viewer plots it. At the ten density deciles the four class
+curves give exactly the counts behind D+C's composition features. Does a
+functional PCA of the whole curves separate the eight pathology groups better
+than D+C? The rule was fixed before any result.
+
+**Done.**
+
+- **Curves:** each class curve is a Betti curve of dimension 0, so the inner
+  product of two curves is exact. Each class's 594 × 594 Gram matrix was
+  computed once (about 10 minutes); no curve was evaluated on a grid.
+- **Folds:** the cell-type study's 476 development slides, 20 repeats of
+  stratified 5-fold. In each fold:
+  - an outlier filter on the training slides only: a slide is dropped when its
+    distance to its group's mean curves exceeds the group's median distance by
+    more than 3 × 1.4826 MADs;
+  - the fPCA of each class, raw and cosine, nine components each, combined by
+    MFA;
+  - logistic regression on the first k MFA components, k chosen by inner
+    cross-validation (4 to 51), against D+C trained on the same kept slides.
+- **Holdout:** the cell-type study's 118 holdout slides, scored once.
+- **Checks:** a verifier passed 17 checks, among them one fold's fPCA refitted
+  with topocyte's own estimator and every AUC recounted from the saved
+  probabilities.
+
+**Results.**
+
+| arm | development macro AUC | holdout |
+|---|---|---|
+| class curves, k chosen by cross-validation | 0.750 | 0.769 |
+| class curves, 4 components | 0.740 | 0.765 |
+| D+C on the same cleaned training slides | 0.756 | 0.779 |
+| D+C on all training slides | 0.764 | 0.774 |
+
+- **Verdict: level with D+C.** The development difference, −0.0064 (−0.0241
+  to +0.0116), contains 0. The holdout leans the same way: −0.0101 (−0.0421
+  to +0.0169).
+- **The filter dropped 11.7% of the training slides** in the development folds
+  (from 4.5% of fibrosis's to 17.6% of necrosis's), and 55 of the 476 in the
+  holdout fit. It cost D+C 0.008 on the development slides and gained it 0.005
+  on the holdout.
+- **Scored repeat by repeat, the curves trail further,** 0.722 against 0.749:
+  their predictions vary more between repeats, and averaging over the repeats
+  helps them more.
+
+**Learned.** The fPCA of the continuous class curves separates the conditions
+about as well as D+C, not better: the curves show no gain over the counts at
+ten density deciles, and D+C stays the representation to beat.
+
+### 8. Planned: graphcode GNN on all GTEx slides
 
 Design stage only. The plan:
 

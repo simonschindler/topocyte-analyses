@@ -10,4 +10,15 @@ scikit-learn==1.9.0
 h5py==3.16.0
 pandas==3.0.5
 matplotlib==3.11.1
+# build_report.py's palette PNGs
+pillow==12.3.0
 pytest==9.1.1
+
+# topocyte's own dependencies in that venv (importlib.metadata, 2026-11-23):
+# anndata and psutil are imported with topocyte; gudhi, ripser and numba are
+# installed there, and this study's code does not import them.
+anndata==0.13.2
+psutil==6.1.1
+gudhi==3.13.0
+ripser==0.6.15
+numba==0.67.0
