@@ -251,6 +251,8 @@ function renderPathology(id) {
   if (!s) return;
   $("pathology-group").textContent = `Pathology group: ${s.group}`;
   $("pathology-flag").textContent = s.quality_flag ? `flag: ${s.quality_flag}` : "";
+  $("pathology-donor").textContent = `Donor: ${s.sex || "sex unknown"}, age ${s.age_bracket || "unknown"}; `
+    + `Hardy scale: ${s.hardy_scale || "unknown"}`;
   $("pathology-categories").textContent = `GTEx categories: ${s.categories || "none"}`;
   $("pathology-notes").textContent = s.notes ? `Notes: ${s.notes}` : "No pathology notes.";
 }

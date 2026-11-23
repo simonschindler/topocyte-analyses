@@ -5,7 +5,8 @@ clusters every cell by the composition of its ball (the pilot's level-1 features
 or, on the 30 pilot slides, the 1,500 sampled centres by their saved chromatic TDA features (level 2), or
 colours every cell by its saved cohort-wide e-means cluster (the sibling study gtex-liver-emeans-neighbourhoods).
 Every cell can also be coloured by its 10-nearest-neighbour density, binned at the cohort's deciles, and the
-cells below a density threshold can be hidden in every layer. The shown slide's GTEx pathology notes are shown.
+cells below a density threshold can be hidden in every layer. The shown slide's GTEx pathology notes and its
+donor's sex, age bracket and Hardy scale are shown.
 
 Adapted from ``tissuegeometry/web/cosine_viewer`` (its DeepZoom tile serving and WebGL point overlay) without
 its local-homology endpoints, its FastAPI backend or its tissuegraphs and Rust imports.
@@ -20,7 +21,8 @@ with a suffix OpenSlide reads (``.svs`` for GTEx); the cells' coordinates are le
 
 Read only: the cohort ``.h5ad`` (h5py mode "r"), the pathology study's ``density.npz`` (each slide's cohort
 rows, and every cell's density, memory-mapped) and ``pathology.csv`` (each slide's group, GTEx pathology
-categories and notes), this study's ``results/pilot.csv`` and ``results/features.npz``,
+categories and notes), the cohort table ``liver_cohort.csv`` beside the ``.h5ad`` (each donor's sex, age
+bracket and Hardy scale), this study's ``results/pilot.csv`` and ``results/features.npz``,
 the e-means study's ``results/labels_<set>.npz``, ``clusters.json``, ``gap.json`` and ``kmeans_check.json``
 (the e-means option is off when they are not there), and the slide files.
 Nothing is written.
@@ -177,6 +179,18 @@ def load_notes(path: Path) -> dict[str, dict[str, str]]:
     columns = ["slide_id", "categories", "notes", "quality_flag"]
     table = pd.read_csv(path, usecols=columns, dtype=str, keep_default_na=False)
     return {row.slide_id: {key: getattr(row, key) for key in columns[1:]} for row in table.itertuples(index=False)}
+
+
+def load_donors(path: Path) -> dict[str, dict[str, str]]:
+    """Each slide's donor sex, age bracket and Hardy scale (the circumstances of death), from the cohort table.
+
+    ``ValueError`` if a slide appears twice.
+    """
+    columns = {"Tissue Sample ID": "slide_id", "Sex": "sex", "Age Bracket": "age_bracket", "Hardy Scale": "hardy_scale"}
+    table = pd.read_csv(path, usecols=list(columns), dtype=str, keep_default_na=False).rename(columns=columns)
+    if table["slide_id"].duplicated().any():
+        raise ValueError(f"{path.name} lists a slide twice")
+    return {row.slide_id: {key: getattr(row, key) for key in list(columns.values())[1:]} for row in table.itertuples()}
 
 
 def cell_types() -> list[str]:
@@ -470,6 +484,11 @@ class Cohort:
         self.notes = load_notes(c.SIB / "pathology.csv")
         if set(self.notes) != set(self.by_id):
             raise ValueError("pathology.csv's notes and the slide table hold different slides")
+        donors = load_donors(c.H5AD.parent / "liver_cohort.csv")
+        missing = sorted(set(self.by_id) - set(donors))
+        if missing:
+            raise ValueError(f"liver_cohort.csv has no donor for {len(missing)} slides, {missing[0]} first")
+        self.donors = {slide_id: donors[slide_id] for slide_id in self.by_id}
         if self.rho.shape != (n_cohort,) or self.rho.dtype != np.float64:
             raise ValueError(f"density.npz's rho is {self.rho.dtype} {self.rho.shape}, not {n_cohort:,} densities")
         if len(self.deciles) != DENSITY_BINS or not np.all(np.diff(self.deciles) > 0):
@@ -517,6 +536,7 @@ class Cohort:
                     "pilot": bool(r.pilot),
                     "wsi": r.slide_id in self.wsis,
                     **self.notes[r.slide_id],
+                    **self.donors[r.slide_id],
                 }
                 for r in self.slides.itertuples(index=False)
             ],

@@ -125,9 +125,11 @@ colouring. It runs over the cohort's density quantiles in steps of 0.1
 percentile (the pathology study's quantile curve), and its ten marked steps are
 the deciles, so at those steps it shows exactly the cells of density slices 0
 to 9; the note under it gives the threshold and the cells shown. The box under
-the slide list shows the slide's pathology group, its GTEx pathology categories
-and notes, and the cohort's quality flag where there is one; the slide list
-shows the categories and notes as a tooltip.
+the slide list shows the slide's pathology group, its donor's sex, age bracket
+and Hardy scale (the circumstances of death, from the cohort table
+`liver_cohort.csv`), its GTEx pathology categories and notes, and the cohort's
+quality flag where there is one; the slide list shows the categories and notes
+as a tooltip.
 
 "Composition clusters on this slide" runs k-means with the chosen k (2 to 10)
 on every cell of the shown slide: the pilot's level-1 features of the cell's

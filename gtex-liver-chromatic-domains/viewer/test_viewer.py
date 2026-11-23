@@ -246,3 +246,13 @@ def test_load_notes_keeps_empty_fields_as_empty_text(tmp_path):
         "S1": {"categories": "cirrhosis, fibrosis", "notes": "2 pieces; cirrhosis", "quality_flag": ""},
         "S2": {"categories": "", "notes": "", "quality_flag": "preservation"},
     }
+
+
+def test_load_donors_reads_sex_age_and_hardy_scale_and_refuses_a_slide_twice(tmp_path):
+    path = tmp_path / "liver_cohort.csv"
+    header = "Tissue Sample ID,Tissue,Subject ID,Sex,Age Bracket,Hardy Scale,Pathology Categories,Pathology Notes\n"
+    path.write_text(header + 'S1,Liver,D1,female,60-69,Slow death,cirrhosis,"2 pieces, cirrhosis"\n')
+    assert serve.load_donors(path) == {"S1": {"sex": "female", "age_bracket": "60-69", "hardy_scale": "Slow death"}}
+    path.write_text(header + "S1,Liver,D1,female,60-69,Slow death,,\nS1,Liver,D1,male,20-29,Ventilator case,,\n")
+    with pytest.raises(ValueError, match="twice"):
+        serve.load_donors(path)
