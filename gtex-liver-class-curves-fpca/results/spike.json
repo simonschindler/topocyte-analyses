@@ -1,0 +1,52 @@
+{
+ "description": "each class's Gram of the first 20 slides, timed, extrapolated by pair count",
+ "slides": 20,
+ "pairs": 210,
+ "pairs_all": 176715,
+ "classes": {
+  "epithelial": {
+   "bars": 3030629,
+   "mean_bars_per_slide_spike": 151531.5,
+   "mean_bars_per_slide_all": 150898.7,
+   "build_seconds": 0.09,
+   "gram_seconds": 0.58,
+   "extrapolated_hours": 0.135
+  },
+  "stromal": {
+   "bars": 688246,
+   "mean_bars_per_slide_spike": 34412.3,
+   "mean_bars_per_slide_all": 31739.7,
+   "build_seconds": 0.03,
+   "gram_seconds": 0.12,
+   "extrapolated_hours": 0.028
+  },
+  "immune": {
+   "bars": 344162,
+   "mean_bars_per_slide_spike": 17208.1,
+   "mean_bars_per_slide_all": 13808.6,
+   "build_seconds": 0.01,
+   "gram_seconds": 0.07,
+   "extrapolated_hours": 0.016
+  },
+  "other": {
+   "bars": 339807,
+   "mean_bars_per_slide_spike": 16990.3,
+   "mean_bars_per_slide_all": 16043.1,
+   "build_seconds": 0.01,
+   "gram_seconds": 0.07,
+   "extrapolated_hours": 0.017
+  }
+ },
+ "extrapolated_hours": 0.195,
+ "seconds": 2.0,
+ "peak_rss_gb": 3.02,
+ "workers": 10,
+ "script_md5": "e014819eb1ac14bec1c463b90f12e46e",
+ "topocyte_commit": "18e3aa5",
+ "versions": {
+  "python": "3.14.0",
+  "numpy": "2.5.1",
+  "h5py": "3.16.0"
+ },
+ "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+}

@@ -40,3 +40,14 @@ classification." Then: "cohort means pathology group. i want to know if it beats
 - **Commits:** local, on topocyte-analyses `main`, one per task (Simon's practice for this repository). Simon pushes.
 
 ## Runs
+
+- 2026-11-23: `curves.py spike`, the Gram matrix of the first 20 slides per class (210 pairs, 10 threads): epithelial
+  3,030,629 bars in 0.58 s, stromal 0.12 s, immune 0.07 s, other 0.07 s. Extrapolated by pair count to the 594
+  slides (176,715 pairs): **0.20 h in all** (epithelial 0.14 h), far below the plan's 6-hour limit. The estimate
+  leans high: 20 rows over 10 threads leave the busiest thread 30 of the 210 pairs. The first 20 slides are typical:
+  their mean bars per slide are within 1% (epithelial) to 25% (immune) of all 594 slides'. 3.0 s wall and peak RSS
+  3.0 GB (`/usr/bin/time -l`); `results/spike.json` names curves.py md5 e014819e….
+  - Checked ad hoc on the real data before the `gram` stage (a scratch script, not kept): the decile gate passes
+    (`decile_counts` in 3.6 s); `rho`'s minimum equals decile 0 exactly, so `rho >= d_0` keeps every cell, as the
+    cell-type study's slice 0 does; every slide has at least 668 cells of every class (no zero curve); and on four
+    slides per class every Gram entry equals `sum_of_minima` within a relative 5.1e-15.
