@@ -27,6 +27,7 @@ import topocyte as tc
 
 import betti
 import common as c
+import estimators as est
 import fetch_upstream
 import inputs as inp
 import oracles
@@ -278,6 +279,201 @@ def test_fpca_scores_of_an_all_empty_dimension_has_no_columns():
         warnings.simplefilter("error")
         S_train, S_test = betti.fpca_scores(G, np.arange(3), np.arange(3, 5))
     assert S_train.shape == (3, 0) and S_test.shape == (2, 0)
+
+
+def test_fpca_scores_returns_the_fitted_scores_of_its_training_curves():
+    # 12 random diagrams and a copy of each with one death moved by 1e-5: the 12 smallest centred eigenvalues are
+    # below 1e-6 of the largest, and their computed eigenvectors are not orthogonal to 1 to working precision. There
+    # the projection's two constant terms decide whether a training curve, projected as a test curve, gets its
+    # fitted score back.
+    rng = np.random.default_rng(10)
+    diagrams = [_random_diagram(rng, n, 1) for n in rng.integers(3, 9, 12)]
+    copies = [d.copy() for d in diagrams]
+    for d in copies:
+        d[np.flatnonzero(np.isfinite(d[:, 1]))[0], 1] += 1e-5
+    G = betti.gram(betti.curves(diagrams + copies, 1), 1)
+    idx = rng.permutation(24)
+    S_train, S_test = betti.fpca_scores(G, idx, idx)
+    K = G[np.ix_(idx, idx)]
+    r = tc.ph.fpca_from_gram(K, normalization="none")
+    rho, tol = r.gram_eigenvalues, 1e-10 * np.abs(r.scores).max()
+    assert rho.size == 23 and rho[-1] < 1e-6 * rho[0]
+    assert np.array_equal(S_train, r.scores)
+    np.testing.assert_allclose(S_test, r.scores, rtol=0, atol=tol)
+    # the test sees the constant terms: the row without them (FPCA.transform's) misses by far more
+    partial = (K - K.mean(axis=0)) @ (r.eigenvectors / np.sqrt(rho))
+    assert np.abs(partial - r.scores).max() > 100 * tol
+
+
+def _nw_scenario(rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Random distances on which Nadaraya-Watson reaches both of its fallbacks: ``(D_train, y, D_test)``.
+
+    20 training samples lie at random symmetric distances U(0.5, 1.5) from one another, with targets U(1, 2). A 21st
+    lies at U(20, 21) from them, with the target 1,000: at the smaller bandwidths all its LOO weights underflow, so
+    its LOO estimate falls back to the mean of the other targets, and its target moves the choice of bandwidth. 9
+    test samples lie like the first 20, and a 10th at 1,000 from every training sample, where every weight underflows.
+    """
+    A = rng.uniform(0.5, 1.5, (21, 21))
+    A[:, -1] = rng.uniform(20, 21, 21)
+    D_test = rng.uniform(0.5, 1.5, (10, 21))
+    D_test[:, -1] = rng.uniform(20, 21, 10)
+    D_test[-1] = 1e3
+    return np.triu(A, 1) + np.triu(A, 1).T, np.append(rng.uniform(1, 2, 20), 1e3), D_test
+
+
+def test_nw_matches_a_loop_transcription_of_upstreams_estimator():
+    for seed in range(5):
+        D_train, y, D_test = _nw_scenario(np.random.default_rng(seed))
+        # the outlier's LOO weights all underflow at the smallest bandwidth: e^(-z²/2) = 0 for z = d/h > 38.6
+        assert D_train[-1, :-1].min() / (0.1 * np.median(D_train[D_train > 0])) > 40
+        pred, h = est.nw_fit_predict(D_train, y, D_test)
+        expected, h_upstream = oracles.upstream_nw(D_train, y, D_test)
+        assert h == h_upstream
+        np.testing.assert_allclose(pred, expected, rtol=1e-12, atol=0)
+        assert pred[-1] == y.mean()
+    # all targets 0: every bandwidth's LOO error is exactly 0, and the first bandwidth, 0.1 m, wins in both
+    D_train, y, D_test = _nw_scenario(np.random.default_rng(0))
+    zero, m = np.zeros(len(y)), np.median(D_train[D_train > 0])
+    assert est.nw_fit_predict(D_train, zero, D_test)[1] == oracles.upstream_nw(D_train, zero, D_test)[1] == 0.1 * m
+
+
+def test_nw_falls_back_to_means_when_every_weight_underflows():
+    rng = np.random.default_rng(11)
+    A = rng.uniform(0.5, 1.5, (12, 12))
+    D_train, y = np.triu(A, 1) + np.triu(A, 1).T, rng.normal(size=12)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        pred, _ = est.nw_fit_predict(D_train, y, np.full((4, 12), 1e6))
+    assert np.array_equal(pred, np.full(4, y.mean()))
+
+
+def test_nw_median_ignores_zero_distances():
+    # Review Focus 3: 5 points, each 3 times, so that 30 distances off the diagonal are 0. The bandwidths come from the
+    # median of the positive distances only, and the copies weigh one another at the kernel's maximum, as upstream's.
+    rng = np.random.default_rng(12)
+    X = rng.uniform(0, 1, (5, 2))[np.repeat(np.arange(5), 3)]
+    D_train = np.sqrt(((X[:, None] - X[None]) ** 2).sum(axis=2))
+    D_test = np.sqrt(((rng.uniform(0, 1, (6, 2))[:, None] - X[None]) ** 2).sum(axis=2))
+    y = rng.uniform(1, 2, 15)
+    pred, h = est.nw_fit_predict(D_train, y, D_test)
+    m_positive, m_all = np.median(D_train[D_train > 0]), np.median(D_train)
+    assert h in np.linspace(0.1 * m_positive, 2.0 * m_positive, 50)
+    assert h not in np.linspace(0.1 * m_all, 2.0 * m_all, 50)
+    expected, h_upstream = oracles.upstream_nw(D_train, y, D_test)
+    assert h == h_upstream
+    np.testing.assert_allclose(pred, expected, rtol=1e-12, atol=0)
+
+
+def _refit_loo_mse(Z: np.ndarray, y: np.ndarray) -> float:
+    """The mean squared error of each ``y[i]``'s prediction by the OLS on the other rows of ``Z``, refitted by lstsq."""
+    errors = []
+    for i in range(len(y)):
+        keep = np.arange(len(y)) != i
+        beta = np.linalg.lstsq(Z[keep], y[keep], rcond=None)[0]
+        errors.append((y[i] - Z[i] @ beta) ** 2)
+    return float(np.mean(errors))
+
+
+def test_loo_select_press_equals_refitting_without_each_sample():
+    rng = np.random.default_rng(13)
+    S0, S1 = rng.normal(size=(15, 4)), rng.normal(size=(15, 3))
+    y = S0[:, 0] - 0.5 * S1[:, 1] + 0.3 * rng.normal(size=15)
+    k0, k1, mse = est.loo_select(S0, S1, y)
+    Z = {k: np.column_stack((np.ones(15), S0[:, : k[0]], S1[:, : k[1]])) for k in itertools.product(range(5), range(4))}
+    refits = {k: _refit_loo_mse(Zk, y) for k, Zk in Z.items()}
+    others = [k for k in ((0, 0), (1, 0), (0, 3), (2, 1), (4, 3), (3, 2)) if k != (k0, k1)][:5]
+    for k in ((k0, k1), *others):
+        assert est._loo_mse(Z[k], y) == pytest.approx(refits[k], rel=1e-10, abs=0)
+    assert mse == pytest.approx(refits[k0, k1], rel=1e-10, abs=0)
+    # the choice is the first minimum of the refitted errors, in the order (K0 + K1, K0)
+    assert (k0, k1) != (0, 0) and min(sorted(refits, key=lambda k: (sum(k), k[0])), key=refits.get) == (k0, k1)
+
+
+def test_loo_select_picks_the_mean_for_constant_targets():
+    rng = np.random.default_rng(14)
+    S0, S1 = rng.normal(size=(20, 4)), rng.normal(size=(20, 3))
+    for value in (0.0, 1.0, -2.5, np.pi, 1e3):
+        assert est.loo_select(S0, S1, np.full(20, value)) == (0, 0, 0.0)
+
+
+def test_loo_select_breaks_a_tie_by_the_smaller_k0():
+    # One score s in both dimensions: (1, 0) and (0, 1) have the same design, so their LOO errors tie exactly, and
+    # (1, 1), whose two score columns are equal, is not eligible (σ_min = 0).
+    rng = np.random.default_rng(19)
+    s = rng.normal(size=(20, 1))
+    y = 1 + 2 * s[:, 0] + 0.1 * rng.normal(size=20)
+    assert est.loo_select(s, s, y) == (0, 1, est._loo_mse(np.column_stack((np.ones(20), s)), y))
+
+
+def test_loo_select_respects_n_minus_two_and_k_max():
+    rng = np.random.default_rng(15)
+    # n = 6: y is linear in the first four H0 scores, which (4, 0) fits exactly; five scores or more are not allowed
+    S0, S1 = rng.normal(size=(6, 5)), rng.normal(size=(6, 5))
+    assert est.loo_select(S0, S1, 1 + S0[:, :4] @ np.array([1.0, -2.0, 0.5, 3.0]))[:2] == (4, 0)
+    # n = 30: y needs five H0 scores, more than k_max = 2 allows
+    S0, S1 = rng.normal(size=(30, 6)), rng.normal(size=(30, 6))
+    y = 1 + S0[:, :5].sum(axis=1) + 0.01 * rng.normal(size=30)
+    assert est.loo_select(S0, S1, y)[0] >= 5
+    k0, k1, _ = est.loo_select(S0, S1, y, k_max=2)
+    assert k0 <= 2 and k1 <= 2
+
+
+def test_loo_select_uses_only_dimensions_with_components():
+    # Review Focus 2: a dimension without components offers only K_d = 0
+    rng = np.random.default_rng(16)
+    S, empty = rng.normal(size=(20, 4)), np.empty((20, 0))
+    y = 1 + S[:, 0] + 0.1 * rng.normal(size=20)
+    k0, k1, _ = est.loo_select(S, empty, y)
+    assert k1 == 0 and k0 >= 1
+    k0, k1, _ = est.loo_select(empty, S, y)
+    assert k0 == 0 and k1 >= 1
+    # end to end: the 10 training samples hold only essential bars in H1, so their H1 fPCA has rank 0
+    diagrams0 = [_random_diagram(rng, n, 1) for n in rng.integers(1, 6, 15)]
+    diagrams1 = [_random_diagram(rng, n, 2) for n in [0] * 10 + [3] * 5]
+    G0, G1 = betti.gram(betti.curves(diagrams0, 0), 0), betti.gram(betti.curves(diagrams1, 1), 1)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        pred, k0, k1 = est.fpcr_fit_predict(G0, G1, rng.normal(size=10), np.arange(10), np.arange(10, 15))
+    assert k1 == 0 and np.isfinite(pred).all()
+
+
+def test_fpcr_recovers_a_linear_functional_of_the_scores():
+    rng = np.random.default_rng(17)
+    G0 = betti.gram(betti.curves([_random_diagram(rng, n, 1) for n in rng.integers(1, 8, 30)], 0), 0)
+    G1 = betti.gram(betti.curves([_random_diagram(rng, n, 2) for n in rng.integers(1, 8, 30)], 1), 1)
+    train, test = np.split(rng.permutation(30), [20])
+    (S0, T0), (S1, T1) = betti.fpca_scores(G0, train, test), betti.fpca_scores(G1, train, test)
+    pred, k0, _ = est.fpcr_fit_predict(G0, G1, 2 + 3 * S0[:, 0] - S0[:, 1], train, test)
+    expected = 2 + 3 * T0[:, 0] - T0[:, 1]
+    assert k0 >= 2
+    np.testing.assert_allclose(pred, expected, rtol=0, atol=1e-8 * np.abs(expected).max())
+    # with an H1 score in the functional too, the H1 columns must be the H1 scores
+    pred, k0, k1 = est.fpcr_fit_predict(G0, G1, 2 + 3 * S0[:, 0] - S1[:, 0], train, test)
+    expected = 2 + 3 * T0[:, 0] - T1[:, 0]
+    assert k0 >= 1 and k1 >= 1
+    np.testing.assert_allclose(pred, expected, rtol=0, atol=1e-8 * np.abs(expected).max())
+
+
+def test_arms_give_finite_predictions_with_empty_curves():
+    # Review Focus 1: 5 of 40 samples hold only essential bars (one in H0, two in H1, as the fluid diagrams), so their
+    # curves are empty: zero Gram rows, a Betti L2 distance of 0 between two of them, and zero curves to project.
+    rng = np.random.default_rng(18)
+    sizes = rng.integers(1, 8, (40, 2))
+    sizes[[0, 7, 19, 33, 38]] = 0  # three in training (0-29), two in test (30-39)
+    diagrams = [[_random_diagram(rng, n, 1 + h) for n in sizes[:, h]] for h in (0, 1)]
+    curves = [betti.curves(diagrams[h], h) for h in (0, 1)]
+    D_K = ws.w2_matrix(diagrams[0]) + ws.w2_matrix(diagrams[1])
+    D_B = betti.l2_matrix(curves[0], 0) + betti.l2_matrix(curves[1], 1)
+    G0, G1 = betti.gram(curves[0], 0), betti.gram(curves[1], 1)
+    assert D_B[0, 7] == D_B[7, 19] == 0 and not G0[38].any() and not G1[38].any()
+    y, train, test = sizes.sum(axis=1) + rng.normal(size=40), np.arange(30), np.arange(30, 40)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        for D in (D_K, D_B):
+            pred, _ = est.nw_fit_predict(D[np.ix_(train, train)], y[train], D[np.ix_(test, train)])
+            assert np.isfinite(pred).all()
+        pred, _, _ = est.fpcr_fit_predict(G0, G1, y[train], train, test)
+        assert np.isfinite(pred).all()
 
 
 @needs_upstream
