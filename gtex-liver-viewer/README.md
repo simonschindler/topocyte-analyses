@@ -4,7 +4,8 @@ A browser viewer of the GTEx liver cohort's cells (594 slides, 126,219,124
 cells). It shows any slide's point cloud, on its H&E where the slide file is at
 hand, coloured by HistoPLUS cell type, by the cell-type study's four classes, by
 10-nearest-neighbour or Voronoi density, by the homotypic fraction or local
-entropy of its nearest cells, or by clusters from three of the studies here. It was built for the
+entropy of its nearest cells and their counterparts against the slide's
+composition, or by clusters from three of the studies here. It was built for the
 [chromatic-domains pilot](../gtex-liver-chromatic-domains/README.md) on
 2026-11-23 and moved to this folder on 2026-11-24, since the later studies use it
 too.
@@ -27,7 +28,10 @@ From this folder:
 When the server prints `open http://127.0.0.1:8765/  (Ctrl-C stops)`, open that
 address in a browser; `--port` and `--host` change it. Ctrl-C in the terminal
 stops the server. The page loads OpenSeadragon from cdnjs, so the browser needs
-the internet.
+the internet. Python reads `serve.py` once, when the server starts, but the page
+is read from disk at every load: after an update, stop the server and start it
+again. The page checks this (`API` in both) and says so rather than failing
+on its own.
 
 - **Environment.** The viewer has no venv of its own. It runs in the
   chromatic-domains study's venv (Python 3.13; that study's README gives the
@@ -40,7 +44,7 @@ the internet.
   many cohort slides have one; the other slides are drawn on a blank canvas. The
   cells' coordinates are the slide's level-0 pixels.
 - **Tests.** `../gtex-liver-chromatic-domains/.venv/bin/python -m pytest -q -W error`
-  runs `test_viewer.py`: 32 tests on synthetic inputs, about 2 s.
+  runs `test_viewer.py`: 34 tests on synthetic inputs, about 2 s.
 
 ## What it shows
 
@@ -111,10 +115,29 @@ log 2 / log K) and one in a mixed hub (low, high). Both are coloured in bins of
 counts of neighbours, so no fraction lands in a bin by rounding. A fixed k gives
 every cell as many neighbours, so the entropy does not shrink where cells are
 sparse, as it would within a fixed radius. The server computes both for a slide,
-k and label set in one request on first use: 0.65 s on the largest slide
-(725,038 cells) at k = 15 by type. Neither is corrected for how common each type
-is on the slide (an excess homotypic fraction, or the Kullback–Leibler
-divergence from the slide's composition).
+k and label set in one request on first use, with the two below: 0.65 s on the
+largest slide (725,038 cells) at k = 15 by type.
+
+Neither takes into account how common each type is on the slide: where
+hepatocytes are 70% of the cells, they have a high homotypic fraction by
+chance alone. Two more colourings measure against the slide's composition P,
+the share of its cells of each type (or class):
+
+- **Homotypic excess:** the homotypic fraction less P of the cell's own type, so
+  0 is what chance gives; above 0, more of its own kind around the cell than
+  the slide's mix, below 0, fewer. It is coloured on a diverging scale, red
+  above and blue below, in 11 bins of 0.2 with chance (−0.1 to +0.1) in the
+  middle, in the dataviz neutral grey. The scale's blue arm resamples the
+  reference blue ramp and its red arm takes the same lightness and chroma at
+  the reference red's hue (`palette.js` gives the checks).
+- **KL divergence:** the Kullback–Leibler divergence D(p ‖ P) of the
+  neighbours' composition p from P, in nats: 0 for the slide's own mix, and
+  log(1/s) for neighbours all of one kind that makes up a share s of the slide
+  (0.69 for half the slide, 2.3 for a tenth). It is computed exactly as the
+  cross-entropy −(1/k) Σ log P of the neighbours' types less their entropy, and
+  coloured on the blue scale in bins of 0.25 nats, the last from 2.25 on. On
+  seven slides, healthy to cirrhotic, the medians were 0.09 to 0.6 nats and
+  the 99th percentiles 1.1 to 2.7 (by type or by class, k = 15).
 
 ### Pathology notes and donor
 
@@ -201,8 +224,8 @@ All read only:
   deciles and slide table), `/api/slide/<id>`, `/api/cells/<id>` (positions and
   types, binary), `/api/density/<id>` (each cell's density and its bin,
   binary), `/api/voronoi/<id>` (each cell's Voronoi density and its bin,
-  binary), `/api/neighbourhood/<id>?k=&by=` (each cell's homotypic fraction and
-  local entropy and their bins, binary), `/api/cluster/<id>?k=&density=&radius=`,
+  binary), `/api/neighbourhood/<id>?k=&by=` (each cell's homotypic fraction,
+  local entropy, homotypic excess and KL divergence, and their bins, binary), `/api/cluster/<id>?k=&density=&radius=`,
   `/api/tda/<id>?k=`, `/api/emeans/<id>?set=&k=` and
   `/api/tile/<id>/<level>/<col>_<row>.jpeg`. The
   last four slides' cells, Voronoi densities, neighbourhood values and slide

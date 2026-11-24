@@ -509,7 +509,8 @@ coloured by:
 - each cell's 10-NN density, in the cohort's ten deciles (the density slices),
   or its Voronoi density (1 / the area of its Voronoi cell) in the same bins;
 - the homotypic fraction and the local Shannon entropy of its k nearest cells,
-  by type or by class;
+  by type or by class, and against the slide's composition their excess over
+  chance and their Kullback–Leibler divergence;
 - composition clusters computed on the fly for one slide;
 - the chromatic-domains pilot's TDA features;
 - the saved e-means clusters of study 6.

@@ -57,11 +57,12 @@ git -C /path/to/topocyte worktree add ../topocyte-bd1d5c0 bd1d5c0
 [gtex-liver-viewer](gtex-liver-viewer/README.md) is the liver cell viewer. It
 shows any cohort slide's cells in the browser, on the H&E where the slide file is
 at hand, coloured by HistoPLUS cell type or class, by 10-NN or Voronoi density,
-by the homotypic fraction or local entropy of its nearest cells, by composition
-clusters computed on the spot, or by the chromatic-domains pilot's TDA clusters
-or the e-means study's saved clusters. A slider hides the cells
-below a density threshold, a panel draws the slide's class curves, and a box
-gives the slide's GTEx pathology notes and its donor. From its folder:
+by the homotypic fraction or local entropy of its nearest cells (also against
+the slide's composition), by composition clusters computed on the spot, or by
+the chromatic-domains pilot's TDA clusters or the e-means study's saved
+clusters. A slider hides the cells below a density threshold, a panel draws the
+slide's class curves, and a box gives the slide's GTEx pathology notes and its
+donor. From its folder:
 
 ```bash
 ../gtex-liver-chromatic-domains/.venv/bin/python serve.py --wsi-dir ~/data/GTEX/wsi

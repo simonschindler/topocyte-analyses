@@ -328,16 +328,48 @@ def test_neighbourhood_request_reads_k_and_the_labels():
             serve.neighbourhood_request(query)
 
 
+def test_homotypic_excess_and_kl_divergence_measure_against_the_slides_composition():
+    labels = np.array([0, 0, 0, 0, 1, 1, 2, 3])  # the slide's shares: 1/2, 1/4, 1/8, 1/8
+    shares = serve.slide_shares(labels, 5)
+    np.testing.assert_array_equal(shares, [0.5, 0.25, 0.125, 0.125, 0.0])
+    nbrs = np.array([[1, 2, 3, 1], [0, 2, 4, 5], [6, 7, 4, 1], [0, 0, 0, 0], [0, 1, 2, 3], [0, 1, 2, 3],
+                     [0, 1, 2, 3], [0, 1, 2, 3]])  # core, border, hub, ..., lone infiltrators
+    excess = serve.homotypic_excess(serve.homotypic_counts(labels, nbrs), 4, labels, shares)
+    np.testing.assert_allclose(excess, [0.5, 0.0, -0.25, 0.5, -0.25, -0.25, -0.125, -0.125], atol=1e-15)
+    kl = serve.kl_divergence(labels, nbrs, shares)
+    log2 = np.log(2)
+    np.testing.assert_allclose(kl[[0, 1, 2, 4, 6]], [log2, log2 / 2, log2 / 4, log2, log2], atol=1e-12)
+    # a neighbourhood with the slide's own composition is not unusual at all
+    assert serve.kl_divergence(np.array([0, 1, 0, 1]), np.array([[1, 2]] * 4), np.array([0.5, 0.5]))[0] == 0
+    # against the definition, on random labels
+    rng = np.random.default_rng(6)
+    labels = rng.integers(0, 5, 300)
+    nbrs = rng.integers(0, 300, size=(300, 7))
+    shares = serve.slide_shares(labels, 5)
+    p = np.stack([(labels[nbrs] == j).mean(axis=1) for j in range(5)], axis=1)
+    direct = np.where(p > 0, p * np.log(np.where(p > 0, p, 1) / shares), 0).sum(axis=1)
+    np.testing.assert_allclose(serve.kl_divergence(labels, nbrs, shares), direct, atol=1e-12)
+
+
+def test_excess_and_kl_codes():
+    excess = serve.excess_codes(np.array([-1.0, -0.91, -0.9, -0.2, 0.0, 0.099, 0.1, 0.5, 0.95, 1.0]))
+    assert excess.dtype == np.uint8 and excess.tolist() == [0, 0, 1, 4, 5, 5, 6, 8, 10, 10]
+    assert serve.excess_codes(np.array([0.0]))[0] == len(serve.EXCESS_EDGES) // 2  # chance is the middle bin
+    kl = serve.kl_codes(serve.KL_STEP * np.array([0.0, 0.999, 1.0, 4.0, 9.0, 20.0]))
+    assert kl.dtype == np.uint8 and kl.tolist() == [0, 0, 1, 4, 9, 9]
+
+
 def test_neighbourhood_blob_layout():
-    fraction, entropy = np.array([0.0, 0.5, 1.0]), np.array([0.25, 1.0, 0.0])
-    fraction_codes, entropy_codes = np.array([0, 5, 9], np.uint8), np.array([2, 9, 0], np.uint8)
-    blob = serve.neighbourhood_blob(fraction, entropy, fraction_codes, entropy_codes)
+    values = [np.array(v) for v in ([0.0, 0.5, 1.0], [0.25, 1.0, 0.0], [-0.5, 0.0, 0.5], [0.0, 0.7, 3.0])]
+    codes = [np.array(c, np.uint8) for c in ([0, 5, 9], [2, 9, 0], [2, 5, 8], [0, 2, 9])]
+    blob = serve.neighbourhood_blob(values, codes)
     n = struct.unpack_from("<I", blob)[0]
-    assert n == 3 and len(blob) == 4 + 10 * n
-    assert np.array_equal(np.frombuffer(blob, "<f4", n, 4), fraction.astype(np.float32))
-    assert np.array_equal(np.frombuffer(blob, "<f4", n, 4 + 4 * n), entropy.astype(np.float32))
-    assert np.array_equal(np.frombuffer(blob, np.uint8, n, 4 + 8 * n), fraction_codes)
-    assert np.array_equal(np.frombuffer(blob, np.uint8, n, 4 + 9 * n), entropy_codes)
+    assert n == 3 and len(blob) == 4 + 4 * 5 * n
+    for j, (v, cj) in enumerate(zip(values, codes, strict=True)):
+        assert np.array_equal(np.frombuffer(blob, "<f4", n, 4 + 4 * n * j), v.astype(np.float32))
+        assert np.array_equal(np.frombuffer(blob, np.uint8, n, 4 + 16 * n + n * j), cj)
+    with pytest.raises(ValueError, match="one per cell"):
+        serve.neighbourhood_blob(values, [codes[0][:2], *codes[1:]])
 
 
 def test_threshold_curve_puts_the_deciles_at_every_hundredth_step():

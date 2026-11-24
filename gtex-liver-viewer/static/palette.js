@@ -50,6 +50,21 @@ export const CLUSTERS = {
 const DENSITY_RAMP = ["#cde2fb", "#aecef5", "#8ebbf1", "#6da7ec", "#4b92e6", "#2f7ddb", "#256abf", "#1b58a4", "#134688", "#0d366b"];
 export const DENSITY = { light: DENSITY_RAMP, dark: [...DENSITY_RAMP].reverse() };
 
+// Homotypic excess, eleven bins from below -0.9 to 0.9 and above: diverging around chance (the middle bin, the
+// dataviz neutral grey), blue below and red above, the reference palette's diverging pair. Blue: the reference blue
+// ramp resampled in OKLab at L 0.86, 0.75, 0.64, 0.53, 0.42 out from the neutral; red: the same L and chroma at the
+// hue of the reference red slot (#e34948), all in sRGB. Each arm passes validate_palette.js --ordinal on monotone L,
+// gaps >= 0.06 and one hue, on light and dark; the step next to the neutral fades into the surface by design (1.5:1
+// on light, 1.9:1 for red on dark), as chance should. The two arms' first steps are close (ΔE 10.3, 7.7 protan);
+// from the second step on they are 18.8 or more apart (13.8 protan). On the dark canvas the arms run the other
+// way, dark next to the neutral and light at the poles.
+const BLUE_ARM = ["#b8d4f6", "#7fb2ee", "#448de6", "#256bc0", "#164b90"]; // from the neutral out
+const RED_ARM = ["#f4c3be", "#e8948d", "#d9615c", "#b23f3d", "#842928"];
+export const DIVERGING = {
+  light: [...[...BLUE_ARM].reverse(), "#f0efec", ...RED_ARM],
+  dark: [...BLUE_ARM, "#383835", ...[...RED_ARM].reverse()],
+};
+
 export function rgb(hex) {
   const v = parseInt(hex.slice(1), 16);
   return [((v >> 16) & 255) / 255, ((v >> 8) & 255) / 255, (v & 255) / 255];

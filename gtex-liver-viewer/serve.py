@@ -85,6 +85,11 @@ NEIGHBOURS = 15  # the default k
 NEIGHBOURS_MIN, NEIGHBOURS_MAX = 2, 100
 LABEL_SETS = ("types", "classes")
 UNIT_BINS = 10  # both values lie in [0, 1], coloured in bins of 0.1
+# The same against the slide's composition: the homotypic fraction's excess over the slide's share of the cell's own
+# type, in 11 bins of 0.2 around chance (0), and the Kullback-Leibler divergence in nats, in steps of KL_STEP.
+EXCESS_EDGES = np.array([-0.9, -0.7, -0.5, -0.3, -0.1, 0.1, 0.3, 0.5, 0.7, 0.9])
+KL_STEP = 0.25
+API = 2  # what /api/meta and the endpoints give; app.js refuses a server with another, as one started before an update
 STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css"}
 
 
@@ -244,8 +249,8 @@ def homotypic_counts(labels: np.ndarray, nbrs: np.ndarray) -> np.ndarray:
     return (labels[nbrs] == labels[:, None]).sum(axis=1)
 
 
-def local_entropy(labels: np.ndarray, nbrs: np.ndarray, n_labels: int) -> np.ndarray:
-    """The Shannon entropy of each cell's neighbours' labels, divided by log(n_labels) (Pielou's evenness, in [0, 1]).
+def entropy_nats(labels: np.ndarray, nbrs: np.ndarray, n_labels: int) -> np.ndarray:
+    """The Shannon entropy of each cell's neighbours' labels, in nats.
 
     With counts c of the k neighbours, H = log k - (1/k) Σ c log c, where 0 log 0 = 0.
     """
@@ -256,7 +261,41 @@ def local_entropy(labels: np.ndarray, nbrs: np.ndarray, n_labels: int) -> np.nda
     total = np.zeros(n)
     for label in range(n_labels):
         total += c_log_c[(neighbour_labels == label).sum(axis=1)]
-    return np.clip((np.log(k) - total / k) / np.log(n_labels), 0.0, 1.0)
+    return np.log(k) - total / k
+
+
+def local_entropy(labels: np.ndarray, nbrs: np.ndarray, n_labels: int) -> np.ndarray:
+    """``entropy_nats`` divided by log(n_labels): Pielou's evenness, in [0, 1]."""
+    return np.clip(entropy_nats(labels, nbrs, n_labels) / np.log(n_labels), 0.0, 1.0)
+
+
+def slide_shares(labels: np.ndarray, n_labels: int) -> np.ndarray:
+    """The share of the slide's cells with each label: the composition the two corrections measure against."""
+    return np.bincount(labels, minlength=n_labels) / len(labels)
+
+
+def homotypic_excess(counts: np.ndarray, k: int, labels: np.ndarray, shares: np.ndarray) -> np.ndarray:
+    """The homotypic fraction counts / k less the slide's share of the cell's own label: 0 is what chance gives."""
+    return counts / k - shares[labels]
+
+
+def kl_divergence(labels: np.ndarray, nbrs: np.ndarray, shares: np.ndarray) -> np.ndarray:
+    """The Kullback-Leibler divergence D(p_i || P) of each cell's neighbours' labels p_i from the slide's shares P,
+    in nats: the cross-entropy -(1/k) Σ_j log P(label of neighbour j) less ``entropy_nats``. Every neighbour is a
+    cell of the slide, so P is positive wherever p_i is."""
+    log_shares = np.log(np.where(shares > 0, shares, 1.0))  # a label absent from the slide is no one's neighbour
+    cross = -log_shares[labels[nbrs]].mean(axis=1)
+    return np.maximum(cross - entropy_nats(labels, nbrs, len(shares)), 0.0)
+
+
+def excess_codes(values: np.ndarray) -> np.ndarray:
+    """The bin of each excess among the 11 that ``EXCESS_EDGES`` bound, each closed below: 5 is chance, ±0.1."""
+    return np.searchsorted(EXCESS_EDGES, values, side="right").astype(np.uint8)
+
+
+def kl_codes(values: np.ndarray) -> np.ndarray:
+    """The bin of each divergence: j for [j, j + 1) × ``KL_STEP`` nats, the last one open above."""
+    return np.minimum(np.floor(values / KL_STEP + 1e-9), UNIT_BINS - 1).astype(np.uint8)
 
 
 def unit_codes(values: np.ndarray) -> np.ndarray:
@@ -284,18 +323,16 @@ def neighbourhood_request(query: dict[str, list[str]]) -> tuple[int, str]:
     return k, by
 
 
-def neighbourhood_blob(fraction: np.ndarray, entropy: np.ndarray, fraction_codes: np.ndarray,
-                       entropy_codes: np.ndarray) -> bytes:
-    """``[n u32][n × f32 homotypic fraction][n × f32 local entropy][n u8 its bin][n u8 its bin]``, little-endian."""
-    n = len(fraction)
-    if not (entropy.shape == fraction_codes.shape == entropy_codes.shape == (n,)):
+def neighbourhood_blob(values: list[np.ndarray], codes: list[np.ndarray]) -> bytes:
+    """``[n u32]``, then each value per cell as ``n × f32``, then each bin as ``n × u8``, little-endian, in the
+    order given (``Cohort.neighbourhood``: homotypic fraction, local entropy, homotypic excess, KL divergence)."""
+    n = len(values[0])
+    if len(values) != len(codes) or any(a.shape != (n,) for a in (*values, *codes)):
         raise ValueError("the values and bins are not one per cell")
     return (
         struct.pack("<I", n)
-        + np.ascontiguousarray(fraction, dtype="<f4").tobytes()
-        + np.ascontiguousarray(entropy, dtype="<f4").tobytes()
-        + np.ascontiguousarray(fraction_codes, dtype=np.uint8).tobytes()
-        + np.ascontiguousarray(entropy_codes, dtype=np.uint8).tobytes()
+        + b"".join(np.ascontiguousarray(v, dtype="<f4").tobytes() for v in values)
+        + b"".join(np.ascontiguousarray(c, dtype=np.uint8).tobytes() for c in codes)
     )
 
 
@@ -668,7 +705,10 @@ class Cohort:
                 "k_min": NEIGHBOURS_MIN,
                 "k_max": NEIGHBOURS_MAX,
                 "n_labels": {"types": len(self.types), "classes": len(c.CLASSES)},
+                "excess_edges": EXCESS_EDGES.tolist(),
+                "kl_step": KL_STEP,
             },
+            "api": API,
             "emeans": None
             if self.emeans_sets is None
             else [
@@ -865,7 +905,13 @@ class Cohort:
         nbrs = nearest_others(cells["xy"], k)
         same = homotypic_counts(labels, nbrs)
         entropy = local_entropy(labels, nbrs, n_labels)
-        blob = neighbourhood_blob(same / k, entropy, homotypic_codes(same, k), unit_codes(entropy))
+        shares = slide_shares(labels, n_labels)
+        excess = homotypic_excess(same, k, labels, shares)
+        kl = kl_divergence(labels, nbrs, shares)
+        blob = neighbourhood_blob(
+            [same / k, entropy, excess, kl],
+            [homotypic_codes(same, k), unit_codes(entropy), excess_codes(excess), kl_codes(kl)],
+        )
         with self._lock:
             return remember(self._neighbourhood, key, blob, CACHE)
 
