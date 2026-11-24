@@ -2,7 +2,7 @@
 // tiles, or a blank canvas of the cloud's size) and the WebGL layer of the slide's cells.
 import { CurvesPanel, binOf, classCounts } from "/static/curves.js";
 import { PointsOverlay } from "/static/overlay.js";
-import { CLUSTERS, DENSITY, DIVERGING, PALETTE, rgb } from "/static/palette.js";
+import { CLUSTERS, DENSITY, PALETTE, colourScale, rgb } from "/static/palette.js";
 
 const BLANK = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 const CELL_UM = 10; // a cell's drawn diameter once zoomed in far enough
@@ -13,6 +13,7 @@ const CENTRE_SIZE = 2.5; // TDA centres are drawn this much larger than the cell
 const API = 2; // the /api/meta "api" this page is written for (serve.py's API)
 // The layers of each cell's k nearest other cells, all four from one request (/api/neighbourhood/<id>).
 const NEIGHBOURHOOD = ["homotypic", "entropy", "excess", "kl"];
+const NONE = 15; // the code of a cell without a value (no Voronoi cell) when the slide's percentiles cut the bins
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => n.toLocaleString("en-US");
 
@@ -29,6 +30,7 @@ const state = {
   voronoi: null, // the shown slide's Voronoi density codes and cells per code (/api/voronoi/<id>), once fetched
   neighbourhood: null, // the shown slide's NEIGHBOURHOOD layers for one k and label set, once fetched
   layer: "types", // "types" | "classes" | "clusters" | "density" | "voronoi", or one of NEIGHBOURHOOD
+  scale: { map: "auto", mode: "fixed", from: 2, to: 98 }, // the value layers' colour map and bins
   hidden: {
     types: new Set(), classes: new Set(), clusters: new Set(), density: new Set(), voronoi: new Set(),
     homotypic: new Set(), entropy: new Set(), excess: new Set(), kl: new Set(),
@@ -121,64 +123,208 @@ function densityTitle(j) {
   return `Cohort decile ${j + 1} of the 10-NN density: ${densityRange(j, " to ")} cells per mm²; ${kept}.`;
 }
 
+function voronoiTitle(j) {
+  return `Voronoi density in cohort decile ${j + 1} of the 10-NN density: ${densityRange(j, " to ")} cells per mm².`;
+}
+
+function excessTitle(j) {
+  const middle = state.meta.neighbourhood.excess_edges.length / 2;
+  const side = j === middle ? "about chance" : j < middle ? "fewer of its own kind than chance"
+    : "more of its own kind than chance";
+  return `Homotypic excess ${excessRange(j, " up to ")}: ${side}.`;
+}
+
+function klTitle(j) {
+  return `KL divergence of the neighbours' mix from the slide's: ${klRange(j, " up to ")} nats.`;
+}
+
+// The value layers, each cell coloured by a number. Fixed bins: the server's codes, with their labels and titles.
+// digits: the fewest decimals to print; centre: where a diverging map puts its neutral; map: the default map.
+const VALUES = {
+  density: { what: "10-NN density", unit: "cells per mm²", digits: 0, bins: 10, label: densityRange, title: densityTitle },
+  voronoi: {
+    what: "Voronoi density", unit: "cells per mm²", digits: 0, bins: 10, label: densityRange, title: voronoiTitle,
+  },
+  homotypic: { what: "Homotypic fraction", unit: "", digits: 2, bins: 10, label: unitRange, title: unitTitle },
+  entropy: { what: "Local entropy", unit: "", digits: 2, bins: 10, label: unitRange, title: unitTitle },
+  excess: {
+    what: "Homotypic excess", unit: "", digits: 2, bins: 11, label: excessRange, title: excessTitle, centre: 0,
+    map: "diverging", signed: true,
+  },
+  kl: { what: "KL divergence", unit: "nats", digits: 2, bins: 10, label: klRange, title: klTitle },
+};
+const VALUE_LAYERS = Object.keys(VALUES);
+
+// The shown slide's values of a value layer: float32, NaN where a cell has none.
+function valuesOf(layer) {
+  if (layer === "density") return state.rho;
+  if (layer === "voronoi") return state.voronoi?.values ?? null;
+  return state.neighbourhood?.[layer]?.values ?? null;
+}
+
+// The server's fixed bins of a value layer: its codes and the cells per code.
+function fixedOf(layer) {
+  if (layer === "density") return state.density && { codes: state.density, counts: state.densityCounts };
+  if (layer === "voronoi") return state.voronoi;
+  return state.neighbourhood?.[layer] ?? null;
+}
+
+function mapOf(layer) {
+  return state.scale.map === "auto" ? (VALUES[layer].map ?? "blue") : state.scale.map;
+}
+
+const sortedValues = new WeakMap(); // a layer's values -> their finite values, sorted
+const scaledBins = new WeakMap(); // a layer's values -> the last bins cut at their percentiles, with its settings
+
+// The q-quantile of sorted values, interpolated between neighbours as numpy's default.
+function quantile(sorted, q) {
+  const x = q * (sorted.length - 1);
+  const i = Math.floor(x);
+  return i + 1 < sorted.length ? sorted[i] + (x - i) * (sorted[i + 1] - sorted[i]) : sorted[i];
+}
+
+// A value layer's bins: the server's fixed ones, or n equal steps between the slide's two percentiles, the first
+// and last open (11 for a diverging map, so that one step sits in the middle, else 10). A diverging map on a layer
+// with a centre widens the range to be even about it, so the neutral stays there.
+function binsOf(layer) {
+  if (state.scale.mode === "fixed") {
+    const f = fixedOf(layer);
+    const none = layer === "voronoi" ? state.meta.density.voronoi_none : null;
+    return f && { n: VALUES[layer].bins, codes: f.codes, counts: f.counts, none };
+  }
+  const values = valuesOf(layer);
+  if (!values) return null;
+  const diverging = mapOf(layer) === "diverging";
+  const n = diverging ? 11 : 10;
+  const { from, to } = state.scale;
+  const key = `${from}|${to}|${n}|${diverging}`;
+  const cached = scaledBins.get(values);
+  if (cached?.key === key) return cached.bins;
+  if (!sortedValues.has(values)) sortedValues.set(values, values.filter((v) => !Number.isNaN(v)).sort());
+  const sorted = sortedValues.get(values);
+  let lo = sorted.length ? quantile(sorted, from / 100) : 0;
+  let hi = sorted.length ? quantile(sorted, to / 100) : 0;
+  const { centre } = VALUES[layer];
+  if (diverging && centre !== undefined) {
+    const half = Math.max(centre - lo, hi - centre);
+    [lo, hi] = [centre - half, centre + half];
+  }
+  const width = (hi - lo) / n;
+  const codes = new Uint8Array(values.length);
+  const counts = new Array(NONE + 1).fill(0);
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i];
+    const j = Number.isNaN(v) ? NONE : width > 0 ? Math.min(n - 1, Math.max(0, Math.floor((v - lo) / width))) : n >> 1;
+    codes[i] = j;
+    counts[j] += 1;
+  }
+  const bins = { n, codes, counts, none: layer === "voronoi" ? NONE : null, lo, hi, width, from, to };
+  scaledBins.set(values, { key, bins });
+  return bins;
+}
+
+// A value as its layer prints it, with enough decimals to tell steps of the given width apart.
+function valueText(layer, v, width) {
+  const { digits, signed } = VALUES[layer];
+  const places = Math.min(4, Math.max(digits, width > 0 ? Math.ceil(-Math.log10(width)) : 0));
+  const text = Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: places, maximumFractionDigits: places });
+  if (Number(text.replaceAll(",", "")) === 0) return text;
+  return v < 0 ? `−${text}` : signed ? `+${text}` : text;
+}
+
+function scaledRange(layer, bins, j, joiner = "–") {
+  const edge = (i) => valueText(layer, bins.lo + i * bins.width, bins.width);
+  if (j === 0) return `< ${edge(1)}`;
+  if (j === bins.n - 1) return `≥ ${edge(j)}`;
+  return `${edge(j)}${VALUES[layer].signed ? " to " : joiner}${edge(j + 1)}`;
+}
+
+function scaledTitle(layer, bins, j) {
+  const { what, unit } = VALUES[layer];
+  return `${what} ${scaledRange(layer, bins, j, " up to ")}${unit ? ` ${unit}` : ""}: step ${j + 1} of ${bins.n} `
+    + `between the slide's percentiles ${bins.from} and ${bins.to}.`;
+}
+
+// The legend of a value layer: its bins in its colour map, and the cells without a value for Voronoi.
+function valueEntries(mode) {
+  const layer = state.layer;
+  const spec = VALUES[layer];
+  const bins = binsOf(layer);
+  const scaled = state.scale.mode !== "fixed" && bins;
+  const entries = colourScale(mapOf(layer), bins ? bins.n : spec.bins, mode).map((hex, j) => ({
+    key: j,
+    hex,
+    n: bins ? bins.counts[j] : 0,
+    label: scaled ? scaledRange(layer, bins, j) : spec.label(j),
+    title: scaled ? scaledTitle(layer, bins, j) : spec.title(j),
+  }));
+  if (layer === "voronoi") {
+    const none = bins?.none ?? state.meta.density.voronoi_none;
+    entries.push({
+      key: none,
+      label: "no Voronoi cell",
+      hex: GREY[mode],
+      n: bins ? bins.counts[none] : 0,
+      title: "On the convex hull of the slide's cells, where the Voronoi cell is unbounded, or at the position of "
+        + "another cell, which shares it.",
+    });
+  }
+  return entries;
+}
+
+// What a value layer shows, and how its colours are cut.
+function valueNote(layer) {
+  const bins = binsOf(layer);
+  const { um_per_px: um, k_nn: kNN } = state.meta.density;
+  let text;
+  let fixed;
+  if (layer === "density") {
+    text = `Each cell's ${kNN}-nearest-neighbour density in cells per mm² (the pathology study's density.npz, at `
+      + `${um} µm per pixel).`;
+    fixed = "In the cohort's ten deciles: the thresholds of the density slices.";
+  } else if (layer === "voronoi") {
+    text = "Each cell's Voronoi density, 1 / the area of its Voronoi cell among the slide's cells, in cells per mm² "
+      + `(at ${um} µm per pixel, as the 10-NN density). ${fmt(bins ? bins.counts[bins.none] : 0)} cells have no `
+      + "Voronoi cell of their own (grey): on the convex hull it is unbounded, and cells at one position share "
+      + "theirs. Cells at the edge of the tissue have large Voronoi cells, so low densities.";
+    fixed = "In the 10-NN density's bins, the cohort's ten deciles.";
+  } else {
+    const { k, by, nLabels } = state.neighbourhood;
+    const [kind, kinds] = by === "types" ? ["HistoPLUS type", "HistoPLUS types"] : ["class", "classes"];
+    const step = state.meta.neighbourhood.kl_step;
+    text = {
+      homotypic: `Each cell's homotypic fraction: the share of its ${k} nearest other cells that are of its own `
+        + `${kind} (1: inside a sheet of its own kind; about 0.5: on a border between two; 0: alone among others).`,
+      entropy: `Each cell's local Shannon entropy: of the ${kinds} of its ${k} nearest other cells, divided by `
+        + `log ${nLabels} for the ${nLabels} ${kinds} (Pielou's evenness; 0: all of one ${kind}; 1: every ${kind} `
+        + "in equal shares).",
+      excess: `Each cell's homotypic excess: the share of its ${k} nearest other cells of its own ${kind}, less the `
+        + `slide's share of cells of that ${kind}. 0 is what chance gives; above, more of its own ${kind} around it `
+        + "than the slide's mix; below, fewer.",
+      kl: `Each cell's KL divergence: how far the mix of ${kinds} among its ${k} nearest other cells is from the `
+        + `slide's own mix, in nats (0: the same mix; neighbours all of one ${kind} that makes up a share s of the `
+        + "slide score log(1/s): 0.69 for half the slide, 2.3 for a tenth).",
+    }[layer] + " The neighbours are taken among all the slide's cells.";
+    fixed = {
+      homotypic: "In bins of 0.1.",
+      entropy: "In bins of 0.1.",
+      excess: "In bins of 0.2 about chance, −0.1 to +0.1.",
+      kl: `In bins of ${step} nats, the last from ${9 * step} on.`,
+    }[layer];
+  }
+  const even = VALUES[layer].centre !== undefined && mapOf(layer) === "diverging" ? ", widened to be even about 0" : "";
+  const scale = state.scale.mode === "fixed" || !bins ? fixed
+    : `In ${bins.n} equal steps between the slide's percentiles ${bins.from} and ${bins.to}, `
+      + `${valueText(layer, bins.lo, bins.width)} and ${valueText(layer, bins.hi, bins.width)}${even}; the first `
+      + "and last steps also take the values beyond.";
+  return `${text} ${scale}${layer === "density" ? "" : " The slider still hides by 10-NN density."}`;
+}
+
 function legendEntries() {
   const { types, type_class: typeClass, classes } = state.meta;
   const mode = paletteMode();
   const count = (t) => (state.counts ? state.counts[t] : 0);
-  if (state.layer === "density") {
-    return DENSITY[mode].map((hex, j) => ({
-      key: j,
-      label: densityRange(j),
-      hex,
-      n: state.densityCounts ? state.densityCounts[j] : 0,
-      title: densityTitle(j),
-    }));
-  }
-  if (state.layer === "homotypic" || state.layer === "entropy") {
-    const counts = state.neighbourhood?.[state.layer].counts;
-    return DENSITY[mode].map((hex, j) => ({
-      key: j, label: unitRange(j), hex, n: counts ? counts[j] : 0, title: unitTitle(j),
-    }));
-  }
-  if (state.layer === "excess") {
-    const counts = state.neighbourhood?.excess.counts;
-    const middle = state.meta.neighbourhood.excess_edges.length / 2;
-    const side = (j) => (j === middle ? "about chance" : j < middle ? "fewer of its own kind than chance"
-      : "more of its own kind than chance");
-    return DIVERGING[mode].map((hex, j) => ({
-      key: j, label: excessRange(j), hex, n: counts ? counts[j] : 0,
-      title: `Homotypic excess ${excessRange(j, " up to ")}: ${side(j)}.`,
-    }));
-  }
-  if (state.layer === "kl") {
-    const counts = state.neighbourhood?.kl.counts;
-    return DENSITY[mode].map((hex, j) => ({
-      key: j, label: klRange(j), hex, n: counts ? counts[j] : 0,
-      title: `KL divergence of the neighbours' mix from the slide's: ${klRange(j, " up to ")} nats.`,
-    }));
-  }
-  if (state.layer === "voronoi") {
-    const none = state.meta.density.voronoi_none;
-    const counts = state.voronoi?.counts;
-    return [
-      ...DENSITY[mode].map((hex, j) => ({
-        key: j,
-        label: densityRange(j),
-        hex,
-        n: counts ? counts[j] : 0,
-        title: `Voronoi density in cohort decile ${j + 1} of the 10-NN density: `
-          + `${densityRange(j, " to ")} cells per mm².`,
-      })),
-      {
-        key: none,
-        label: "no Voronoi cell",
-        hex: GREY[mode],
-        n: counts ? counts[none] : 0,
-        title: "On the convex hull of the slide's cells, where the Voronoi cell is unbounded, or at the position of "
-          + "another cell, which shares it.",
-      },
-    ];
-  }
+  if (VALUE_LAYERS.includes(state.layer)) return valueEntries(mode);
   if (state.layer === "clusters") {
     const { emeans } = state.clusters;
     const entries = state.clusters.clusters.map((cluster, j) => ({
@@ -226,18 +372,9 @@ function applyColors() {
   const { types, type_class: typeClass, classes } = state.meta;
   const mode = paletteMode();
   const table = new Float32Array(16 * 4);
-  if (state.layer === "density" || NEIGHBOURHOOD.includes(state.layer)) {
+  if (VALUE_LAYERS.includes(state.layer)) {
     const hidden = state.hidden[state.layer];
-    const colours = state.layer === "excess" ? DIVERGING[mode] : DENSITY[mode];
-    colours.forEach((hex, j) => table.set([...rgb(hex), hidden.has(j) ? 0 : 1], j * 4));
-    overlay?.setColors(table);
-    renderLegend();
-    return;
-  }
-  if (state.layer === "voronoi") {
-    const none = state.meta.density.voronoi_none;
-    DENSITY[mode].forEach((hex, j) => table.set([...rgb(hex), state.hidden.voronoi.has(j) ? 0 : 1], j * 4));
-    table.set([...rgb(GREY[mode]), state.hidden.voronoi.has(none) ? 0 : 1], none * 4);
+    for (const e of valueEntries(mode)) table.set([...rgb(e.hex), hidden.has(e.key) ? 0 : 1], e.key * 4);
     overlay?.setColors(table);
     renderLegend();
     return;
@@ -319,44 +456,8 @@ function renderLegend() {
     return row;
   }));
   const note = $("legend-note");
-  note.hidden = state.layer !== "density" && state.layer !== "voronoi" && !NEIGHBOURHOOD.includes(state.layer);
-  if (state.layer === "homotypic" || state.layer === "entropy") {
-    const { k, by, nLabels } = state.neighbourhood;
-    const [kind, kinds] = by === "types" ? ["HistoPLUS type", "HistoPLUS types"] : ["class", "classes"];
-    note.textContent = (state.layer === "homotypic"
-      ? `Each cell's homotypic fraction: the share of its ${k} nearest other cells that are of its own ${kind} `
-        + "(1: inside a sheet of its own kind; about 0.5: on a border between two; 0: alone among others). "
-      : `Each cell's local Shannon entropy: of the ${kinds} of its ${k} nearest other cells, divided by `
-        + `log ${nLabels} for the ${nLabels} ${kinds} (Pielou's evenness; 0: all of one ${kind}; 1: every `
-        + `${kind} in equal shares). `)
-      + "The neighbours are taken among all the slide's cells; the slider still hides by 10-NN density.";
-  }
-  if (state.layer === "excess" || state.layer === "kl") {
-    const { k, by } = state.neighbourhood;
-    const [kind, kinds] = by === "types" ? ["HistoPLUS type", "HistoPLUS types"] : ["class", "classes"];
-    note.textContent = (state.layer === "excess"
-      ? `Each cell's homotypic excess: the share of its ${k} nearest other cells of its own ${kind}, less the `
-        + `slide's share of cells of that ${kind}. 0 is what chance gives; above (red), more of its own ${kind} `
-        + "around it than the slide's mix; below (blue), fewer. "
-      : `Each cell's KL divergence: how far the mix of ${kinds} among its ${k} nearest other cells is from the `
-        + `slide's own mix, in nats (0: the same mix; neighbours all of one ${kind} that makes up a share s of `
-        + "the slide score log(1/s): 0.69 for half the slide, 2.3 for a tenth). ")
-      + "The neighbours are taken among all the slide's cells; the slider still hides by 10-NN density.";
-  }
-  if (state.layer === "density") {
-    const { k_nn: k, um_per_px: um } = state.meta.density;
-    note.textContent = `Each cell's ${k}-nearest-neighbour density in cells per mm² (the pathology study's `
-      + `density.npz, at ${um} µm per pixel), in the cohort's ten deciles: the thresholds of the density slices. `
-      + "Low densities fade into the background.";
-  }
-  if (state.layer === "voronoi") {
-    const { um_per_px: um, voronoi_none: none } = state.meta.density;
-    note.textContent = "Each cell's Voronoi density, 1 / the area of its Voronoi cell among the slide's cells, in "
-      + `cells per mm² (at ${um} µm per pixel, as the 10-NN density), in the same bins: the cohort's ten deciles `
-      + `of the 10-NN density. ${fmt(state.voronoi.counts[none])} cells have no Voronoi cell of their own (grey): `
-      + "on the convex hull it is unbounded, and cells at one position share theirs. Cells at the edge of the "
-      + "tissue have large Voronoi cells, so low densities. The slider still hides by 10-NN density.";
-  }
+  note.hidden = !VALUE_LAYERS.includes(state.layer);
+  if (!note.hidden) note.textContent = valueNote(state.layer);
 }
 
 // --- slide list -------------------------------------------------------------------------------------------
@@ -424,9 +525,7 @@ function renderSlides() {
 // The per-cell codes of a layer: cluster labels, density bins, or type codes for types and classes.
 function codesOf(layer) {
   if (layer === "clusters") return state.clusters?.labels ?? null;
-  if (layer === "density") return state.density;
-  if (layer === "voronoi") return state.voronoi?.codes ?? null;
-  if (NEIGHBOURHOOD.includes(layer)) return state.neighbourhood?.[layer].codes ?? null;
+  if (VALUE_LAYERS.includes(layer)) return binsOf(layer)?.codes ?? null;
   return state.types;
 }
 
@@ -443,6 +542,7 @@ const LAZY = {
 function lazyFailed(message) {
   document.querySelector(`input[name=layer][value=${state.layer}]`).checked = true;
   $("neighbourhood").hidden = !NEIGHBOURHOOD.includes(state.layer);
+  $("scale").hidden = !VALUE_LAYERS.includes(state.layer);
   renderLegend();
   $("legend-note").hidden = false;
   $("legend-note").textContent = message;
@@ -451,15 +551,16 @@ function lazyFailed(message) {
 // /api/neighbourhood/<id>: [n u32], then n f32 values and then n u8 bins of each NEIGHBOURHOOD layer in turn.
 function parseNeighbourhood(buffer, n, k, by) {
   if (new DataView(buffer).getUint32(0, true) !== n) throw new Error("values for another number of cells");
-  const part = (offset) => {
-    const codes = new Uint8Array(buffer, offset, n);
-    const counts = new Array(DIVERGING.light.length).fill(0); // the most bins of any of the layers
+  const part = (j) => {
+    const values = new Float32Array(buffer, 4 + 4 * n * j, n);
+    const codes = new Uint8Array(buffer, 4 + 16 * n + n * j, n);
+    const counts = new Array(NONE + 1).fill(0);
     for (let i = 0; i < n; i++) counts[codes[i]] += 1;
-    return { codes, counts };
+    return { values, codes, counts };
   };
   const nLabels = state.meta.neighbourhood.n_labels[by];
   if (buffer.byteLength !== 4 + 5 * NEIGHBOURHOOD.length * n) throw new Error("values of another layout");
-  const layers = Object.fromEntries(NEIGHBOURHOOD.map((name, j) => [name, part(4 + 16 * n + j * n)]));
+  const layers = Object.fromEntries(NEIGHBOURHOOD.map((name, j) => [name, part(j)]));
   return { k, by, nLabels, ...layers };
 }
 
@@ -500,7 +601,7 @@ function parseVoronoi(buffer, n) {
   const codes = new Uint8Array(buffer, 4 + 4 * n, n);
   const counts = new Array(state.meta.density.voronoi_none + 1).fill(0);
   for (let i = 0; i < n; i++) counts[codes[i]] += 1;
-  return { codes, counts };
+  return { values: new Float32Array(buffer, 4, n), codes, counts };
 }
 
 // The Voronoi layer: the server triangulates the shown slide's cells on first use, which takes a few seconds on
@@ -819,6 +920,7 @@ async function init() {
   $("slides").addEventListener("change", (event) => loadSlide(event.target.value));
   document.querySelectorAll("input[name=layer]").forEach((radio) => radio.addEventListener("change", () => {
     $("neighbourhood").hidden = !NEIGHBOURHOOD.includes(radio.value);
+    $("scale").hidden = !VALUE_LAYERS.includes(radio.value);
     if (radio.value in LAZY) LAZY[radio.value](); else setLayer(radio.value);
   }));
   const { k, k_min: kMin, k_max: kMax } = state.meta.neighbourhood;
@@ -829,6 +931,22 @@ async function init() {
   };
   $("nb-k").addEventListener("change", neighbours);
   $("nb-by").addEventListener("change", neighbours);
+  const rescale = () => {
+    const from = Number($("pct-from").value);
+    const to = Number($("pct-to").value);
+    $("pct").hidden = $("scale-mode").value !== "percentiles";
+    if (!(from >= 0 && to <= 100 && from < to)) {
+      $("legend-note").hidden = false;
+      $("legend-note").textContent = "The percentiles run from 0 to 100, the first below the second.";
+      return;
+    }
+    state.scale = { map: $("cmap").value, mode: $("scale-mode").value, from, to };
+    VALUE_LAYERS.forEach((layer) => state.hidden[layer].clear()); // the bins, and so the toggles, change
+    const codes = VALUE_LAYERS.includes(state.layer) ? codesOf(state.layer) : null;
+    if (overlay && codes) overlay.setCodes(codes);
+    applyColors();
+  };
+  for (const id of ["cmap", "scale-mode", "pct-from", "pct-to"]) $(id).addEventListener("change", rescale);
   $("emeans-set").replaceChildren(...(state.meta.emeans ?? []).map((s) => new Option(
     `${s.name} (${s.columns} columns, k̂ ${s.k_tibshirani})`, s.name,
   )));

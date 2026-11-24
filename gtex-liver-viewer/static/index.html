@@ -71,6 +71,7 @@
   .neighbourhood[hidden] { display: none; }
   .neighbourhood label { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
   .neighbourhood select { padding: 2px 4px; }
+  .neighbourhood input[type=number] { width: 52px; font: inherit; color: var(--ink); background: var(--field); border: 1px solid var(--rule); border-radius: 4px; padding: 2px 4px; }
   #nb-k { width: 52px; font: inherit; color: var(--ink); background: var(--field); border: 1px solid var(--rule); border-radius: 4px; padding: 2px 4px; }
   #run:hover { border-color: var(--accent); }
   #run:disabled { cursor: progress; color: var(--muted); }
@@ -147,6 +148,11 @@
   <div class="neighbourhood" id="neighbourhood" hidden>
     <label>k <input type="number" id="nb-k" min="2" max="100" step="1" value="15"> nearest</label>
     <label>by <select id="nb-by"><option value="types">HistoPLUS type</option><option value="classes">class</option></select></label>
+  </div>
+  <div class="neighbourhood" id="scale" hidden>
+    <label>colours <select id="cmap"><option value="auto">default</option><option value="blue">blue</option><option value="viridis">viridis</option><option value="diverging">diverging</option></select></label>
+    <label>bins <select id="scale-mode"><option value="fixed">fixed</option><option value="percentiles">slide percentiles</option></select></label>
+    <label id="pct" hidden><input type="number" id="pct-from" min="0" max="100" step="0.5" value="2"> to <input type="number" id="pct-to" min="0" max="100" step="0.5" value="98"> %</label>
   </div>
   <ul id="legend"></ul>
   <p class="note" id="legend-note" hidden></p>

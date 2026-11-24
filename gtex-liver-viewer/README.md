@@ -139,6 +139,29 @@ the share of its cells of each type (or class):
   seven slides, healthy to cirrhotic, the medians were 0.09 to 0.6 nats and
   the 99th percentiles 1.1 to 2.7 (by type or by class, k = 15).
 
+### Colour maps and bins
+
+Under the colour choice, the six value colourings (the two densities and the four
+neighbourhood values) share two menus:
+
+- **colours:** *default* (the blue scale, and the diverging one for the
+  homotypic excess), *blue*, *viridis* (matplotlib 3.11.2's) or *diverging* (blue
+  to red about a neutral grey, as for the excess). Blue and the diverging map are
+  resampled in OKLab where a layer needs another number of steps than their own
+  (10 and 11).
+- **bins:** *fixed*, each colouring's own bins as described above, or *slide
+  percentiles*: 10 equal steps (11 for the diverging map, so that one sits in
+  the middle) between two percentiles of the shown slide's values, 2 and 98 by
+  default, the first and last steps also taking the values beyond. A diverging
+  map on the homotypic excess widens the range to be even about 0, so chance
+  stays in the neutral step. The percentiles are taken over all the slide's cells
+  with a value, whatever the density slider hides; the legend and the note give
+  the steps' values.
+
+Changing either resets the legend's toggles of the value colourings, since the
+bins change with them. The density slider and the class curves keep the 10-NN
+density's own bins.
+
 ### Pathology notes and donor
 
 The box under the slide list shows the slide's pathology group, its donor's sex,
