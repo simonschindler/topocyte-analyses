@@ -515,8 +515,9 @@ coloured by:
 - the chromatic-domains pilot's TDA features;
 - the saved e-means clusters of study 6.
 
-A slider hides the cells below a density threshold in any colouring, a panel
-plots how each class thins out as that threshold rises, and a box shows the
+A slider hides the cells below a threshold of the colouring's value (the 10-NN
+density under a type, class or cluster colouring), a panel plots how each class
+thins out as the 10-NN density threshold rises, and a box shows the
 slide's GTEx pathology notes and its donor's sex, age bracket and Hardy scale.
 It reads everything read only and writes nothing.
 

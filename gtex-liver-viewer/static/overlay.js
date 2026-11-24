@@ -2,19 +2,20 @@
 // a slide in one draw call, at its level-0 px position; colour and visibility come from a table indexed by the
 // cell's code (HistoPLUS type or cluster label), so switching layers or hiding a code only changes a uniform.
 // A code can be drawn in front (alpha 1) or behind (alpha 2: a first pass under everything else), and each
-// code has its own size factor, so a few highlighted cells stay visible over the rest. A density threshold hides
-// the cells below it in every layer: decided by the cell's density bin where the bins differ (exact: the server
-// bins in float64) and by its float32 density inside the threshold's own bin.
+// code has its own size factor, so a few highlighted cells stay visible over the rest. A threshold hides the
+// cells below it in every layer: decided by the cell's bin where the bins differ (for the 10-NN density, exact:
+// the server bins in float64) and by its float32 value inside the threshold's own bin; any other value comes
+// with every bin 0, so its float32 value alone decides.
 
 const MAX_TYPES = 16;
 
 const VS = `
   attribute vec2 a_position;    // level-0 px
   attribute float a_type;       // HistoPLUS type code
-  attribute float a_bin;        // density bin (cohort decile)
-  attribute float a_density;    // 10-NN density, cells per mm²
-  uniform float u_minBin;       // the bin the density threshold falls in
-  uniform float u_minDensity;   // the density threshold
+  attribute float a_bin;        // the threshold's bin: the 10-NN density's cohort decile, or 0
+  attribute float a_density;    // the value the threshold compares: the 10-NN density, or another
+  uniform float u_minBin;       // the bin the threshold falls in
+  uniform float u_minDensity;   // the threshold
   uniform vec4 u_bounds;        // visible image rectangle (x, y, width, height) in level-0 px
   uniform float u_pointSize;    // device px
   uniform vec4 u_colors[${MAX_TYPES}];  // rgb, and 0 hidden, 1 in front, 2 behind
@@ -139,8 +140,21 @@ export class PointsOverlay {
     this.draw();
   }
 
-  // Hide the cells below a density threshold: those in a lower bin, and those in its bin below its value.
+  // Hide the cells below a threshold: those in a lower bin, and those in its bin below its value.
   setThreshold(minBin, minDensity) { this.minBin = minBin; this.minDensity = minDensity; this.draw(); }
+
+  // Replace what the threshold compares (setPoints' bins and densities), keeping the positions and codes.
+  setThresholdValues(bins, values) {
+    const gl = this.gl;
+    if (bins.length !== this.count || values.length !== this.count) {
+      throw new Error(`${bins.length} bins and ${values.length} values for ${this.count} cells`);
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.bins);
+    gl.bufferData(gl.ARRAY_BUFFER, bins, gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this.densities);
+    gl.bufferData(gl.ARRAY_BUFFER, values, gl.STATIC_DRAW);
+    this.draw();
+  }
 
   // Replace the per-cell codes the colour table is indexed by (type codes, or cluster labels), one per cell.
   setCodes(codes) {

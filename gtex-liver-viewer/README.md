@@ -86,12 +86,23 @@ had none, and the median was 3,261 cells per mm², against 3,060 for the 10-NN
 density. Cells next to empty space, at the tissue's edges or around a gap in it,
 have large Voronoi cells and so low densities.
 
-The slider under the legend hides every cell below a 10-NN density threshold, in
-any colouring, the Voronoi density's included. It runs over the cohort's density
-quantiles in steps of 0.1 percentile (the pathology study's quantile curve), and
-its ten marked steps are the deciles, so at those steps it shows exactly the
-cells of density slices 0 to 9; the note under it gives the threshold and the
-cells shown.
+The slider under the legend hides every cell below a threshold of the attribute
+the cells are coloured by; its label names it, and the note under it gives the
+threshold and the cells shown.
+
+- **10-NN density**, and under a colouring with no number to it (type, class,
+  clusters): the slider runs over the cohort's density quantiles in steps of
+  0.1 percentile (the pathology study's quantile curve), and its ten marked
+  steps are the deciles, so at those steps it shows exactly the cells of
+  density slices 0 to 9.
+- **Every other value colouring** (Voronoi density and the four neighbourhood
+  values): the slider runs over the shown slide's own quantiles of that value,
+  in the same steps, its marks at the slide's deciles; a cell is shown when its
+  value is at or above the threshold, as the page compares them (both float32),
+  and a cell without a value (no Voronoi cell) is hidden by any threshold.
+
+Choosing a colouring with another attribute starts it with no threshold; the
+step otherwise stays, also from slide to slide.
 
 ### Neighbourhood composition
 
@@ -155,12 +166,11 @@ neighbourhood values) share two menus:
   default, the first and last steps also taking the values beyond. A diverging
   map on the homotypic excess widens the range to be even about 0, so chance
   stays in the neutral step. The percentiles are taken over all the slide's cells
-  with a value, whatever the density slider hides; the legend and the note give
-  the steps' values.
+  with a value, whatever the slider hides; the legend and the note give the
+  steps' values.
 
 Changing either resets the legend's toggles of the value colourings, since the
-bins change with them. The density slider and the class curves keep the 10-NN
-density's own bins.
+bins change with them. The slider and the class curves keep their own scales.
 
 ### Pathology notes and donor
 
@@ -173,9 +183,10 @@ as a tooltip.
 ### Class curves
 
 The panel in the slide view's bottom-right corner (it can be closed and
-reopened) draws, for the shown slide, how each class thins out as the density
-threshold rises, on the slider's scale with the slider's threshold marked. Its
-menu has three views:
+reopened) draws, for the shown slide, how each class thins out as the 10-NN
+density threshold rises, on the slider's scale for that density, with the
+slider's threshold marked while the slider is on the 10-NN density. Its menu has
+three views:
 
 - **stacked** (the default): of the slide's cells, the share that is of each
   class and at or above the threshold, stacked, so the stack starts at 1 and its

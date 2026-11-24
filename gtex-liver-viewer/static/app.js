@@ -14,6 +14,7 @@ const API = 2; // the /api/meta "api" this page is written for (serve.py's API)
 // The layers of each cell's k nearest other cells, all four from one request (/api/neighbourhood/<id>).
 const NEIGHBOURHOOD = ["homotypic", "entropy", "excess", "kl"];
 const NONE = 15; // the code of a cell without a value (no Voronoi cell) when the slide's percentiles cut the bins
+const LOWEST = -3.4e38; // below every value: where a cell has none, and the threshold that hides nothing
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => n.toLocaleString("en-US");
 
@@ -31,6 +32,7 @@ const state = {
   neighbourhood: null, // the shown slide's NEIGHBOURHOOD layers for one k and label set, once fetched
   layer: "types", // "types" | "classes" | "clusters" | "density" | "voronoi", or one of NEIGHBOURHOOD
   scale: { map: "auto", mode: "fixed", from: 2, to: 98 }, // the value layers' colour map and bins
+  thresholdSource: null, // the values the overlay's threshold compares (state.rho, or a value layer's)
   hidden: {
     types: new Set(), classes: new Set(), clusters: new Set(), density: new Set(), voronoi: new Set(),
     homotypic: new Set(), entropy: new Set(), excess: new Set(), kl: new Set(),
@@ -141,17 +143,27 @@ function klTitle(j) {
 // The value layers, each cell coloured by a number. Fixed bins: the server's codes, with their labels and titles.
 // digits: the fewest decimals to print; centre: where a diverging map puts its neutral; map: the default map.
 const VALUES = {
-  density: { what: "10-NN density", unit: "cells per mm²", digits: 0, bins: 10, label: densityRange, title: densityTitle },
-  voronoi: {
-    what: "Voronoi density", unit: "cells per mm²", digits: 0, bins: 10, label: densityRange, title: voronoiTitle,
+  density: {
+    what: "10-NN density", name: "10-NN density", unit: "cells per mm²", digits: 0, bins: 10, label: densityRange,
+    title: densityTitle,
   },
-  homotypic: { what: "Homotypic fraction", unit: "", digits: 2, bins: 10, label: unitRange, title: unitTitle },
-  entropy: { what: "Local entropy", unit: "", digits: 2, bins: 10, label: unitRange, title: unitTitle },
+  voronoi: {
+    what: "Voronoi density", name: "Voronoi density", unit: "cells per mm²", digits: 0, bins: 10,
+    label: densityRange, title: voronoiTitle,
+  },
+  homotypic: {
+    what: "Homotypic fraction", name: "homotypic fraction", unit: "", digits: 2, bins: 10, label: unitRange,
+    title: unitTitle,
+  },
+  entropy: {
+    what: "Local entropy", name: "local entropy", unit: "", digits: 2, bins: 10, label: unitRange, title: unitTitle,
+  },
   excess: {
-    what: "Homotypic excess", unit: "", digits: 2, bins: 11, label: excessRange, title: excessTitle, centre: 0,
+    what: "Homotypic excess", name: "homotypic excess", unit: "", digits: 2, bins: 11, label: excessRange,
+    title: excessTitle, centre: 0,
     map: "diverging", signed: true,
   },
-  kl: { what: "KL divergence", unit: "nats", digits: 2, bins: 10, label: klRange, title: klTitle },
+  kl: { what: "KL divergence", name: "KL divergence", unit: "nats", digits: 2, bins: 10, label: klRange, title: klTitle },
 };
 const VALUE_LAYERS = Object.keys(VALUES);
 
@@ -174,6 +186,11 @@ function mapOf(layer) {
 }
 
 const sortedValues = new WeakMap(); // a layer's values -> their finite values, sorted
+
+function sortedOf(values) {
+  if (!sortedValues.has(values)) sortedValues.set(values, values.filter((v) => !Number.isNaN(v)).sort());
+  return sortedValues.get(values);
+}
 const scaledBins = new WeakMap(); // a layer's values -> the last bins cut at their percentiles, with its settings
 
 // The q-quantile of sorted values, interpolated between neighbours as numpy's default.
@@ -200,8 +217,7 @@ function binsOf(layer) {
   const key = `${from}|${to}|${n}|${diverging}`;
   const cached = scaledBins.get(values);
   if (cached?.key === key) return cached.bins;
-  if (!sortedValues.has(values)) sortedValues.set(values, values.filter((v) => !Number.isNaN(v)).sort());
-  const sorted = sortedValues.get(values);
+  const sorted = sortedOf(values);
   let lo = sorted.length ? quantile(sorted, from / 100) : 0;
   let hi = sorted.length ? quantile(sorted, to / 100) : 0;
   const { centre } = VALUES[layer];
@@ -317,7 +333,7 @@ function valueNote(layer) {
     : `In ${bins.n} equal steps between the slide's percentiles ${bins.from} and ${bins.to}, `
       + `${valueText(layer, bins.lo, bins.width)} and ${valueText(layer, bins.hi, bins.width)}${even}; the first `
       + "and last steps also take the values beyond.";
-  return `${text} ${scale}${layer === "density" ? "" : " The slider still hides by 10-NN density."}`;
+  return `${text} ${scale}`;
 }
 
 function legendEntries() {
@@ -631,6 +647,7 @@ function setLayer(layer) {
   document.querySelector(`input[name=layer][value=${layer}]`).checked = true;
   const codes = codesOf(layer);
   if (overlay && codes && codes !== before) overlay.setCodes(codes);
+  if (thresholdSource() !== state.thresholdSource) syncThreshold();
   applyColors();
 }
 
@@ -765,8 +782,59 @@ function thresholdAt(step) {
 
 // Hide the cells below the threshold in every layer, as the overlay decides it: by bin where the bins differ,
 // by float32 density inside the threshold's bin.
+// The attribute the slider thresholds: the colouring's values, or the 10-NN density under a categorical colouring.
+function thresholdOf() {
+  return VALUE_LAYERS.includes(state.layer) ? state.layer : "density";
+}
+
+function thresholdSource() {
+  const on = thresholdOf();
+  return on === "density" ? state.rho : valuesOf(on);
+}
+
+const thresholdArrays = new WeakMap(); // a layer's values -> the overlay's bins (all 0) and values (none: LOWEST)
+
+// Give the overlay what the slider thresholds: the 10-NN density's cohort bins and densities (exact at the density
+// slices), or the colouring's own values, where a cell without one is below every threshold.
+function syncThreshold() {
+  if (!overlay || !state.density) return;
+  const on = thresholdOf();
+  const source = thresholdSource();
+  if (on === "density") {
+    overlay.setThresholdValues(state.density, state.rho);
+  } else if (source) {
+    if (!thresholdArrays.has(source)) {
+      const values = Float32Array.from(source, (v) => (Number.isNaN(v) ? LOWEST : v));
+      thresholdArrays.set(source, { bins: new Uint8Array(source.length), values });
+    }
+    const { bins, values } = thresholdArrays.get(source);
+    overlay.setThresholdValues(bins, values);
+  }
+  state.thresholdSource = source;
+  applyThreshold();
+}
+
+// The first index of sorted values at or above t.
+function lowerBound(sorted, t) {
+  let [lo, hi] = [0, sorted.length];
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (sorted[mid] < t) lo = mid + 1; else hi = mid;
+  }
+  return lo;
+}
+
+// Hide the cells below the threshold in every layer, as the overlay decides it. The 10-NN density runs over the
+// cohort's quantiles (its deciles are the density slices): by bin where the bins differ, by float32 density inside
+// the threshold's bin. Any other value runs over the shown slide's own quantiles, by its float32 value.
 function applyThreshold() {
   const step = Number($("threshold").value);
+  const on = thresholdOf();
+  $("threshold-label").textContent = `Show only cells with ${VALUES[on].name} at or above`;
+  if (on !== "density") {
+    applyValueThreshold(on, step);
+    return;
+  }
   const { t, bin } = thresholdAt(step);
   overlay?.setThreshold(bin, t);
   curves?.setMarker(step / 10);
@@ -787,6 +855,30 @@ function applyThreshold() {
   const slice = step % 100 === 0 ? `, density slice ${step / 100}` : "";
   $("threshold-note").textContent = `≥ ${fmt(Math.round(t))} cells per mm² (cohort percentile `
     + `${(step / 10).toFixed(1)}${slice}): ${fmt(shown)} of ${fmt(n)} cells shown (${((100 * shown) / n).toFixed(1)}%).`;
+}
+
+function applyValueThreshold(on, step) {
+  curves?.setMarker(0); // the class curves run over the 10-NN density, not this
+  const values = valuesOf(on);
+  if (!values || state.thresholdSource !== values) {
+    overlay?.setThreshold(0, LOWEST);
+    $("threshold-note").textContent = "";
+    return;
+  }
+  const sorted = sortedOf(values);
+  const n = values.length;
+  const t = step === 0 || !sorted.length ? LOWEST : Math.fround(quantile(sorted, step / 1000));
+  overlay?.setThreshold(0, t);
+  if (step === 0) {
+    $("threshold-note").textContent = `No threshold: every cell is shown (${fmt(n)}).`;
+    return;
+  }
+  const shown = sorted.length - lowerBound(sorted, t);
+  const { unit } = VALUES[on];
+  const width = sorted.length ? (sorted[sorted.length - 1] - sorted[0]) / 1000 : 0;
+  const none = n - sorted.length ? `; the ${fmt(n - sorted.length)} cells without a value are hidden` : "";
+  $("threshold-note").textContent = `≥ ${valueText(on, t, width)}${unit ? ` ${unit}` : ""} (this slide's percentile `
+    + `${(step / 10).toFixed(1)}): ${fmt(shown)} of ${fmt(n)} cells shown (${((100 * shown) / n).toFixed(1)}%)${none}.`;
 }
 
 // --- scale bar --------------------------------------------------------------------------------------------
@@ -870,7 +962,8 @@ async function loadSlide(id) {
       overlay ??= new PointsOverlay(viewer, CELL_UM / info.um_per_px);
       overlay.cellPx = CELL_UM / info.um_per_px;
       overlay.setPoints(xy, codesOf(state.layer), bins, rho);
-      applyThreshold();
+      state.thresholdSource = rho;
+      syncThreshold();
       const classes = new Uint8Array(n);
       for (let i = 0; i < n; i++) classes[i] = state.meta.type_class[types[i]];
       const { curve, deciles } = state.meta.density;
@@ -921,6 +1014,11 @@ async function init() {
   document.querySelectorAll("input[name=layer]").forEach((radio) => radio.addEventListener("change", () => {
     $("neighbourhood").hidden = !NEIGHBOURHOOD.includes(radio.value);
     $("scale").hidden = !VALUE_LAYERS.includes(radio.value);
+    const next = VALUE_LAYERS.includes(radio.value) ? radio.value : "density";
+    if (next !== thresholdOf()) {
+      $("threshold").value = "0"; // a new attribute to threshold starts with none
+      applyThreshold();
+    }
     if (radio.value in LAZY) LAZY[radio.value](); else setLayer(radio.value);
   }));
   const { k, k_min: kMin, k_max: kMax } = state.meta.neighbourhood;

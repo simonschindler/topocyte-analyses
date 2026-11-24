@@ -70,6 +70,7 @@
   .neighbourhood { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; color: var(--ink2); font-size: 12px; }
   .neighbourhood[hidden] { display: none; }
   .neighbourhood label { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .neighbourhood label[hidden] { display: none; }
   .neighbourhood select { padding: 2px 4px; }
   .neighbourhood input[type=number] { width: 52px; font: inherit; color: var(--ink); background: var(--field); border: 1px solid var(--rule); border-radius: 4px; padding: 2px 4px; }
   #nb-k { width: 52px; font: inherit; color: var(--ink); background: var(--field); border: 1px solid var(--rule); border-radius: 4px; padding: 2px 4px; }
@@ -156,7 +157,7 @@
   </div>
   <ul id="legend"></ul>
   <p class="note" id="legend-note" hidden></p>
-  <label class="field">Show only cells with 10-NN density at or above
+  <label class="field"><span id="threshold-label">Show only cells with 10-NN density at or above</span>
     <input type="range" id="threshold" min="0" max="999" step="1" value="0" list="density-slices">
   </label>
   <datalist id="density-slices">
