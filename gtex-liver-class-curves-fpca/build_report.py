@@ -10,12 +10,16 @@ the runs' time and memory (``/usr/bin/time -l``) and their creation times, the i
 AUCs the gates reproduce, the pathology study's ``pathology.csv`` for the slides' notes, and, for the mean curves, its
 ``density.npz`` and the cohort's cell classes (h5py mode "r"). It runs no stage and fits no classifier.
 
-Three results no stage saved are computed here, and used by no verdict:
+Four results no stage saved are computed here, and used by no verdict:
 
 - each group's mean class curves on the development slides, counted exactly at displayed thresholds 25 cells per mm²
   apart: the one place a grid of thresholds is used, to draw the curves (the counts at the ten deciles are asserted
   equal to the cell-type study's ``composition.npz``);
 - each block's fractions of variance, from ``folds.BlockFPCA`` fitted on all development slides;
+- the holdout model's score spaces on the development slides: the holdout stage's filter, eight block fPCAs and
+  MFA, fitted again with ``folds`` (asserted to drop the slides ``holdout.npz`` records and to give
+  ``folds.curve_space``'s scores), and a UMAP of its weighted blocks with the cell-type study's settings, for the
+  scatter plots by pathology group;
 - post hoc, the per-repeat paired difference of the curves at the chosen k minus D+C: the mean over the repeats of
   each repeat's macro AUC difference, with the 2.5 and 97.5 percentiles over the readouts' bootstrap draws
   (``stratified_bootstrap``, 4000, ``default_rng(12345)``), each draw scoring every repeat on its slides
@@ -39,6 +43,7 @@ import json
 import math
 import re
 import subprocess
+import warnings
 
 import matplotlib
 import numpy as np
@@ -57,6 +62,26 @@ INK, INK2, MUTED, RULE, SURFACE, CONTEXT = "#0b0b0b", "#52514e", "#898781", "#e1
 SERIES = ("#2a78d6", "#eb6834")  # the dataviz palette's first two slots, validated as a pair: development, holdout
 # The liver cell viewer's class colours on a light background (gtex-liver-chromatic-domains/viewer/static/palette.js).
 CLASS_COLOR = {"epithelial": "#2a78d6", "stromal": "#1baf7a", "immune": "#eb6834", "other": "#52514e"}
+# The sibling reports' pathology-group colours and facets (gtex-liver-celltype-slices/build_report.py): a scatter
+# colours healthy and two other groups, a triple that passes the all-pairs palette check, over all other slides in grey.
+GROUP_COLOR = {
+    "healthy": "#2a78d6",
+    "steatosis": "#1baf7a",
+    "congestion": "#eb6834",
+    "fibrosis": "#eda100",
+    "cirrhosis": "#e34948",
+    "inflammation/hepatitis": "#008300",
+    "necrosis": "#e87ba4",
+}
+FACETS = (
+    ("healthy · steatosis · congestion", ("healthy", "steatosis", "congestion")),
+    ("healthy · fibrosis · cirrhosis", ("healthy", "fibrosis", "cirrhosis")),
+    ("healthy · inflammation/hepatitis · necrosis", ("healthy", "inflammation/hepatitis", "necrosis")),
+)
+PAIRS = [(i, j) for i in range(4) for j in range(i + 1, 4)]  # the scatter matrix: every pair of the first four
+NORM_LABEL = {"none": "raw", "cosine": "cosine"}
+# The cell-type study's UMAP settings (gtex-liver-celltype-slices/spaces.py).
+UMAP_PARAMS = {"n_neighbors": 15, "min_dist": 0.1, "metric": "euclidean", "n_components": 2, "random_state": 0}
 STEP = 25.0  # cells per mm² between the displayed thresholds of the mean curves
 TOP_LEVEL = 0.999  # the curves are counted up to the cohort's 99.9th density percentile, rounded up to a thousand
 LINEAR_LEVEL = 0.99  # the linear plot ends at the 99th percentile, rounded up to a thousand
@@ -303,6 +328,60 @@ def variance_fractions(grams: dict[str, np.ndarray], dev: np.ndarray) -> dict[st
     return out
 
 
+def holdout_space(grams: dict[str, np.ndarray], labels: np.ndarray, dev_mask: np.ndarray, dropped: np.ndarray) -> dict:
+    """The holdout model's score spaces on the development slides, for section 6's scatter plots.
+
+    The holdout stage's curve space, fitted again: ``folds.outlier_keep`` on the development slides (their labels
+    only), each block's ``folds.BlockFPCA`` and the ``folds.MFA`` on the slides it keeps, and the slides it drops
+    projected. Asserted to drop the slides ``holdout.npz`` records (``dropped``, over the development slides in order)
+    and to give ``folds.curve_space``'s scores. Keys: ``keep``; ``mfa`` (development slides × MFA components) and
+    ``mfa_evr`` (each component's share of the variance of the kept slides' weighted blocks, from ``celltype.pca``, as
+    ``folds.MFA`` computes it); ``blocks``, ``block_evr`` and ``block_names`` (the eight fPCAs' scores, fractions of
+    variance and names); ``umap``, a UMAP of the development slides' weighted blocks (``UMAP_PARAMS``). No holdout slide
+    enters: the plots add no look at the holdout.
+    """
+
+    def agrees(a: np.ndarray, b: np.ndarray) -> bool:  # the same arithmetic, so equal up to the order of summation
+        return a.shape == b.shape and float(np.abs(a - b).max()) <= 1e-9 * float(np.abs(b).max())
+
+    dev = np.flatnonzero(dev_mask)
+    keep = folds.outlier_keep(grams, dev, np.where(dev_mask, labels, -1))
+    assert np.array_equal(~keep, dropped), "the filter does not drop the slides the holdout fit dropped"
+    kept, out = dev[keep], dev[~keep]
+    blocks, block_evr, block_names = [], [], []
+    for name in c.CLASSES:
+        for normalization in c.NORMALIZATIONS:
+            K = folds.analysis_kernel(grams[name], normalization)
+            fpca = folds.BlockFPCA().fit(K[np.ix_(kept, kept)])
+            scores = np.empty((dev.size, fpca.scores_.shape[1]))
+            scores[keep], scores[~keep] = fpca.scores_, fpca.transform(K[np.ix_(out, kept)])
+            blocks.append(scores)
+            block_evr.append(fpca.explained_variance_ratio_)
+            block_names.append(f"{name} · {NORM_LABEL[normalization]}")
+    mfa = folds.MFA().fit([block[keep] for block in blocks])
+    space = np.empty((dev.size, mfa.scores_.shape[1]))
+    space[keep], space[~keep] = mfa.scores_, mfa.transform([block[~keep] for block in blocks])
+    reference_kept, reference_out = folds.curve_space(grams, kept, out)
+    assert agrees(space[keep], reference_kept) and agrees(space[~keep], reference_out), "not curve_space's scores"
+    weighted = np.hstack([block * w for block, w in zip(blocks, mfa.weights_, strict=True)])
+    scores, evr, _ = c.celltype.pca(weighted[keep])
+    assert agrees(scores[:, : space.shape[1]], space[keep]), "the MFA's fractions of variance are not its own"
+    import umap  # here rather than at the top: slow to import, and only these plots need it
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=".*n_jobs value 1 overridden.*")
+        embedding = np.asarray(umap.UMAP(**UMAP_PARAMS).fit_transform(weighted), dtype=np.float64)
+    return {
+        "keep": keep,
+        "mfa": space,
+        "mfa_evr": evr[: space.shape[1]],
+        "blocks": blocks,
+        "block_evr": block_evr,
+        "block_names": block_names,
+        "umap": embedding,
+    }
+
+
 def draw_weights(draws: np.ndarray) -> np.ndarray:
     """How often each slide appears in each bootstrap draw, (draws, slides), from the draws' index arrays."""
     offsets = draws + draws.shape[1] * np.arange(draws.shape[0])[:, None]
@@ -453,6 +532,91 @@ def fig_aucs(readouts: dict, hold_json: dict) -> bytes:
 # ---------------------------------------------------------------- the report
 
 
+def scatter_groups(
+    ax: plt.Axes, x: np.ndarray, y: np.ndarray, group: np.ndarray, dropped: np.ndarray, members, counts: dict
+) -> None:
+    """One panel: the groups ``members`` in their colours over all other slides in grey; dropped slides hollow."""
+    context = ~np.isin(group, members)
+    ax.scatter(x[context & ~dropped], y[context & ~dropped], s=9, color=CONTEXT, linewidths=0, alpha=0.7, zorder=1)
+    ax.scatter(x[context & dropped], y[context & dropped], s=9, facecolor="none", edgecolor=CONTEXT, linewidths=0.8,
+               zorder=1)
+    for rank, name in enumerate(sorted(members, key=lambda g: -counts[g])):
+        chosen = group == name
+        ax.scatter(x[chosen & ~dropped], y[chosen & ~dropped], s=20, color=GROUP_COLOR[name], edgecolor=SURFACE,
+                   linewidths=0.6, zorder=2 + rank)
+        ax.scatter(x[chosen & dropped], y[chosen & dropped], s=20, facecolor="none", edgecolor=GROUP_COLOR[name],
+                   linewidths=1.0, zorder=2 + rank)
+
+
+def group_legend(counts: dict, n_dropped: int) -> tuple[list[Line2D], int]:
+    """The legend's handles in reading order across four columns (sibling layout), and the number of columns."""
+    names = list(dict.fromkeys(name for _, members in FACETS for name in members))
+    handles = [
+        Line2D([], [], ls="none", marker="o", ms=6, color=GROUP_COLOR[n], mec=SURFACE, label=f"{n} ({counts[n]})")
+        for n in names
+    ]
+    handles.append(Line2D([], [], ls="none", marker="o", ms=5, color=CONTEXT,
+                          label=f"other slides, unclassified ({counts['unclassified']}) among them"))
+    handles.append(Line2D([], [], ls="none", marker="o", ms=6, mfc="none", mec=INK2, mew=1.0,
+                          label=f"hollow: dropped by the filter, projected ({n_dropped})"))
+    ncol = 4
+    rows = -(-len(handles) // ncol)
+    order = [handles[r * ncol + col] for col in range(ncol) for r in range(rows) if r * ncol + col < len(handles)]
+    return order, ncol
+
+
+def fig_space(space: np.ndarray, evr: np.ndarray, group: np.ndarray, dropped: np.ndarray, embedding: np.ndarray,
+              title: str) -> bytes:
+    """Every pair of the first four MFA components and the UMAP, one facet row per group triple (sibling layout)."""
+    counts = {g: int(np.sum(group == g)) for g in GROUPS}
+    panels = [
+        (space[:, i], space[:, j], f"PC{i + 1} ({100 * evr[i]:.1f}%)", f"PC{j + 1} ({100 * evr[j]:.1f}%)")
+        for i, j in PAIRS
+    ]
+    panels.append((embedding[:, 0], embedding[:, 1], "UMAP 1", "UMAP 2"))
+    fig, axes = plt.subplots(len(FACETS), len(panels), figsize=(15.2, 7.4), constrained_layout=True)
+    for row, (facet_title, members) in enumerate(FACETS):
+        for col, (xv, yv, xlabel, ylabel) in enumerate(panels):
+            ax = axes[row, col]
+            scatter_groups(ax, xv, yv, group, dropped, members, counts)
+            ax.tick_params(labelsize=7)
+            ax.grid(alpha=0.5)
+            ax.set_xlabel(xlabel, fontsize=7.5)
+            ax.set_ylabel(ylabel, fontsize=7.5)
+            if col == len(panels) - 1:
+                ax.tick_params(labelbottom=False, labelleft=False)
+                if row == 0:
+                    ax.set_title("UMAP of the weighted blocks", loc="left", color=INK, fontsize=8.5)
+            if col == 0:
+                ax.set_title(facet_title, loc="left", color=INK, fontsize=8.5)
+    handles, ncol = group_legend(counts, int(dropped.sum()))
+    fig.legend(handles=handles, frameon=False, loc="outside lower center", ncol=ncol, fontsize=8)
+    fig.suptitle(title, x=0.01, ha="left", fontsize=10, color=INK)
+    return png_bytes(fig)
+
+
+def fig_blocks(blocks: list[np.ndarray], block_evr: list[np.ndarray], block_names: list[str], group: np.ndarray,
+               dropped: np.ndarray, title: str) -> bytes:
+    """PC1 against PC2 of each block's fPCA: the eight blocks in a row, one row per group triple."""
+    counts = {g: int(np.sum(group == g)) for g in GROUPS}
+    fig = plt.figure(figsize=(15.2, 7.9), layout="constrained")
+    rows = fig.subfigures(len(FACETS) + 1, 1, height_ratios=[1] * len(FACETS) + [0.34])
+    for subfig, (facet_title, members) in zip(rows, FACETS):
+        axes = subfig.subplots(1, len(blocks))
+        for ax, scores, evr, name in zip(axes, blocks, block_evr, block_names, strict=True):
+            scatter_groups(ax, scores[:, 0], scores[:, 1], group, dropped, members, counts)
+            ax.set_title(name, fontsize=7.5, color=INK2)
+            ax.set_xlabel(f"PC1 ({100 * evr[0]:.1f}%)", fontsize=7)
+            ax.set_ylabel(f"PC2 ({100 * evr[1]:.1f}%)", fontsize=7, labelpad=1)
+            ax.tick_params(labelbottom=False, labelleft=False, length=0)
+            ax.grid(alpha=0.5)
+        subfig.suptitle(facet_title, x=0.005, ha="left", fontsize=8.5, color=INK)
+    handles, ncol = group_legend(counts, int(dropped.sum()))
+    rows[-1].legend(handles=handles, frameon=False, loc="center", ncol=ncol, fontsize=8)
+    fig.suptitle(title, x=0.01, ha="left", fontsize=10, color=INK)
+    return png_bytes(fig)
+
+
 def main() -> None:
     c.check_topocyte()
     inputs = c.load_inputs()
@@ -488,6 +652,7 @@ def main() -> None:
     assert list(pathology["slide_id"]) == ids and [GROUPS[g] for g in labels] == list(pathology["group"])
     curves = mean_curves(inputs)
     fractions = variance_fractions(grams, dev)
+    space = holdout_space(grams, labels, inputs["dev"], hold_dropped)
 
     n_dev, n_hold, n_all = dev.size, hold.size, len(ids)
     n_repeats, n_splits = split.shape[0], dropped.shape[1]
@@ -518,7 +683,7 @@ def main() -> None:
     gate_dev, gate_hold = dev_json["dc_gate"]["max_abs_difference"], hold_json["gate"]["max_abs_difference"]
     assert max(gate_dev, gate_hold) <= 1e-12 and readouts["gate"]["macro_auc"] == auc["dc_unfiltered"]
     assert hold_json["gate"]["macro_auc"] == hauc["dc_unfiltered"]
-    # The unfiltered D+C's macro AUCs are the improvement phase's own, as section 6 says.
+    # The unfiltered D+C's macro AUCs are the improvement phase's own, as section 7 says.
     improve_dev = json.loads((c.CELLTYPE / "results/improve_dev.json").read_text())
     (dc_idea,) = [idea for idea in improve_dev["ideas"] if idea["name"] == "baseline:D+C-features"]
     (dc_readout,) = [row for row in dc_idea["readouts"] if row["k"] == inputs["DC"].shape[1]]
@@ -867,7 +1032,83 @@ seed {hold_json["fit"]["inner_seed"]}), chose k = {hold_k}.</p>
 {table(["k", "outer folds", "share"], k_rows)}
 """
 
-    # ---------------- section 6: the AUCs
+    # ---------------- section 6: the holdout model's score space
+    group = np.array([GROUPS[i] for i in y])
+    keep = space["keep"]
+    n_kept, n_space = int(keep.sum()), space["mfa"].shape[1]
+    assert n_kept == n_dev - n_hold_dropped and n_space >= hold_k >= 4
+    mfa_share = {k: float(space["mfa_evr"][:k].sum()) for k in (2, 4, hold_k)}
+    dev_counts = {g: int(np.sum(group == g)) for g in GROUPS}
+    medians = np.array([[np.median(space["mfa"][group == g, j]) for j in range(4)] for g in GROUPS])
+    median_rows = [
+        [f"{html.escape(g)} ({dev_counts[g]})", *(num(v, 2) for v in row)]
+        for g, row in zip(GROUPS, medians, strict=True)
+    ]
+    furthest = GROUPS.index("cirrhosis")
+    assert all(np.argmax(medians[:, j]) == furthest for j in range(2)), "cirrhosis's medians are not the highest on PC1-2"
+    second = [int(np.argsort(-medians[:, j])[1]) for j in range(2)]  # the next-highest median on PC1, on PC2
+    if second[0] == second[1]:
+        i = second[0]
+        next_highest = (
+            f"the next highest, on both, is {html.escape(GROUPS[i])}'s: {num(medians[i, 0], 2)} and "
+            f"{num(medians[i, 1], 2)}"
+        )
+    else:
+        next_highest = (
+            f"the next highest are {html.escape(GROUPS[second[0]])}'s {num(medians[second[0], 0], 2)} on PC1 and "
+            f"{html.escape(GROUPS[second[1]])}'s {num(medians[second[1], 1], 2)} on PC2"
+        )
+    space_png = fig_space(
+        space["mfa"], space["mfa_evr"], group, ~keep, space["umap"],
+        "The holdout model's MFA space: every pair of the first four components and a UMAP; one row per group triple",
+    )
+    blocks_png = fig_blocks(
+        space["blocks"], space["block_evr"], space["block_names"], group, ~keep,
+        "The holdout model's eight block fPCAs: PC1 against PC2; one row per group triple",
+    )
+    umap_settings = (
+        f"{UMAP_PARAMS['n_neighbors']} neighbours, minimum distance {UMAP_PARAMS['min_dist']}, seed "
+        f"{UMAP_PARAMS['random_state']}"
+    )
+    space_section = f"""
+<p>The model the holdout stage fitted, drawn on the {n_dev} development slides: the outlier filter on them, then each
+block's fPCA and the MFA on the {n_kept} slides it kept, with the {n_hold_dropped} slides it dropped projected (hollow
+marks). It is fitted again here from the Gram matrices with <code>folds</code>, and asserted to drop the slides
+<code>holdout.npz</code> records and to give <code>folds.curve_space</code>'s scores. Its inner cross-validation chose
+k = {hold_k}: the classifier reads components 1–{hold_k}, and the k = 4 arm components 1–4, which the matrix shows
+pair by pair. On the holdout it scored macro AUC {num(hauc["curves"])} at k = {hold_k} and
+{num(hauc["curves4"])} at k = 4. Components 1–2 hold {pct(mfa_share[2], 1)} of the variance of the weighted blocks,
+1–4 hold {pct(mfa_share[4], 1)} and 1–{hold_k} {pct(mfa_share[hold_k], 1)}. The holdout slides are not drawn, so
+that these plots add no look at them.</p>
+<p>Cirrhosis reaches furthest along the first two components: its median is the highest of the {len(GROUPS)} groups
+on both, {num(medians[furthest, 0], 2)} on PC1 and {num(medians[furthest, 1], 2)} on PC2; {next_highest}.</p>
+{
+        figure(
+            space_png,
+            "The holdout model's MFA space: scatter matrix of PC1 to PC4 and a UMAP, by pathology group",
+            f"<strong>The holdout model's MFA space.</strong> The first six columns are the pairs of its first four "
+            "components, each with its share of the weighted blocks' variance; the last is a UMAP of the weighted "
+            f"blocks (no units; {umap_settings}, the cell-type study's settings). Each row colours healthy and two "
+            f"other groups over all other development slides in grey; hollow marks are the {n_hold_dropped} slides "
+            "the filter dropped, projected. A component's sign is arbitrary: a flip would mirror its axis.",
+        )
+    }
+{
+        figure(
+            blocks_png,
+            "The holdout model's eight block fPCAs: PC1 against PC2, by pathology group",
+            f"<strong>The model's eight block fPCAs</strong>, PC1 against PC2, each fitted on the {n_kept} kept "
+            "slides, the dropped ones projected (hollow). Tick labels are left out: each block's scores are in "
+            f"its own units. These fractions of variance are the model's; section 4's are of fits on all {n_dev} "
+            "development slides.",
+        )
+    }
+<p>Each group's median of the first four components over its development slides, the dropped ones included: the table
+view of the matrix.</p>
+{table(["pathology group (slides)", *(f"PC{j + 1}" for j in range(4))], median_rows)}
+"""
+
+    # ---------------- section 7: the AUCs
     auc_rows = [
         [
             ARM_LABEL[arm],
@@ -945,7 +1186,7 @@ AUCs, {num(readouts["gate"]["macro_auc"], 4)} and {num(hold_json["gate"]["macro_
     }
 """
 
-    # ---------------- section 7: the verdict
+    # ---------------- section 8: the verdict
     few = [g for g in range(len(GROUPS)) if hold_n[g] < 5]  # the holdout's small groups, which its note names
     assert few and all(f"{GROUPS[g]} {hold_n[g]}" in hold_json["note"] for g in few)
     few_sizes = " and ".join(str(n) for n in sorted(int(hold_n[g]) for g in few))
@@ -1014,10 +1255,10 @@ of its first component, up to {max(c.K_GRID)} components by SVD), and the four a
 departures from <code>design.md</code>, neither with any effect. The MFA's signs follow the cell-type study's
 <code>pca</code>, each left singular vector's largest-magnitude entry positive, where the design (Pipeline 4.3) named
 each component's largest-magnitude loading: the logistic regression on standardized features gives the same
-probabilities under a flip of sign, and no MFA score is reported. The design's projection gate (Pipeline 4.2) ran in
-<code>verify_results.py</code> and a synthetic test, not inside the run: on repeat 0, fold 0, every block's projection
-agrees with topocyte's <code>FPCA.transform</code> with a largest difference of {scientific(projection_gap)}, relative to the block's
-largest score.</li>
+probabilities under a flip of sign, and in section 6's plots a flip would only mirror an axis. The design's
+projection gate (Pipeline 4.2) ran in <code>verify_results.py</code> and a synthetic test, not inside the run: on
+repeat 0, fold 0, every block's projection agrees with topocyte's <code>FPCA.transform</code> with a largest
+difference of {scientific(projection_gap)}, relative to the block's largest score.</li>
 <li><strong>Readouts:</strong> each arm's macro AUC over the {len(CONDITIONS)} conditions from the probabilities
 averaged over the repeats; the paired differences with 95% intervals over {readouts["bootstrap"]["draws"]:,} stratified
 bootstrap draws (seed {readouts["bootstrap"]["seed"]}). The holdout stage fitted everything once on the {n_dev}
@@ -1056,11 +1297,13 @@ D+C, on {n_all} GTEx liver slides in {len(GROUPS)} pathology groups</p>
 {variance_section}
 <h2>5. The chosen k</h2>
 {k_section}
-<h2>6. AUCs per arm and the paired differences</h2>
+<h2>6. The holdout model's score space</h2>
+{space_section}
+<h2>7. AUCs per arm and the paired differences</h2>
 {auc_section}
-<h2>7. Verdict</h2>
+<h2>8. Verdict</h2>
 {verdict_section}
-<h2>8. Methods and run</h2>
+<h2>9. Methods and run</h2>
 {methods_section}
 """
     page = (

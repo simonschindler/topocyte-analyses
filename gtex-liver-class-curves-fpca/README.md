@@ -35,8 +35,8 @@ eight pathology groups better.
      `FPCA.transform` with a largest difference of 3.3e-9, relative to the block's largest score;
   3. a multiple factor analysis of the eight blocks, up to 51 components. Its signs follow the cell-type study's
      `pca` (each left singular vector's largest-magnitude entry positive), not the largest-magnitude loading of
-     Pipeline 4.3; this changes nothing, as the logistic regression on standardized features is sign-invariant and no
-     MFA score is reported;
+     Pipeline 4.3; this changes nothing, as the logistic regression on standardized features is sign-invariant, and in
+     the report's score-space plots a flip of sign would only mirror an axis;
   4. four arms, each the cell-type study's logistic regression: the curves at k chosen by inner 5-fold
      cross-validation from 4 to 51, the curves at k = 4, D+C on the same kept slides, and D+C on all the training
      slides (the gate against the cell-type study).
@@ -47,7 +47,7 @@ eight pathology groups better.
 
 `design.md` holds the question, Simon's rulings and the rule; `plan.md` the implementation plan; `progress.md` the
 ledger of what ran; `report.html` each group's mean curves, the dropped slides, the fractions of variance, the chosen
-k and the readouts.
+k, the holdout model's score spaces (scatter plots by pathology group) and the readouts.
 
 ## Results
 
