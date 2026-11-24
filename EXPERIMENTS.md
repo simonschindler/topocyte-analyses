@@ -292,7 +292,9 @@ loop of all cells. The comparisons were fixed before any result:
   | supervised LDA of D+C plus 20 topology components | 0.784 |
   | supervised PLS-DA of 50 topology components | 0.781 |
 
-  No idea beat D+C: the best was +0.010 (−0.027 to +0.051).
+  No idea beat D+C: the best was +0.010 (−0.027 to +0.051). Study 7 later
+  scored the same 118 slides a second time, for the class curves, so a
+  further study on them would take a third look.
 - **PLS-DA in depth** (development slides only): nested cross-validation gives
   0.773 (0.734 to 0.810), never beyond composition. Its axes are mostly density
   and composition: D+C predicts 81% of the variance of the axis that separates
@@ -461,15 +463,16 @@ than D+C? The rule was fixed before any result.
   holdout fit. It cost D+C 0.008 on the development slides and gained it 0.005
   on the holdout.
 - **Scored repeat by repeat, the curves fall below D+C in all 20 repeats,** by
-  0.006 to 0.049 (0.722 against 0.749 on average). Their model changes from
-  fold to fold (k from 4 to 32), so averaging each slide's probabilities over
-  the repeats lifts them by 0.028 and D+C by only 0.007: this is why the
-  averaged readout's gap is smaller.
+  0.006 to 0.049 (0.722 against 0.749 on average). Averaging each slide's
+  probabilities over the repeats lifts them by 0.028 and D+C by only 0.007,
+  which narrows the averaged readout's gap. That is in line with their model
+  changing from fold to fold (k from 4 to 32).
 
 **Learned.** The fPCA of the continuous class curves does not beat D+C. The
 rule calls the two level, which means that its readout cannot tell them apart,
 not that they are equal: the curves scored below D+C in all 20 repeats, by
-0.006 to 0.049, and on the holdout, at the chosen k and at k = 4 alike. The
+0.006 to 0.049 at the chosen k and by 0.004 to 0.033 at k = 4, and on the
+holdout at both. The
 whole curves show no gain over the counts at ten density deciles, and D+C
 stays the representation to beat.
 
@@ -549,7 +552,8 @@ shown added value here, not that it cannot.
 - **A density control and a composition control belong in every comparison.**
   They are cheap, and here they were decisive.
 - **Fix the rule before the result, and keep a holdout you score once.** Study 4
-  held 118 slides back from the start. Several rules were written before any
+  held 118 slides back from the start, and study 7 reused them for its own
+  single look. Several rules were written before any
   run: studies 4, 5 and 7 for their verdicts, study 1 for the death/birth ratio,
   and studies 2 and 3 for the PC2 check. This kept the conclusions from
   drifting with the data.

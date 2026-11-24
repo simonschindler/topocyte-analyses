@@ -953,7 +953,7 @@ AUCs, {num(readouts["gate"]["macro_auc"], 4)} and {num(hold_json["gate"]["macro_
 <p><strong>{html.escape(verdict[0].upper() + verdict[1:])}.</strong> The rule reads the development interval of curves
 at the chosen k minus D+C, {interval([lo, hi])}, which contains 0: the pre-registered readout, from the probabilities
 averaged over the repeats, cannot tell the curves' fPCA from D+C on the development slides. Level does not mean equal:
-every readout puts the curves below D+C, {every_readout}. The holdout difference enters the rule only when the
+every macro-AUC readout puts the curves below D+C, {every_readout}. The holdout difference enters the rule only when the
 interval lies above 0; it was {signed(hdiff)} ({interval([hlo, hhi])}, an interval that the holdout's groups of
 {few_sizes} slides make too narrow).</p>
 <p><strong>Post hoc</strong> (not in the design, so it cannot change the verdict): the per-repeat paired difference of
@@ -961,8 +961,8 @@ the curves at the chosen k minus D+C, the mean over the {n_repeats} repeats of e
 is {post_hoc_text}: the 2.5 and 97.5 percentiles over the readouts' {c.N_BOOT:,} bootstrap draws of the development
 slides, stratified by group (seed {c.BOOT_SEED}), each draw scoring all {n_repeats} repeats on the drawn slides. Unlike
 the averaged readout's interval, it lies below 0. The two readouts differ because averaging each slide's probabilities
-over the repeats lifts the curves by {num(gain["curves"])} and D+C by {num(gain["dc"])}: the curves' model changes
-from fold to fold ({k_range}).</p>
+over the repeats lifts the curves by {num(gain["curves"])} and D+C by {num(gain["dc"])}, in line with the curves'
+model changing from fold to fold ({k_range}).</p>
 <p>The rule as <code>holdout.json</code> records it: {html.escape(hold_json["verdict"]["rule"])}</p>
 """
 
@@ -991,7 +991,7 @@ from fold to fold ({k_range}).</p>
             "k = 4's gaps": below4,
             "the chosen k's range": k_range,
             "k = 4's spread and lift": fixed_k4,
-            "the projection gate": f"within {scientific(projection_gap)}",
+            "the projection gate": f"a largest difference of {scientific(projection_gap)}",
         }
     )
     check_rows = [
@@ -1016,7 +1016,7 @@ departures from <code>design.md</code>, neither with any effect. The MFA's signs
 each component's largest-magnitude loading: the logistic regression on standardized features gives the same
 probabilities under a flip of sign, and no MFA score is reported. The design's projection gate (Pipeline 4.2) ran in
 <code>verify_results.py</code> and a synthetic test, not inside the run: on repeat 0, fold 0, every block's projection
-agrees with topocyte's <code>FPCA.transform</code> within {scientific(projection_gap)}, relative to the block's
+agrees with topocyte's <code>FPCA.transform</code> with a largest difference of {scientific(projection_gap)}, relative to the block's
 largest score.</li>
 <li><strong>Readouts:</strong> each arm's macro AUC over the {len(CONDITIONS)} conditions from the probabilities
 averaged over the repeats; the paired differences with 95% intervals over {readouts["bootstrap"]["draws"]:,} stratified

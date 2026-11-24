@@ -32,7 +32,7 @@ eight pathology groups better.
   2. each block's fPCA on the kept slides (topocyte's `fpca_from_gram`, nine components), and an exact projection of
      the other slides. The design's gate on this projection (`design.md`, Pipeline 4.2) ran in `verify_results.py`
      and a synthetic test, not inside the run, and passed: on repeat 0, fold 0, every block agrees with topocyte's
-     `FPCA.transform` within 3.3e-9, relative to the block's largest score;
+     `FPCA.transform` with a largest difference of 3.3e-9, relative to the block's largest score;
   3. a multiple factor analysis of the eight blocks, up to 51 components. Its signs follow the cell-type study's
      `pca` (each left singular vector's largest-magnitude entry positive), not the largest-magnitude loading of
      Pipeline 4.3; this changes nothing, as the logistic regression on standardized features is sign-invariant and no
@@ -73,7 +73,7 @@ Reading:
 
 - **Level with D+C, by the rule.** The development interval contains 0: the pre-registered readout, from the
   probabilities averaged over the repeats, cannot tell the curves' fPCA from D+C. Level does not mean equal: every
-  readout puts the curves below D+C, the averaged one by 0.006, each of the 20 repeats by 0.006 to 0.049, and the
+  macro-AUC readout puts the curves below D+C, the averaged one by 0.006, each of the 20 repeats by 0.006 to 0.049, and the
   holdout by 0.010. The holdout difference does not enter the rule when the interval contains 0.
 - **Post hoc, the per-repeat difference lies below 0.** The mean over the 20 repeats of the curves' macro AUC minus
   D+C's is −0.0277, 95% interval [−0.0447, −0.0102], over the same 4000 stratified bootstrap draws of the development
@@ -88,9 +88,9 @@ Reading:
 - **Per repeat, the curves scored below D+C in all 20 repeats,** by 0.006 to 0.049: 0.722 ± 0.013 against
   0.749 ± 0.011 (mean ± SD over the repeats). At k = 4 too, by 0.004 to 0.033. The averaged readout narrows the gap,
   because averaging each slide's probabilities over the repeats lifts the curves' macro AUC by 0.028 and D+C's by
-  0.007: the curves' model changes from fold to fold (k from 4 to 32), and their probabilities vary more between
-  repeats (an SD over the repeats of 0.054 on average, D+C's 0.035). At a fixed k = 4 they vary less (0.026), and
-  averaging lifts them by only 0.011.
+  0.007. That is in line with the curves' model changing from fold to fold (k from 4 to 32) and their probabilities
+  varying more between repeats (an SD over the repeats of 0.054 on average, D+C's 0.035). At a
+  fixed k = 4 they vary less (0.026), and averaging lifts them by only 0.011.
 - **k:** the inner cross-validation chose k = 4 or 6 in 62 of the 100 outer folds, and never 8, 40 or 51; the
   holdout fit chose k = 6.
 - **The filter cost D+C** 0.008 of development macro AUC (0.756 against 0.764) and gained it 0.005 on the holdout
@@ -166,8 +166,8 @@ $PY build_report.py
 On an M4 with 10 cores and 16 GB. The development, readouts and holdout records also name `folds.py`
 (c6b1d6546bbda28c9986d88204289133) and `common.py` (db4b4915cadc80c815832b6ce97c6b77), unchanged since.
 `verify_results.py` checks every md5 against the script at its commit, and `build_report.py` checks that
-`verify.json` comes from this folder's `verify_results.py`, that all its checks passed, and that the npz files it reads
-have the sha256 sums `verify.json` records.
+`verify.json` comes from this folder's `verify_results.py`, that all its checks passed, and that the three result npz files it
+reads (`gram.npz`, `development.npz`, `holdout.npz`) have the sha256 sums `verify.json` records.
 
 ## Outputs
 
