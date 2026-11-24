@@ -36,7 +36,7 @@ const state = {
   colocSummary: null, // its pooled excess by focal and neighbour type, for the matrix panel
   matrixClosed: false, // the matrix panel was closed for this choice of the colouring
   layer: "types", // "types" | "classes" | "clusters" | "density" | "voronoi", or one of NEIGHBOURHOOD
-  scale: { map: "auto", mode: "fixed", from: 2, to: 98 }, // the value layers' colour map and bins
+  scale: { map: "viridis", mode: "fixed", from: 2, to: 98 }, // the value layers' colour map and bins
   thresholdSource: null, // the values the overlay's threshold compares (state.rho, or a value layer's)
   hidden: {
     types: new Set(), classes: new Set(), clusters: new Set(), density: new Set(), voronoi: new Set(),
@@ -152,7 +152,8 @@ function klTitle(j) {
 }
 
 // The value layers, each cell coloured by a number. Fixed bins: the server's codes, with their labels and titles.
-// digits: the fewest decimals to print; centre: where a diverging map puts its neutral; map: the default map.
+// digits: the fewest decimals to print; centre: where a diverging map puts its neutral; map: its own map, which
+// the colour menu's "by layer" gives (blue where none).
 const VALUES = {
   density: {
     what: "10-NN density", name: "10-NN density", unit: "cells per mm²", digits: 0, bins: 10, label: densityRange,
@@ -665,7 +666,8 @@ async function showColoc() {
   if ($("layer-coloc").checked) setLayer("coloc");
 }
 
-// The pooled excess of the shown slide as a focal × neighbour matrix, coloured for the page's theme.
+// The pooled excess of the shown slide as a focal × neighbour matrix, in the colour map the menu gives the
+// colocalization excess, for the page's theme.
 function renderMatrix() {
   const s = state.colocSummary;
   if (!s || !matrix) return;
@@ -675,7 +677,7 @@ function renderMatrix() {
   matrix.render({
     labels: s.labels,
     values: s.pooled_excess,
-    colours: colourScale("diverging", 11, theme),
+    colours: colourScale(mapOf("coloc"), 11, theme),
     none: GREY[theme],
     describe: (b, a) => {
       const v = s.pooled_excess[b][a];
@@ -1188,6 +1190,7 @@ async function init() {
     const codes = VALUE_LAYERS.includes(state.layer) ? codesOf(state.layer) : null;
     uploadCodes(codes);
     applyColors();
+    renderMatrix(); // the matrix takes the colour map too
   };
   for (const id of ["cmap", "scale-mode", "pct-from", "pct-to"]) $(id).addEventListener("change", rescale);
   $("emeans-set").replaceChildren(...(state.meta.emeans ?? []).map((s) => new Option(
@@ -1229,7 +1232,7 @@ async function init() {
   });
   $("theme").addEventListener("click", () => setTheme(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
   renderSlides();
-  applyColors();
+  rescale(); // the colour menus as shown (a browser may restore them on reload), then the colours
   $("slides").focus();
 }
 

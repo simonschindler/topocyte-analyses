@@ -72,10 +72,11 @@ per pixel; the status line says which.
 pathology study's `density.npz` (cells per mm², at the assumed 0.4942 µm per
 pixel), binned at the cohort's ten deciles. The deciles are the density slices'
 thresholds, so a cell in the bin that starts at decile j is kept in slices 0 to
-j. The legend gives each bin's range and its cells on the slide. The blue scale
-runs light to dark (dark to light on the dark canvas), so low densities fade
-into the background. The densities are memory-mapped from the uncompressed
-`density.npz` rather than loaded (1 GB for the cohort).
+j. The legend gives each bin's range and its cells on the slide. Its own scale
+(the colour menu's *by layer*, below) is blue, light to dark (dark to light on
+the dark canvas), so that low densities fade into the background. The densities
+are memory-mapped from the uncompressed `density.npz` rather than loaded (1 GB
+for the cohort).
 
 "Voronoi density" colours every cell by 1 / the area of its Voronoi cell among
 the slide's cells, in cells per mm² at the same 0.4942 µm per pixel, in the same
@@ -130,7 +131,7 @@ HistoPLUS type or by class (the menu beside k):
 The pair tells apart a cell in a core of its own kind (fraction 1, entropy 0), a
 lone infiltrator (0 and 0), a cell on a border between two kinds (about 0.5, and
 log 2 / log K) and one in a mixed hub (low, high). Both are coloured in bins of
-0.1 on the densities' blue scale; the homotypic fraction is binned from its
+0.1 (blue by layer, as the densities); the homotypic fraction is binned from its
 counts of neighbours, so no fraction lands in a bin by rounding. A fixed k gives
 every cell as many neighbours, so the entropy does not shrink where cells are
 sparse, as it would within a fixed radius. The server computes both for a slide,
@@ -144,38 +145,39 @@ the share of its cells of each type (or class):
 
 - **Homotypic excess:** the homotypic fraction less P of the cell's own type, so
   0 is what chance gives; above 0, more of its own kind around the cell than
-  the slide's mix, below 0, fewer. It is coloured on a diverging scale, red
-  above and blue below, in 11 bins of 0.2 with chance (−0.1 to +0.1) in the
-  middle, in the dataviz neutral grey. The scale's blue arm resamples the
-  reference blue ramp and its red arm takes the same lightness and chroma at
-  the reference red's hue (`palette.js` gives the checks).
+  the slide's mix, below 0, fewer. It takes 11 bins of 0.2 with chance (−0.1
+  to +0.1) in the middle; its own scale (*by layer*) is diverging, red above and
+  blue below about the dataviz neutral grey for chance. The scale's blue arm
+  resamples the reference blue ramp and its red arm takes the same lightness and
+  chroma at the reference red's hue (`palette.js` gives the checks).
 - **KL divergence:** the Kullback–Leibler divergence D(p ‖ P) of the
   neighbours' composition p from P, in nats: 0 for the slide's own mix, and
   log(1/s) for neighbours all of one kind that makes up a share s of the slide
   (0.69 for half the slide, 2.3 for a tenth). It is computed exactly as the
   cross-entropy −(1/k) Σ log P of the neighbours' types less their entropy, and
-  coloured on the blue scale in bins of 0.25 nats, the last from 2.25 on. On
+  binned in steps of 0.25 nats, the last from 2.25 on (blue by layer). On
   seven slides, healthy to cirrhotic, the medians were 0.09 to 0.6 nats and
   the 99th percentiles 1.1 to 2.7 (by type or by class, k = 15).
 
 ### Colour maps and bins
 
-Under the colour choice, the six value colourings (the two densities and the four
-neighbourhood values) share two menus:
+Under the colour choice, the seven value colourings (the two densities, the four
+neighbourhood values and the colocalization excess) share two menus:
 
-- **colours:** *default* (the blue scale, and the diverging one for the
-  homotypic excess), *blue*, *viridis* (matplotlib 3.11.2's) or *diverging* (blue
-  to red about a neutral grey, as for the excess). Blue and the diverging map are
-  resampled in OKLab where a layer needs another number of steps than their own
-  (10 and 11).
+- **colours:** *viridis* (matplotlib 3.11.2's), the default; *blue*; *diverging*
+  (blue to red about a neutral grey); or *by layer*, each colouring's own scale
+  as above: blue, and diverging for the homotypic and colocalization excesses.
+  Blue and the diverging map are resampled in OKLab where a layer needs another
+  number of steps than their own (10 and 11). On the two excesses in fixed
+  bins, viridis puts 0 in its middle step, with no neutral.
 - **bins:** *fixed*, each colouring's own bins as described above, or *slide
   percentiles*: 10 equal steps (11 for the diverging map, so that one sits in
   the middle) between two percentiles of the shown slide's values, 2 and 98 by
   default, the first and last steps also taking the values beyond. A diverging
-  map on the homotypic excess widens the range to be even about 0, so chance
-  stays in the neutral step. The percentiles are taken over all the slide's cells
-  with a value, whatever the slider hides; the legend and the note give the
-  steps' values.
+  map on either excess widens the range to be even about 0, so that 0 stays in
+  the neutral step. The percentiles are taken over all the slide's cells with a
+  value, whatever the slider hides; the legend and the note give the steps'
+  values.
 
 Changing either resets the legend's toggles of the value colourings, since the
 bins change with them. The slider and the class curves keep their own scales.
@@ -206,11 +208,12 @@ room normalisation to the viewer's k nearest neighbours (Simon, 2026-11-24):
 - **Excess of** (the menu): the cell's own type, the default, or any one type or
   class. k and the label set are the neighbourhood controls'.
 
-It is coloured in 11 bins of 0.2 about 0 (−0.1 to +0.1 in the neutral grey) on
-the diverging scale, or as the colour menus set. The panel at the top right gives
-the shown slide's pooled excess by focal type (rows) and neighbour type
-(columns): the precision-weighted mean of the cells' raw Y (`summarize_cloud`),
-on the diverging scale even about 0 up to the largest value; hovering a square
+It takes 11 bins of 0.2 about 0 (−0.1 to +0.1 in the middle), coloured as the
+colour menus set (*by layer*: diverging, the middle step in the neutral grey).
+The panel at the top right gives the shown slide's pooled excess by focal type
+(rows) and neighbour type (columns): the precision-weighted mean of the cells'
+raw Y (`summarize_cloud`), in 11 steps even about 0 up to the largest value, in
+the colour map the menu gives the cells, with a key under it; hovering a square
 gives its value with its standard error, the median shrunk Y and the pair's
 scale. The server computes a slide, k and label set on first use (about 1.3 s on
 the largest slide, 725,038 cells, at k = 15 by type) and keeps the last two.

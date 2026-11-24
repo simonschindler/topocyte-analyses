@@ -61,11 +61,11 @@ by the homotypic fraction or local entropy of its nearest cells (also against
 the slide's composition), by its hypergeometric colocalization excess on a
 scale fitted over the cohort, by composition clusters computed on the spot, or by
 the chromatic-domains pilot's TDA clusters or the e-means study's saved
-clusters. The value colourings take blue, viridis or a diverging map, in fixed
-bins or between two percentiles of the slide's values. A slider hides the cells
-below a threshold of the colouring's value (the 10-NN density for a type, class
-or cluster colouring), a panel draws the slide's class curves, and a box gives
-the slide's GTEx pathology notes and its donor. From its folder:
+clusters. The value colourings take viridis (the default), blue or a diverging
+map, in fixed bins or between two percentiles of the slide's values. A slider
+hides the cells below a threshold of the colouring's value (the 10-NN density
+for a type, class or cluster colouring), a panel draws the slide's class curves,
+and a box gives the slide's GTEx pathology notes and its donor. From its folder:
 
 ```bash
 ../gtex-liver-chromatic-domains/.venv/bin/python serve.py --wsi-dir ~/data/GTEX/wsi
