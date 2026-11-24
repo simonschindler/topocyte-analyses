@@ -1,0 +1,78 @@
+{
+ "description": "the inputs of the three tasks and gate G5 (design.md): the interpolation datasets against their seed-0 regeneration, every cloud's Rips diagrams against ripser's as pairs, the 2,000 fluid diagrams' presence; then the fluid diagrams' bars, lowest birth (the shift) and essential bars",
+ "passed": true,
+ "g5": {
+  "passed": true,
+  "interpolation_datasets": 100,
+  "interpolation_equals_its_seed_0_regeneration": true,
+  "rips_clouds_compared": {
+   "interpolation": 10500,
+   "curvature": 100
+  },
+  "rips_clouds_differing_from_ripser": {
+   "interpolation": [],
+   "curvature": []
+  },
+  "fluid_diagrams_expected": 2000,
+  "fluid_diagrams_missing": []
+ },
+ "fluid": {
+  "passed": true,
+  "diagrams": 2000,
+  "bars_per_diagram": {
+   "min": 3,
+   "median": 1535.0,
+   "max": 6493
+  },
+  "empty_finite_per_time": {
+   "1": {
+    "h0": 13,
+    "h1": 14
+   },
+   "2.5": {
+    "h0": 6,
+    "h1": 10
+   },
+   "5": {
+    "h0": 8,
+    "h1": 12
+   },
+   "7.5": {
+    "h0": 9,
+    "h1": 8
+   },
+   "9": {
+    "h0": 6,
+    "h1": 10
+   }
+  },
+  "lowest_birth": -25.093391940453845,
+  "ceil_minus_lowest_birth": 26,
+  "shift": 26.0,
+  "shift_is_ceil_of_minus_lowest_birth": true,
+  "essential_per_diagram": [
+   [
+    1,
+    2
+   ]
+  ],
+  "essential_is_one_h0_two_h1": true
+ },
+ "seconds": 3.8,
+ "date": "2026-11-24 14:15:45",
+ "provenance": {
+  "md5": {
+   "inputs.py": "8ea3b6580b6b4f6d856ed332c6f0005d",
+   "common.py": "18810fa1ae71c2602d91a6ff04ea5474",
+   "safe_pickle.py": "f5d358a62b4932fd640f83a17a2e0eef"
+  },
+  "versions": {
+   "numpy": "2.5.1",
+   "scipy": "1.18.0",
+   "pandas": "3.0.5",
+   "ripser": "0.6.15"
+  },
+  "topocyte_commit": "18e3aa5",
+  "upstream_sha": "fe7d652eff478ffe6081c7e6765458651ad3cd74"
+ }
+}
