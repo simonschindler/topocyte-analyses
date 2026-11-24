@@ -175,12 +175,14 @@ neighbourhood values and the colocalization excess) share two menus:
   bins, viridis puts 0 in its middle step, with no neutral.
 - **bins:** *fixed*, each colouring's own bins as described above, or *slide
   percentiles*: 10 equal steps (11 for the diverging map, so that one sits in
-  the middle) between two percentiles of the shown slide's values, 2 and 98 by
+  the middle) between two percentiles of the shown slide's values, 5 and 95 by
   default, the first and last steps also taking the values beyond. A diverging
   map on either excess widens the range to be even about 0, so that 0 stays in
   the neutral step. The percentiles are taken over all the slide's cells with a
   value, whatever the slider hides; the legend and the note give the steps'
-  values.
+  values. The same two percentiles bound the class curves of every value
+  colouring but the 10-NN density (below), so their fields show under fixed
+  bins too.
 
 Changing either resets the legend's toggles of the value colourings, since the
 bins change with them. The slider and the class curves keep their own scales.
@@ -232,15 +234,17 @@ as a tooltip.
 ### Class curves
 
 The panel in the slide view's bottom-right corner (it can be closed and
-reopened) draws, for the shown slide, how each class thins out as the slider's
-threshold rises, on the slider's scale for the attribute it thresholds, with the
-slider's threshold marked:
+reopened) draws, for the shown slide, how each class thins out as a threshold
+rises on the attribute the slider thresholds, with the slider's threshold
+marked:
 
 - under the 10-NN density, type, class and cluster colourings, the 10-NN
-  density on the cohort's percentiles, every 10 a density slice;
-- under every other value colouring, that value on the shown slide's own
-  percentiles, the ticks giving the value at each tenth. The stack's height then
-  falls about evenly by construction, so the composition is what changes.
+  density on the cohort's percentiles (the slider's scale), every 10 a density
+  slice;
+- under every other value colouring, that value itself, in 500 equal steps
+  between the two percentiles of the shown slide that the colour menus set (5
+  and 95 by default), so that a long tail does not squeeze the rest; the mark
+  shows while the slider's threshold falls between them.
 
 Its menu has three views:
 

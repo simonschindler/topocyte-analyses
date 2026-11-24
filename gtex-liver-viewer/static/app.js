@@ -37,7 +37,7 @@ const state = {
   colocSummary: null, // its pooled excess by focal and neighbour type, for the matrix panel
   matrixClosed: false, // the matrix panel was closed for this choice of the colouring
   layer: "types", // "types" | "classes" | "clusters" | "density" | "voronoi", or one of NEIGHBOURHOOD
-  scale: { map: "viridis", mode: "fixed", from: 2, to: 98 }, // the value layers' colour map and bins
+  scale: { map: "viridis", mode: "fixed", from: 5, to: 95 }, // the value layers' colour map and bins
   thresholdSource: null, // the values the overlay's threshold compares (state.rho, or a value layer's)
   hidden: {
     types: new Set(), classes: new Set(), clusters: new Set(), density: new Set(), voronoi: new Set(),
@@ -773,6 +773,7 @@ function setLayer(layer) {
   state.layer = layer;
   document.querySelector(`input[name=layer][value=${layer}]`).checked = true;
   $("matrix").hidden = layer !== "coloc" || state.matrixClosed;
+  showPercentiles(layer, state.scale.mode);
   uploadCodes(codesOf(layer));
   if (thresholdSource() !== state.thresholdSource) syncThreshold();
   applyColors();
@@ -971,7 +972,7 @@ function applyThreshold() {
   }
   const { t, bin } = thresholdAt(step);
   overlay?.setThreshold(bin, t);
-  curves?.setMarker(step / 10);
+  curves?.setMarker(step > 0 ? step / 1000 : null);
   const bins = state.density;
   const rho = state.rho;
   if (!bins) {
@@ -1000,7 +1001,7 @@ function applyValueThreshold(on, step) {
   const values = valuesOf(on);
   if (!values || state.thresholdSource !== values) {
     overlay?.setThreshold(0, LOWEST);
-    curves?.setMarker(0);
+    curves?.setMarker(null);
     $("threshold-note").textContent = "";
     return;
   }
@@ -1008,7 +1009,7 @@ function applyValueThreshold(on, step) {
   const n = values.length;
   const t = valueThreshold(sorted, step);
   overlay?.setThreshold(0, t);
-  curves?.setMarker(step / 10);
+  curves?.setMarker(step > 0 ? curvesAt(values, t) : null);
   if (step === 0) {
     $("threshold-note").textContent = `No threshold: every cell is shown (${fmt(n)}).`;
     return;
@@ -1023,19 +1024,35 @@ function applyValueThreshold(on, step) {
 
 // --- class curves -----------------------------------------------------------------------------------------
 
-const curveData = new WeakMap(); // a threshold source's values -> its class curves over the slider's steps
+const curveData = new WeakMap(); // a threshold source's values -> its class curves, by the range they span
+const VALUE_STEPS = 501; // the thresholds along a value colouring's class curves
+let shownCurves = null; // the class curves on show: the values they threshold and their data
 
 // The caption of the class curves' x axis for the attribute the slider thresholds.
 function curvesCaption(on) {
   if (on === "density") return "threshold: cohort density percentile (every 10 = a density slice)";
   const { name, unit } = VALUES[on];
   const short = unit === "cells per mm²" ? "cells/mm²" : unit;
-  return `threshold: ${name}${short ? ` (${short})` : ""}, at this slide's percentiles`;
+  return `threshold: ${name}${short ? ` (${short})` : ""}, this slide's p${state.scale.from}–p${state.scale.to}`;
 }
 
-// A tick label: the value as its layer prints it, shortened from 10,000 on (12.3K).
-function tickText(layer, v) {
-  if (Math.abs(v) < 1e4) return valueText(layer, v, 0);
+// Round values between lo and hi for ticks: steps of 1, 2 or 5 × 10^k, about six of them.
+function niceTicks(lo, hi, count = 6) {
+  const span = hi - lo;
+  if (!(span > 0)) return { step: 0, values: [lo] };
+  let step = 10 ** Math.floor(Math.log10(span / count));
+  const err = (count * step) / span;
+  if (err <= 0.15) step *= 10;
+  else if (err <= 0.35) step *= 5;
+  else if (err <= 0.75) step *= 2;
+  const values = [];
+  for (let v = Math.ceil(lo / step) * step; v <= hi + step * 1e-9; v += step) values.push(Number(v.toPrecision(12)));
+  return { step, values };
+}
+
+// A tick label: the value as its layer prints it, to the ticks' step, shortened from 10,000 on (12.3K).
+function tickText(layer, v, step) {
+  if (Math.abs(v) < 1e4) return valueText(layer, v, step);
   return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(v);
 }
 
@@ -1048,42 +1065,69 @@ function densityCurves() {
     counts,
     nCells: state.classes.length,
     caption: curvesCaption("density"),
-    ticks: Array.from({ length: 11 }, (_, j) => String(10 * j)),
+    ticks: Array.from({ length: 11 }, (_, j) => ({ at: j / 10, label: String(10 * j) })),
     describe: (s) => `percentile ${(s / 10).toFixed(1)} · ≥ ${fmt(Math.round(curve[s]))} cells per mm²`,
   };
 }
 
-// The class curves over a value colouring: the slider's thresholds, the shown slide's quantiles of the values, with
-// the values at its deciles as the ticks.
+// The class curves over a value colouring: the value itself, at equal steps from the shown slide's lower to its
+// upper percentile of the colour menus, counted by the overlay's rule (float32 values; a cell without one is never
+// above a threshold here, as none is the slider's "no threshold").
 function valueCurves(on, source) {
   const sorted = sortedOf(source);
-  const thresholds = Array.from(state.meta.density.curve, (_, s) => valueThreshold(sorted, s));
+  const { from, to } = state.scale;
+  const lo = sorted.length ? quantile(sorted, from / 100) : 0;
+  const hi = sorted.length ? quantile(sorted, to / 100) : 0;
+  const span = hi - lo;
+  const thresholds = Array.from({ length: VALUE_STEPS }, (_, s) => Math.fround(lo + (span * s) / (VALUE_STEPS - 1)));
   const counts = valueClassCounts({
     classes: state.classes, values: thresholdArraysOf(source).values, nClasses: state.meta.classes.length, thresholds,
   });
   const { unit } = VALUES[on];
-  const width = sorted.length ? (sorted[sorted.length - 1] - sorted[0]) / 1000 : 0;
-  const at = (s) => (s === 0 ? "no threshold" : `≥ ${valueText(on, thresholds[s], width)}${unit ? ` ${unit}` : ""}`);
+  const ticks = niceTicks(lo, hi);
+  const percentile = (t) => (100 * lowerBound(sorted, t)) / Math.max(1, sorted.length);
   return {
     counts,
     nCells: state.classes.length,
     caption: curvesCaption(on),
-    ticks: Array.from({ length: 11 }, (_, j) => (sorted.length ? tickText(on, quantile(sorted, j / 10)) : "")),
-    describe: (s) => `${at(s)} · this slide's percentile ${(s / 10).toFixed(1)}`,
+    ticks: ticks.values.map((v) => ({ at: span > 0 ? (v - lo) / span : 0.5, label: tickText(on, v, ticks.step) })),
+    describe: (s) => `≥ ${valueText(on, thresholds[s], span / (VALUE_STEPS - 1))}${unit ? ` ${unit}` : ""} · this `
+      + `slide's percentile ${percentile(thresholds[s]).toFixed(1)}`,
+    lo,
+    hi,
   };
 }
 
-// The class curves on the slider's scale for the attribute it thresholds, once its values are here.
+// Where a value colouring's threshold falls along its class curves' x axis, 0 to 1, or null off it.
+function curvesAt(values, t) {
+  const data = shownCurves?.values === values ? shownCurves.data : null;
+  if (!data || !(data.hi > data.lo)) return null;
+  const at = (t - data.lo) / (data.hi - data.lo);
+  return at >= 0 && at <= 1 ? at : null;
+}
+
+// The class curves for the attribute the slider thresholds, once its values are here.
 function updateCurves() {
   if (!curves) return;
   const on = thresholdOf();
-  const source = state.thresholdSource;
-  if (!source || !state.classes) {
+  const values = state.thresholdSource;
+  if (!values || !state.classes) {
+    shownCurves = null;
     curves.clear(curvesCaption(on));
     return;
   }
-  if (!curveData.has(source)) curveData.set(source, on === "density" ? densityCurves() : valueCurves(on, source));
-  curves.setData(curveData.get(source));
+  const key = on === "density" ? "density" : `${state.scale.from}|${state.scale.to}`;
+  if (!curveData.has(values)) curveData.set(values, new Map());
+  const cached = curveData.get(values);
+  if (!cached.has(key)) cached.set(key, on === "density" ? densityCurves() : valueCurves(on, values));
+  shownCurves = { values, data: cached.get(key) };
+  curves.setData(shownCurves.data);
+}
+
+// The percentile fields show where they act: under slide-percentile bins, and for the class curves of a value
+// colouring other than the 10-NN density.
+function showPercentiles(layer, mode) {
+  $("pct").hidden = mode !== "percentiles" && !(VALUE_LAYERS.includes(layer) && layer !== "density");
 }
 
 // --- scale bar --------------------------------------------------------------------------------------------
@@ -1220,6 +1264,7 @@ async function init() {
     $("coloc").hidden = radio.value !== "coloc";
     if (radio.value === "coloc") state.matrixClosed = false;
     $("scale").hidden = !VALUE_LAYERS.includes(radio.value);
+    showPercentiles(radio.value, state.scale.mode);
     const next = VALUE_LAYERS.includes(radio.value) ? radio.value : "density";
     if (next !== thresholdOf()) {
       $("threshold").value = "0"; // a new attribute to threshold starts with none
@@ -1254,7 +1299,7 @@ async function init() {
   const rescale = () => {
     const from = Number($("pct-from").value);
     const to = Number($("pct-to").value);
-    $("pct").hidden = $("scale-mode").value !== "percentiles";
+    showPercentiles(state.layer, $("scale-mode").value);
     if (!(from >= 0 && to <= 100 && from < to)) {
       $("legend-note").hidden = false;
       $("legend-note").textContent = "The percentiles run from 0 to 100, the first below the second.";
@@ -1266,6 +1311,8 @@ async function init() {
     uploadCodes(codes);
     applyColors();
     renderMatrix(); // the matrix takes the colour map too
+    updateCurves(); // a value colouring's class curves span the percentiles
+    applyThreshold(); // and the slider's mark on them moves with them
   };
   for (const id of ["cmap", "scale-mode", "pct-from", "pct-to"]) $(id).addEventListener("change", rescale);
   $("emeans-set").replaceChildren(...(state.meta.emeans ?? []).map((s) => new Option(

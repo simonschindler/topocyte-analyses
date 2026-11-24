@@ -1,8 +1,8 @@
-// Class curves over the threshold slider's scale, for the shown slide: how the cells of each class thin out as the
-// threshold rises on the attribute the slider thresholds. For the 10-NN density (its own colouring, and the type,
-// class and cluster colourings) the x axis is the cohort's density quantiles in steps of 0.1 percentile, with the
-// deciles (the density slices) exact at every hundredth step; for any other value colouring, the shown slide's
-// own quantiles of that value, in the same steps.
+// Class curves for the shown slide: how the cells of each class thin out as a threshold rises on the attribute the
+// threshold slider thresholds. For the 10-NN density (its own colouring, and the type, class and cluster colourings)
+// the x axis is the slider's scale, the cohort's density quantiles in steps of 0.1 percentile, with the deciles (the
+// density slices) exact at every hundredth step; for any other value colouring, that value itself, in equal steps
+// between the two percentiles of the shown slide that the colour menus set (5 and 95 by default).
 //
 // Views:
 //   stacked: of the slide's cells, the share that is of each class and at or above the threshold, stacked, so the
@@ -109,17 +109,17 @@ export class CurvesPanel {
     Object.assign(this, { chart, legend, tip, select });
     this.view = "stacked";
     this.data = null;
-    this.axis = { caption: "", ticks: [] }; // the x axis' caption and its labels at every tenth of it
+    this.axis = { caption: "", ticks: [] }; // the x axis' caption and ticks, { at: 0 to 1 along it, label }
     this.colours = null;
     this.names = null;
-    this.marker = 0;
+    this.marker = null;
     select.replaceChildren(...Object.entries(VIEWS).map(([value, label]) => new Option(label, value)));
     select.value = this.view;
     select.addEventListener("change", () => { this.view = select.value; this.render(); });
   }
 
-  // counts (classCounts or valueClassCounts), the slide's cell count nCells, the x axis' caption and its labels
-  // at every tenth of it (ticks, 11 strings), and describe(s), the head of the hover box at step s.
+  // counts (classCounts or valueClassCounts) at steps evenly spaced along the x axis, the slide's cell count
+  // nCells, the axis' caption and ticks, and describe(s), the head of the hover box at step s.
   setData(data) {
     this.data = data;
     this.axis = { caption: data.caption, ticks: data.ticks };
@@ -135,9 +135,10 @@ export class CurvesPanel {
 
   setColours(colours, names) { this.colours = colours; this.names = names; this.render(); }
 
-  setMarker(percentile) { this.marker = percentile; this.placeMarker(); }
+  // The slider's threshold, 0 to 1 along the x axis, or null where there is none or it is off the axis.
+  setMarker(at) { this.marker = at; this.placeMarker(); }
 
-  x(p) { return M.left + (p / 100) * (W - M.left - M.right); }
+  x(f) { return M.left + f * (W - M.left - M.right); }
 
   y(v) { return M.top + (1 - v) * (H - M.top - M.bottom); }
 
@@ -145,12 +146,12 @@ export class CurvesPanel {
     this.tip.hidden = true;
     const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "img" }, { overflow: "visible" });
     this.svg = svg;
-    for (let j = 0; j <= 10; j++) {
-      const x = this.x(10 * j);
+    for (const { at, label } of this.axis.ticks) {
+      const x = this.x(at);
       svg.append(el("line", { x1: x, x2: x, y1: M.top, y2: H - M.bottom }, { stroke: "var(--rule)" }));
-      const label = el("text", { x, y: H - M.bottom + 12, "text-anchor": "middle" });
-      label.textContent = this.axis.ticks[j] ?? "";
-      svg.append(label);
+      const text = el("text", { x, y: H - M.bottom + 12, "text-anchor": "middle" });
+      text.textContent = label;
+      svg.append(text);
     }
     for (const v of [0, 0.25, 0.5, 0.75, 1]) {
       svg.append(el("line", { x1: M.left, x2: W - M.right, y1: this.y(v), y2: this.y(v) }, { stroke: "var(--rule)" }));
@@ -188,7 +189,7 @@ export class CurvesPanel {
     const { counts, nCells } = this.data;
     const values = viewValues(this.view, counts, nCells);
     const steps = values[0].length;
-    const px = (s) => this.x((100 * s) / (steps - 1)).toFixed(2);
+    const px = (s) => this.x(s / (steps - 1)).toFixed(2);
     if (this.view === "stacked") {
       let lower = new Float64Array(steps);
       values.forEach((v, k) => {
@@ -206,7 +207,7 @@ export class CurvesPanel {
       const first = totals.findIndex((t) => t < SPARSE * nCells);
       if (first >= 0) {
         svg.append(el("rect", {
-          x: px(first), y: M.top, width: (this.x(100) - Number(px(first))).toFixed(2), height: H - M.top - M.bottom,
+          x: px(first), y: M.top, width: (this.x(1) - Number(px(first))).toFixed(2), height: H - M.top - M.bottom,
         }, { fill: "var(--rule)", opacity: "0.6" }));
       }
     }
@@ -224,10 +225,11 @@ export class CurvesPanel {
 
   placeMarker() {
     if (!this.markerLine) return;
-    const x = this.x(this.marker);
+    const on = this.marker !== null && this.marker >= 0 && this.marker <= 1;
+    const x = this.x(on ? this.marker : 0);
     this.markerLine.setAttribute("x1", x);
     this.markerLine.setAttribute("x2", x);
-    this.markerLine.style.visibility = this.marker > 0 ? "visible" : "hidden";
+    this.markerLine.style.visibility = on ? "visible" : "hidden";
   }
 
   hover(event) {
@@ -236,9 +238,9 @@ export class CurvesPanel {
     const xSvg = ((event.clientX - box.left) / box.width) * W;
     const steps = this.data.counts[0].length;
     const s = Math.max(0, Math.min(steps - 1, Math.round(((xSvg - M.left) / (W - M.left - M.right)) * (steps - 1))));
-    const p = (100 * s) / (steps - 1);
-    this.cross.setAttribute("x1", this.x(p));
-    this.cross.setAttribute("x2", this.x(p));
+    const f = s / (steps - 1);
+    this.cross.setAttribute("x1", this.x(f));
+    this.cross.setAttribute("x2", this.x(f));
     this.cross.style.visibility = "visible";
     const values = viewValues(this.view, this.data.counts, this.data.nCells);
     const pct = (v) => (Number.isNaN(v) ? "–" : `${(100 * v).toFixed(1)}%`);
@@ -247,7 +249,7 @@ export class CurvesPanel {
     if (this.view === "stacked") rows.push(`<div>kept ${pct(values.reduce((sum, v) => sum + v[s], 0))}</div>`);
     this.tip.innerHTML = `<div class="tip-head">${this.data.describe(s)}</div>${rows.join("")}`;
     this.tip.hidden = false;
-    const left = ((this.x(p) / W) * box.width) + (p > 55 ? -this.tip.offsetWidth - 10 : 10);
+    const left = ((this.x(f) / W) * box.width) + (f > 0.55 ? -this.tip.offsetWidth - 10 : 10);
     this.tip.style.left = `${left + this.chart.offsetLeft}px`;
     this.tip.style.top = `${this.chart.offsetTop + 6}px`;
   }

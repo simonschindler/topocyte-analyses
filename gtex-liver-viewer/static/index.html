@@ -170,7 +170,7 @@
   <div class="neighbourhood" id="scale" hidden>
     <label>colours <select id="cmap" title="by layer: blue, and diverging for the two excesses"><option value="viridis" selected>viridis</option><option value="blue">blue</option><option value="diverging">diverging</option><option value="auto">by layer</option></select></label>
     <label>bins <select id="scale-mode"><option value="fixed">fixed</option><option value="percentiles">slide percentiles</option></select></label>
-    <label id="pct" hidden><input type="number" id="pct-from" min="0" max="100" step="0.5" value="2"> to <input type="number" id="pct-to" min="0" max="100" step="0.5" value="98"> %</label>
+    <label id="pct" hidden title="Two percentiles of the shown slide's values: the colour steps run between them under slide-percentile bins, and the class curves of a value colouring span them">percentiles <input type="number" id="pct-from" min="0" max="100" step="0.5" value="5"> to <input type="number" id="pct-to" min="0" max="100" step="0.5" value="95"></label>
   </div>
   <ul id="legend"></ul>
   <p class="note" id="legend-note" hidden></p>
