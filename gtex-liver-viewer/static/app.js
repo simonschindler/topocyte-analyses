@@ -24,8 +24,12 @@ const state = {
   rho: null, // the shown slide's 10-NN density per cell, float32
   densityCounts: null, // cells per density bin on the shown slide
   voronoi: null, // the shown slide's Voronoi density codes and cells per code (/api/voronoi/<id>), once fetched
-  layer: "types", // "types" | "classes" | "clusters" | "density" | "voronoi"
-  hidden: { types: new Set(), classes: new Set(), clusters: new Set(), density: new Set(), voronoi: new Set() },
+  neighbourhood: null, // the shown slide's homotypic fraction and local entropy for one k and label set, once fetched
+  layer: "types", // "types" | "classes" | "clusters" | "density" | "voronoi" | "homotypic" | "entropy"
+  hidden: {
+    types: new Set(), classes: new Set(), clusters: new Set(), density: new Set(), voronoi: new Set(),
+    homotypic: new Set(), entropy: new Set(),
+  },
 };
 let viewer = null;
 let overlay = null;
@@ -82,6 +86,17 @@ function densityRange(j, joiner = "–") {
   return `${per(d[j])}${joiner}${per(d[j + 1])}`;
 }
 
+// A bin of a value in [0, 1]: from j/10 up to (j + 1)/10, the last one with 1 itself.
+function unitRange(j, joiner = "–") {
+  return `${(j / 10).toFixed(1)}${joiner}${j === 9 ? "1" : ((j + 1) / 10).toFixed(1)}`;
+}
+
+function unitTitle(j) {
+  const what = state.layer === "homotypic" ? "Homotypic fraction" : "Local entropy";
+  const top = j === 9 ? "1 included" : `${((j + 1) / 10).toFixed(1)} not included`;
+  return `${what} from ${(j / 10).toFixed(1)} to ${top}.`;
+}
+
 function densityTitle(j) {
   const kept = j === 0 ? "kept only in density slice 0, every cell" : `kept in density slices 0 to ${j}`;
   return `Cohort decile ${j + 1} of the 10-NN density: ${densityRange(j, " to ")} cells per mm²; ${kept}.`;
@@ -98,6 +113,12 @@ function legendEntries() {
       hex,
       n: state.densityCounts ? state.densityCounts[j] : 0,
       title: densityTitle(j),
+    }));
+  }
+  if (state.layer === "homotypic" || state.layer === "entropy") {
+    const counts = state.neighbourhood?.[state.layer].counts;
+    return DENSITY[mode].map((hex, j) => ({
+      key: j, label: unitRange(j), hex, n: counts ? counts[j] : 0, title: unitTitle(j),
     }));
   }
   if (state.layer === "voronoi") {
@@ -169,8 +190,9 @@ function applyColors() {
   const { types, type_class: typeClass, classes } = state.meta;
   const mode = paletteMode();
   const table = new Float32Array(16 * 4);
-  if (state.layer === "density") {
-    DENSITY[mode].forEach((hex, j) => table.set([...rgb(hex), state.hidden.density.has(j) ? 0 : 1], j * 4));
+  if (state.layer === "density" || state.layer === "homotypic" || state.layer === "entropy") {
+    const hidden = state.hidden[state.layer];
+    DENSITY[mode].forEach((hex, j) => table.set([...rgb(hex), hidden.has(j) ? 0 : 1], j * 4));
     overlay?.setColors(table);
     renderLegend();
     return;
@@ -260,7 +282,18 @@ function renderLegend() {
     return row;
   }));
   const note = $("legend-note");
-  note.hidden = state.layer !== "density" && state.layer !== "voronoi";
+  note.hidden = !["density", "voronoi", "homotypic", "entropy"].includes(state.layer);
+  if (state.layer === "homotypic" || state.layer === "entropy") {
+    const { k, by, nLabels } = state.neighbourhood;
+    const [kind, kinds] = by === "types" ? ["HistoPLUS type", "HistoPLUS types"] : ["class", "classes"];
+    note.textContent = (state.layer === "homotypic"
+      ? `Each cell's homotypic fraction: the share of its ${k} nearest other cells that are of its own ${kind} `
+        + "(1: inside a sheet of its own kind; about 0.5: on a border between two; 0: alone among others). "
+      : `Each cell's local Shannon entropy: of the ${kinds} of its ${k} nearest other cells, divided by `
+        + `log ${nLabels} for the ${nLabels} ${kinds} (Pielou's evenness; 0: all of one ${kind}; 1: every `
+        + `${kind} in equal shares). `)
+      + "The neighbours are taken among all the slide's cells; the slider still hides by 10-NN density.";
+  }
   if (state.layer === "density") {
     const { k_nn: k, um_per_px: um } = state.meta.density;
     note.textContent = `Each cell's ${k}-nearest-neighbour density in cells per mm² (the pathology study's `
@@ -344,7 +377,68 @@ function codesOf(layer) {
   if (layer === "clusters") return state.clusters?.labels ?? null;
   if (layer === "density") return state.density;
   if (layer === "voronoi") return state.voronoi?.codes ?? null;
+  if (layer === "homotypic" || layer === "entropy") return state.neighbourhood?.[layer].codes ?? null;
   return state.types;
+}
+
+// Layers whose values the server computes for the shown slide on first use; each switches once they are here.
+const LAZY = {
+  voronoi: () => showVoronoi(),
+  homotypic: () => showNeighbourhood("homotypic"),
+  entropy: () => showNeighbourhood("entropy"),
+};
+
+// After a failed request: check the layer still shown again, and say why.
+function lazyFailed(message) {
+  document.querySelector(`input[name=layer][value=${state.layer}]`).checked = true;
+  $("neighbourhood").hidden = state.layer !== "homotypic" && state.layer !== "entropy";
+  renderLegend();
+  $("legend-note").hidden = false;
+  $("legend-note").textContent = message;
+}
+
+// /api/neighbourhood/<id>: [n u32][n f32 fraction][n f32 entropy][n u8 fraction bin][n u8 entropy bin].
+function parseNeighbourhood(buffer, n, k, by) {
+  if (new DataView(buffer).getUint32(0, true) !== n) throw new Error("values for another number of cells");
+  const part = (offset) => {
+    const codes = new Uint8Array(buffer, offset, n);
+    const counts = new Array(DENSITY.light.length).fill(0);
+    for (let i = 0; i < n; i++) counts[codes[i]] += 1;
+    return { codes, counts };
+  };
+  const nLabels = state.meta.neighbourhood.n_labels[by];
+  return { k, by, nLabels, homotypic: part(4 + 8 * n), entropy: part(4 + 9 * n) };
+}
+
+// Both values come from one request for the k and label set in the controls; a later choice wins over an
+// earlier request still running.
+async function showNeighbourhood(layer) {
+  const id = state.slide;
+  if (!state.info || state.info.slide_id !== id) return; // the slide's own open handler calls again
+  const { k_min: kMin, k_max: kMax } = state.meta.neighbourhood;
+  const k = Number($("nb-k").value);
+  const by = $("nb-by").value;
+  const note = $("legend-note");
+  if (!Number.isInteger(k) || k < kMin || k > kMax) {
+    note.hidden = false;
+    note.textContent = `k must be a whole number from ${kMin} to ${kMax}.`;
+    return;
+  }
+  const have = state.neighbourhood;
+  if (!have || have.k !== k || have.by !== by) {
+    note.hidden = false;
+    note.textContent = `Finding the ${k} nearest cells of each of ${fmt(state.info.n_cells)} cells …`;
+    try {
+      const url = `/api/neighbourhood/${encodeURIComponent(id)}?k=${k}&by=${by}`;
+      const buffer = await fetchOk(url).then((r) => r.arrayBuffer());
+      if (state.slide !== id || Number($("nb-k").value) !== k || $("nb-by").value !== by) return;
+      state.neighbourhood = parseNeighbourhood(buffer, state.types.length, k, by);
+    } catch (err) {
+      if (state.slide === id) lazyFailed(`Could not compute the neighbourhoods: ${err.message}`);
+      return;
+    }
+  }
+  if ($(`layer-${layer}`).checked) setLayer(layer);
 }
 
 // /api/voronoi/<id>: [n u32][n f32 Voronoi density][n u8 code], the code VORONOI_NONE for cells without one.
@@ -370,11 +464,7 @@ async function showVoronoi() {
       if (state.slide !== id) return;
       state.voronoi = parseVoronoi(buffer, state.types.length);
     } catch (err) {
-      if (state.slide !== id) return;
-      document.querySelector(`input[name=layer][value=${state.layer}]`).checked = true;
-      renderLegend();
-      note.hidden = false;
-      note.textContent = `Could not compute the Voronoi densities: ${err.message}`;
+      if (state.slide === id) lazyFailed(`Could not compute the Voronoi densities: ${err.message}`);
       return;
     }
   }
@@ -617,9 +707,10 @@ async function loadSlide(id) {
       state.density = bins;
       state.rho = rho;
       state.densityCounts = binCounts;
-      state.voronoi = null; // fetched for this slide when its layer is chosen
-      const voronoi = state.layer === "voronoi" || $("layer-voronoi").checked;
-      if (state.layer === "voronoi") state.layer = "types"; // until this slide's Voronoi densities are here
+      state.voronoi = null; // these are fetched for this slide when their layer is chosen
+      state.neighbourhood = null;
+      const lazy = Object.keys(LAZY).find((layer) => state.layer === layer || $(`layer-${layer}`).checked);
+      if (lazy && state.layer === lazy) state.layer = "types"; // until this slide's values are here
       updateMethod();
       clearClusters();
       overlay ??= new PointsOverlay(viewer, CELL_UM / info.um_per_px);
@@ -636,9 +727,9 @@ async function loadSlide(id) {
       applyColors();
       updateScaleBar();
       setStatus(slideStatus(info));
-      if (voronoi) {
-        $("layer-voronoi").checked = true; // clearClusters checked the layer shown meanwhile
-        showVoronoi();
+      if (lazy) {
+        $(`layer-${lazy}`).checked = true; // clearClusters checked the layer shown meanwhile
+        LAZY[lazy]();
       }
     });
     viewer.addOnceHandler("open-failed", (event) => {
@@ -671,8 +762,17 @@ async function init() {
   $("hne-only").addEventListener("change", renderSlides);
   $("slides").addEventListener("change", (event) => loadSlide(event.target.value));
   document.querySelectorAll("input[name=layer]").forEach((radio) => radio.addEventListener("change", () => {
-    if (radio.value === "voronoi") showVoronoi(); else setLayer(radio.value);
+    $("neighbourhood").hidden = radio.value !== "homotypic" && radio.value !== "entropy";
+    if (radio.value in LAZY) LAZY[radio.value](); else setLayer(radio.value);
   }));
+  const { k, k_min: kMin, k_max: kMax } = state.meta.neighbourhood;
+  Object.assign($("nb-k"), { value: String(k), min: String(kMin), max: String(kMax) });
+  const neighbours = () => {
+    const layer = ["homotypic", "entropy"].find((name) => $(`layer-${name}`).checked);
+    if (layer) showNeighbourhood(layer);
+  };
+  $("nb-k").addEventListener("change", neighbours);
+  $("nb-by").addEventListener("change", neighbours);
   $("emeans-set").replaceChildren(...(state.meta.emeans ?? []).map((s) => new Option(
     `${s.name} (${s.columns} columns, k̂ ${s.k_tibshirani})`, s.name,
   )));

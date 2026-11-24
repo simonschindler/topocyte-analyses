@@ -67,6 +67,11 @@
   #radius { width: 64px; font: inherit; color: var(--ink); background: var(--field); border: 1px solid var(--rule); border-radius: 4px; padding: 2px 4px; }
   #k { width: 52px; font: inherit; color: var(--ink); background: var(--field); border: 1px solid var(--rule); border-radius: 4px; padding: 2px 4px; }
   #run { padding: 2px 12px; cursor: pointer; margin-left: auto; }
+  .neighbourhood { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; color: var(--ink2); font-size: 12px; }
+  .neighbourhood[hidden] { display: none; }
+  .neighbourhood label { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
+  .neighbourhood select { padding: 2px 4px; }
+  #nb-k { width: 52px; font: inherit; color: var(--ink); background: var(--field); border: 1px solid var(--rule); border-radius: 4px; padding: 2px 4px; }
   #run:hover { border-color: var(--accent); }
   #run:disabled { cursor: progress; color: var(--muted); }
   .note { margin: 0; color: var(--muted); font-size: 11px; }
@@ -134,7 +139,13 @@
     <label><input type="radio" name="layer" value="clusters" id="layer-clusters" disabled> Clusters</label>
     <label><input type="radio" name="layer" value="density"> 10-NN density</label>
     <label><input type="radio" name="layer" value="voronoi" id="layer-voronoi"> Voronoi density</label>
+    <label><input type="radio" name="layer" value="homotypic" id="layer-homotypic"> Homotypic fraction</label>
+    <label><input type="radio" name="layer" value="entropy" id="layer-entropy"> Local entropy</label>
   </fieldset>
+  <div class="neighbourhood" id="neighbourhood" hidden>
+    <label>k <input type="number" id="nb-k" min="2" max="100" step="1" value="15"> nearest</label>
+    <label>by <select id="nb-by"><option value="types">HistoPLUS type</option><option value="classes">class</option></select></label>
+  </div>
   <ul id="legend"></ul>
   <p class="note" id="legend-note" hidden></p>
   <label class="field">Show only cells with 10-NN density at or above

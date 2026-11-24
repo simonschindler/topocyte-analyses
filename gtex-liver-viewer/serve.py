@@ -5,8 +5,9 @@ also clusters every cell by the composition of its ball (the chromatic-domains p
 chosen k and radius, or, on that pilot's 30 slides, the 1,500 sampled centres by their saved chromatic TDA
 features (level 2), or colours every cell by its saved cohort-wide e-means cluster (gtex-liver-emeans-neighbourhoods).
 Every cell can also be coloured by its 10-nearest-neighbour density, binned at the cohort's deciles, or by its
-Voronoi density (1 / the area of its Voronoi cell) in the same bins, and the cells below a 10-NN density
-threshold can be hidden in every layer. The shown slide's GTEx pathology notes and its
+Voronoi density (1 / the area of its Voronoi cell) in the same bins, or by its homotypic fraction or local
+Shannon entropy among its k nearest other cells, and the cells below a 10-NN density threshold can be hidden in
+every layer. The shown slide's GTEx pathology notes and its
 donor's sex, age bracket and Hardy scale are shown.
 
 Adapted from ``tissuegeometry/web/cosine_viewer`` (its DeepZoom tile serving and WebGL point overlay) without
@@ -79,6 +80,11 @@ PACKED = 3  # (set, k) whose packed labels of every cohort cell (63 MB each) sta
 DENSITY_BINS = 10  # the density layer's bins: the cohort's deciles of the 10-NN density, the density slices
 CURVE_STEPS = 1000  # the threshold slider's steps: the cohort's density quantiles at levels 0, 0.001, ..., 1
 VORONOI_NONE = DENSITY_BINS  # the code of a cell without a Voronoi density, after the ten density bins
+# Homotypic fraction and local entropy: each cell's k nearest other cells, by HistoPLUS type or by class.
+NEIGHBOURS = 15  # the default k
+NEIGHBOURS_MIN, NEIGHBOURS_MAX = 2, 100
+LABEL_SETS = ("types", "classes")
+UNIT_BINS = 10  # both values lie in [0, 1], coloured in bins of 0.1
 STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css"}
 
 
@@ -217,6 +223,80 @@ def voronoi_codes(rho: np.ndarray, deciles: np.ndarray) -> np.ndarray:
     some = np.isfinite(rho)
     codes[some] = density_codes(rho[some], deciles)
     return codes
+
+
+def nearest_others(xy: np.ndarray, k: int) -> np.ndarray:
+    """(n, k): each cell's k nearest other cells, nearest first (``cKDTree``); the cell itself is left out, even
+    where another cell shares its position. ``ValueError`` unless there are more than k cells."""
+    from scipy.spatial import cKDTree
+
+    n = len(xy)
+    if n <= k:
+        raise ValueError(f"{n} cells, too few for {k} neighbours each")
+    idx = cKDTree(xy).query(xy, k=k + 1, workers=-1)[1]
+    others = idx != np.arange(n)[:, None]
+    others[others.all(axis=1), -1] = False  # k + 1 others at one distance: the cell itself fell out, drop the last
+    return idx[others].reshape(n, k)
+
+
+def homotypic_counts(labels: np.ndarray, nbrs: np.ndarray) -> np.ndarray:
+    """Each cell's neighbours (rows of ``nbrs``) with its own label: the homotypic fraction times k."""
+    return (labels[nbrs] == labels[:, None]).sum(axis=1)
+
+
+def local_entropy(labels: np.ndarray, nbrs: np.ndarray, n_labels: int) -> np.ndarray:
+    """The Shannon entropy of each cell's neighbours' labels, divided by log(n_labels) (Pielou's evenness, in [0, 1]).
+
+    With counts c of the k neighbours, H = log k - (1/k) Σ c log c, where 0 log 0 = 0.
+    """
+    n, k = nbrs.shape
+    neighbour_labels = labels[nbrs]
+    c_log_c = np.zeros(k + 1)  # c log c for the counts c = 0, 1, ..., k
+    c_log_c[1:] = np.arange(1, k + 1) * np.log(np.arange(1, k + 1))
+    total = np.zeros(n)
+    for label in range(n_labels):
+        total += c_log_c[(neighbour_labels == label).sum(axis=1)]
+    return np.clip((np.log(k) - total / k) / np.log(n_labels), 0.0, 1.0)
+
+
+def unit_codes(values: np.ndarray) -> np.ndarray:
+    """The bin of each value in [0, 1]: j for [j/10, (j+1)/10), the last bin with 1 itself. A value that is a tenth
+    up to rounding (an even split, say) goes up into the bin that it starts."""
+    return np.minimum(np.floor(values * UNIT_BINS + 1e-9), UNIT_BINS - 1).astype(np.uint8)
+
+
+def homotypic_codes(counts: np.ndarray, k: int) -> np.ndarray:
+    """``unit_codes`` of the fractions counts / k, in integers, so no fraction is binned by its rounding."""
+    return np.minimum(UNIT_BINS * counts // k, UNIT_BINS - 1).astype(np.uint8)
+
+
+def neighbourhood_request(query: dict[str, list[str]]) -> tuple[int, str]:
+    """k and the label set (``LABEL_SETS``) of a neighbourhood request's query; ``ValueError`` if invalid."""
+    try:
+        k = int(query.get("k", [str(NEIGHBOURS)])[0])
+    except ValueError:
+        raise ValueError("k must be a whole number") from None
+    if not NEIGHBOURS_MIN <= k <= NEIGHBOURS_MAX:
+        raise ValueError(f"k must be from {NEIGHBOURS_MIN} to {NEIGHBOURS_MAX}")
+    by = query.get("by", ["types"])[0]
+    if by not in LABEL_SETS:
+        raise ValueError(f"by must be one of {', '.join(LABEL_SETS)}")
+    return k, by
+
+
+def neighbourhood_blob(fraction: np.ndarray, entropy: np.ndarray, fraction_codes: np.ndarray,
+                       entropy_codes: np.ndarray) -> bytes:
+    """``[n u32][n × f32 homotypic fraction][n × f32 local entropy][n u8 its bin][n u8 its bin]``, little-endian."""
+    n = len(fraction)
+    if not (entropy.shape == fraction_codes.shape == entropy_codes.shape == (n,)):
+        raise ValueError("the values and bins are not one per cell")
+    return (
+        struct.pack("<I", n)
+        + np.ascontiguousarray(fraction, dtype="<f4").tobytes()
+        + np.ascontiguousarray(entropy, dtype="<f4").tobytes()
+        + np.ascontiguousarray(fraction_codes, dtype=np.uint8).tobytes()
+        + np.ascontiguousarray(entropy_codes, dtype=np.uint8).tobytes()
+    )
 
 
 def threshold_curve(curve: np.ndarray, levels: np.ndarray, deciles: np.ndarray) -> np.ndarray:
@@ -534,6 +614,7 @@ class Cohort:
         self._packed: OrderedDict[tuple, np.ndarray] = OrderedDict()  # (set, k) -> packed labels of every cell
         self._density: OrderedDict[str, bytes] = OrderedDict()  # slide ID -> its cells' densities and bins
         self._voronoi: OrderedDict[str, bytes] = OrderedDict()  # slide ID -> its cells' Voronoi densities and codes
+        self._neighbourhood: OrderedDict[tuple, bytes] = OrderedDict()  # (slide ID, k, label set) -> both values
         n_cohort = int(self.slides["end"].max())
         self.rho = npz_memmap(c.SIB / "density.npz", "rho")  # every cohort cell's 10-NN density, cells per mm²
         with np.load(c.SIB / "density.npz", allow_pickle=False) as density:
@@ -581,6 +662,12 @@ class Cohort:
                 "um_per_px": self.density_um_per_px,
                 "curve": self.curve.tolist(),
                 "voronoi_none": VORONOI_NONE,
+            },
+            "neighbourhood": {
+                "k": NEIGHBOURS,
+                "k_min": NEIGHBOURS_MIN,
+                "k_max": NEIGHBOURS_MAX,
+                "n_labels": {"types": len(self.types), "classes": len(c.CLASSES)},
             },
             "emeans": None
             if self.emeans_sets is None
@@ -762,6 +849,26 @@ class Cohort:
         with self._lock:
             return remember(self._voronoi, slide_id, blob, CACHE)
 
+    def neighbourhood(self, slide_id: str, k: int, by: str) -> bytes:
+        """Every cell's homotypic fraction and local entropy among its k nearest other cells, by HistoPLUS type or
+        by class (``by``), with their bins, as ``neighbourhood_blob``; computed on first use."""
+        key = (slide_id, k, by)
+        with self._lock:
+            if key in self._neighbourhood:
+                self._neighbourhood.move_to_end(key)
+                return self._neighbourhood[key]
+        cells = self.cells(slide_id)
+        labels = cells["types"].astype(np.int64)
+        n_labels = len(self.types)
+        if by == "classes":
+            labels, n_labels = self.type_class[labels], len(c.CLASSES)
+        nbrs = nearest_others(cells["xy"], k)
+        same = homotypic_counts(labels, nbrs)
+        entropy = local_entropy(labels, nbrs, n_labels)
+        blob = neighbourhood_blob(same / k, entropy, homotypic_codes(same, k), unit_codes(entropy))
+        with self._lock:
+            return remember(self._neighbourhood, key, blob, CACHE)
+
     def packed(self, name: str, k: int) -> np.ndarray:
         """The e-means study's packed labels of every cohort cell for one set and k."""
         key = (name, k)
@@ -875,6 +982,9 @@ def make_handler(cohort: Cohort) -> type[BaseHTTPRequestHandler]:
                 self.send(HTTPStatus.OK, cohort.density(parts[2]), "application/octet-stream")
             elif len(parts) == 3 and parts[:2] == ["api", "voronoi"] and parts[2] in cohort.by_id:
                 self.send(HTTPStatus.OK, cohort.voronoi(parts[2]), "application/octet-stream")
+            elif len(parts) == 3 and parts[:2] == ["api", "neighbourhood"] and parts[2] in cohort.by_id:
+                k, by = neighbourhood_request(query)
+                self.send(HTTPStatus.OK, cohort.neighbourhood(parts[2], k, by), "application/octet-stream")
             elif len(parts) == 3 and parts[:2] == ["api", "emeans"] and parts[2] in cohort.by_id:
                 name, k = emeans_request(query)
                 self.send(HTTPStatus.OK, json.dumps(cohort.emeans(parts[2], name, k)).encode(), "application/json")

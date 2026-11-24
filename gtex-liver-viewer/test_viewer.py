@@ -281,6 +281,65 @@ def test_voronoi_density_is_cells_per_mm2_and_its_codes_mark_cells_without_one()
     assert serve.VORONOI_NONE == serve.DENSITY_BINS
 
 
+def test_nearest_others_are_the_k_nearest_cells_without_the_cell_itself():
+    xy = np.random.default_rng(5).uniform(0, 100, size=(200, 2))
+    distances = np.linalg.norm(xy[:, None] - xy[None], axis=2)
+    np.fill_diagonal(distances, np.inf)
+    nbrs = serve.nearest_others(xy, 5)
+    assert nbrs.shape == (200, 5)
+    assert np.array_equal(nbrs, np.argsort(distances, axis=1)[:, :5])
+    twin = np.vstack([xy, xy[[7]]])  # a 201st cell at the 8th cell's position: each is the other's nearest
+    nbrs = serve.nearest_others(twin, 5)
+    assert nbrs[7, 0] == 200 and nbrs[200, 0] == 7 and 7 not in nbrs[7] and 200 not in nbrs[200]
+    with pytest.raises(ValueError, match="cells"):
+        serve.nearest_others(xy[:5], 5)
+
+
+def test_homotypic_fraction_and_local_entropy_tell_the_four_regimes_apart():
+    labels = np.array([0, 0, 0, 0, 1, 1, 2, 3])
+    nbrs = np.array([
+        [1, 2, 3, 1],  # a core: its own type all round
+        [0, 2, 4, 5],  # a two-way border: half its own type, half one other
+        [6, 7, 4, 1],  # a hub: one of each of the four types
+        [0, 0, 0, 0],
+        [0, 1, 2, 3],  # a lone infiltrator: all of one foreign type
+        [0, 1, 2, 3],
+        [0, 1, 2, 3],
+        [0, 1, 2, 3],
+    ])
+    np.testing.assert_array_equal(serve.homotypic_counts(labels, nbrs), [4, 2, 1, 4, 0, 0, 0, 0])
+    entropy = serve.local_entropy(labels, nbrs, 4)
+    np.testing.assert_allclose(entropy[[0, 1, 2, 4]], [0.0, 0.5, 1.0, 0.0], atol=1e-15)
+    assert np.all((entropy >= 0) & (entropy <= 1))
+
+
+def test_unit_and_homotypic_codes_bin_by_tenths():
+    codes = serve.unit_codes(np.array([0.0, 0.0999, 0.1, 0.5, np.log(2) / np.log(4), 0.95, 1.0]))
+    assert codes.dtype == np.uint8 and codes.tolist() == [0, 0, 1, 5, 5, 9, 9]
+    homotypic = serve.homotypic_codes(np.arange(16), 15)  # the fractions 0, 1/15, ..., 1, binned without rounding
+    assert homotypic.dtype == np.uint8 and homotypic.tolist() == [0, 0, 1, 2, 2, 3, 4, 4, 5, 6, 6, 7, 8, 8, 9, 9]
+
+
+def test_neighbourhood_request_reads_k_and_the_labels():
+    assert serve.neighbourhood_request({}) == (serve.NEIGHBOURS, "types")
+    assert serve.neighbourhood_request({"k": ["20"], "by": ["classes"]}) == (20, "classes")
+    for query in ({"k": ["1"]}, {"k": ["101"]}, {"k": ["x"]}, {"by": ["genes"]}):
+        with pytest.raises(ValueError):
+            serve.neighbourhood_request(query)
+
+
+def test_neighbourhood_blob_layout():
+    fraction, entropy = np.array([0.0, 0.5, 1.0]), np.array([0.25, 1.0, 0.0])
+    fraction_codes, entropy_codes = np.array([0, 5, 9], np.uint8), np.array([2, 9, 0], np.uint8)
+    blob = serve.neighbourhood_blob(fraction, entropy, fraction_codes, entropy_codes)
+    n = struct.unpack_from("<I", blob)[0]
+    assert n == 3 and len(blob) == 4 + 10 * n
+    assert np.array_equal(np.frombuffer(blob, "<f4", n, 4), fraction.astype(np.float32))
+    assert np.array_equal(np.frombuffer(blob, "<f4", n, 4 + 4 * n), entropy.astype(np.float32))
+    assert np.array_equal(np.frombuffer(blob, np.uint8, n, 4 + 8 * n), fraction_codes)
+    assert np.array_equal(np.frombuffer(blob, np.uint8, n, 4 + 9 * n), entropy_codes)
+
+
 def test_threshold_curve_puts_the_deciles_at_every_hundredth_step():
     levels = np.linspace(0, 1, serve.CURVE_STEPS + 1)
     curve = 1000 * levels**2

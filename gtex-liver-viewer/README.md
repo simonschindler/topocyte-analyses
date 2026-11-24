@@ -3,8 +3,8 @@
 A browser viewer of the GTEx liver cohort's cells (594 slides, 126,219,124
 cells). It shows any slide's point cloud, on its H&E where the slide file is at
 hand, coloured by HistoPLUS cell type, by the cell-type study's four classes, by
-10-nearest-neighbour or Voronoi density, or by clusters from three of the
-studies here. It was built for the
+10-nearest-neighbour or Voronoi density, by the homotypic fraction or local
+entropy of its nearest cells, or by clusters from three of the studies here. It was built for the
 [chromatic-domains pilot](../gtex-liver-chromatic-domains/README.md) on
 2026-11-23 and moved to this folder on 2026-11-24, since the later studies use it
 too.
@@ -40,7 +40,7 @@ the internet.
   many cohort slides have one; the other slides are drawn on a blank canvas. The
   cells' coordinates are the slide's level-0 pixels.
 - **Tests.** `../gtex-liver-chromatic-domains/.venv/bin/python -m pytest -q -W error`
-  runs `test_viewer.py`: 27 tests on synthetic inputs, about 2 s.
+  runs `test_viewer.py`: 32 tests on synthetic inputs, about 2 s.
 
 ## What it shows
 
@@ -88,6 +88,33 @@ quantiles in steps of 0.1 percentile (the pathology study's quantile curve), and
 its ten marked steps are the deciles, so at those steps it shows exactly the
 cells of density slices 0 to 9; the note under it gives the threshold and the
 cells shown.
+
+### Neighbourhood composition
+
+"Homotypic fraction" and "Local entropy" describe each cell's k nearest other
+cells (k = 15 by default, 2 to 100, set under the colour choice; `cKDTree`, the
+cell itself left out, also where another cell shares its position), by
+HistoPLUS type or by class (the menu beside k):
+
+- **Homotypic fraction:** the share of those neighbours of the cell's own type
+  (or class): 1 inside a sheet of its own kind, about 0.5 on a border between
+  two, 0 for a lone cell among others.
+- **Local entropy:** the Shannon entropy of the neighbours' types (or classes),
+  divided by the log of the number of types (14) or classes (4): Pielou's
+  evenness, 0 when every neighbour is of one kind and 1 when every kind is there
+  in equal shares.
+
+The pair tells apart a cell in a core of its own kind (fraction 1, entropy 0), a
+lone infiltrator (0 and 0), a cell on a border between two kinds (about 0.5, and
+log 2 / log K) and one in a mixed hub (low, high). Both are coloured in bins of
+0.1 on the densities' blue scale; the homotypic fraction is binned from its
+counts of neighbours, so no fraction lands in a bin by rounding. A fixed k gives
+every cell as many neighbours, so the entropy does not shrink where cells are
+sparse, as it would within a fixed radius. The server computes both for a slide,
+k and label set in one request on first use: 0.65 s on the largest slide
+(725,038 cells) at k = 15 by type. Neither is corrected for how common each type
+is on the slide (an excess homotypic fraction, or the Kullback–Leibler
+divergence from the slide's composition).
 
 ### Pathology notes and donor
 
@@ -174,9 +201,12 @@ All read only:
   deciles and slide table), `/api/slide/<id>`, `/api/cells/<id>` (positions and
   types, binary), `/api/density/<id>` (each cell's density and its bin,
   binary), `/api/voronoi/<id>` (each cell's Voronoi density and its bin,
-  binary), `/api/cluster/<id>?k=&density=&radius=`, `/api/tda/<id>?k=`,
-  `/api/emeans/<id>?set=&k=` and `/api/tile/<id>/<level>/<col>_<row>.jpeg`. The
-  last four slides' cells, Voronoi densities and slide files stay in memory.
+  binary), `/api/neighbourhood/<id>?k=&by=` (each cell's homotypic fraction and
+  local entropy and their bins, binary), `/api/cluster/<id>?k=&density=&radius=`,
+  `/api/tda/<id>?k=`, `/api/emeans/<id>?set=&k=` and
+  `/api/tile/<id>/<level>/<col>_<row>.jpeg`. The
+  last four slides' cells, Voronoi densities, neighbourhood values and slide
+  files stay in memory.
 - `static/`: `index.html` (the page and its styles), `app.js` (the slide list,
   the controls and the OpenSeadragon canvas), `overlay.js` (the WebGL point
   layer, from cosine_viewer's `WsiGLOverlay`), `curves.js` (the class-curves
