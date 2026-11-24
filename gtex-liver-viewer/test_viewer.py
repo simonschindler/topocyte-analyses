@@ -7,9 +7,10 @@ import struct
 import numpy as np
 import pandas as pd
 import pytest
+
 import serve
 
-import common as c
+c = serve.c  # the chromatic-domains study's common module, which serve puts on the path
 
 
 def test_groups_are_the_pilot_conditions_then_the_two_left_out():

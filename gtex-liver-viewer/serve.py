@@ -1,9 +1,9 @@
 #!/usr/bin/env python
 """Browser viewer of the GTEx liver cohort's cells: every slide's point cloud, coloured by HistoPLUS cell type
-or by the study's four classes, with the slides filtered by pathology group. On one slide at a time it also
-clusters every cell by the composition of its ball (the pilot's level-1 features) with a chosen k and radius,
-or, on the 30 pilot slides, the 1,500 sampled centres by their saved chromatic TDA features (level 2), or
-colours every cell by its saved cohort-wide e-means cluster (the sibling study gtex-liver-emeans-neighbourhoods).
+or by the cell-type study's four classes, with the slides filtered by pathology group. On one slide at a time it
+also clusters every cell by the composition of its ball (the chromatic-domains pilot's level-1 features) with a
+chosen k and radius, or, on that pilot's 30 slides, the 1,500 sampled centres by their saved chromatic TDA
+features (level 2), or colours every cell by its saved cohort-wide e-means cluster (gtex-liver-emeans-neighbourhoods).
 Every cell can also be coloured by its 10-nearest-neighbour density, binned at the cohort's deciles, and the
 cells below a density threshold can be hidden in every layer. The shown slide's GTEx pathology notes and its
 donor's sex, age bracket and Hardy scale are shown.
@@ -11,10 +11,10 @@ donor's sex, age bracket and Hardy scale are shown.
 Adapted from ``tissuegeometry/web/cosine_viewer`` (its DeepZoom tile serving and WebGL point overlay) without
 its local-homology endpoints, its FastAPI backend or its tissuegraphs and Rust imports.
 
-Run from the study folder with the study venv::
+Run from this folder with the chromatic-domains study's venv (README.md)::
 
-    .venv/bin/python viewer/serve.py                       # point clouds only
-    .venv/bin/python viewer/serve.py --wsi-dir DIR         # plus the H&E of every slide with a file in DIR
+    ../gtex-liver-chromatic-domains/.venv/bin/python serve.py                  # point clouds only
+    ../gtex-liver-chromatic-domains/.venv/bin/python serve.py --wsi-dir DIR    # plus the H&E of the slides in DIR
 
 then open the printed address. A slide is shown on its H&E when DIR holds a file named ``<slide_id><suffix>``
 with a suffix OpenSlide reads (``.svs`` for GTEx); the cells' coordinates are level-0 pixels of that slide.
@@ -22,7 +22,7 @@ with a suffix OpenSlide reads (``.svs`` for GTEx); the cells' coordinates are le
 Read only: the cohort ``.h5ad`` (h5py mode "r"), the pathology study's ``density.npz`` (each slide's cohort
 rows, and every cell's density, memory-mapped) and ``pathology.csv`` (each slide's group, GTEx pathology
 categories and notes), the cohort table ``liver_cohort.csv`` beside the ``.h5ad`` (each donor's sex, age
-bracket and Hardy scale), this study's ``results/pilot.csv`` and ``results/features.npz``,
+bracket and Hardy scale), the chromatic-domains study's ``results/pilot.csv`` and ``results/features.npz``,
 the e-means study's ``results/labels_<set>.npz``, ``clusters.json``, ``gap.json`` and ``kmeans_check.json``
 (the e-means option is off when they are not there), and the slide files.
 Nothing is written.
@@ -49,7 +49,8 @@ import numpy as np
 import pandas as pd
 
 HERE = Path(__file__).resolve().parent
-sys.path.insert(0, str(HERE.parent))
+# The chromatic-domains study's common module: the cohort's paths, the four classes and the pilot's constants.
+sys.path.insert(0, str(HERE.parent / "gtex-liver-chromatic-domains"))
 import common as c  # noqa: E402
 
 STATIC = HERE / "static"
@@ -60,7 +61,8 @@ WSI_SUFFIXES = (".svs", ".tif", ".tiff", ".ndpi", ".mrxs", ".scn", ".bif", ".vms
 TILE_SIZE = 256  # DeepZoom tiles without overlap, as in cosine_viewer
 MARGIN_PX = 256  # blank border around a point cloud shown without its slide
 CACHE = 4  # slides whose cells, and slide files whose tile generators, stay in memory
-# Composition clusters: the pilot's level 1 (features.level1, domains.kmeans) on every cell of one slide.
+# Composition clusters: the chromatic-domains pilot's level 1 (its features.level1, domains.kmeans) on every cell
+# of one slide.
 K_MIN, K_MAX = 2, 10
 RADIUS_MIN_UM, RADIUS_MAX_UM = 10.0, 500.0  # the ball's radius; the pilot's is c.DELTA_UM (150 µm)
 N_INIT, KMEANS_SEED = 20, 0
@@ -69,7 +71,7 @@ FEATURES = ("log10 cells", *(f"{name} fraction" for name in c.CLASSES))
 TDA_KEY = "L2_obs_all"  # 20 MFA scores of the 16 blocks' fPCA scores of the residual Betti curves, all-slides basis
 BACKGROUND = 15  # the code of the cells that are not centres, in a TDA clustering
 # Cohort e-means clusters: the saved labels of every cohort cell, in the cohort's row order, k = 2..10 per set.
-EMEANS = HERE.parents[1] / "gtex-liver-emeans-neighbourhoods" / "results"
+EMEANS = HERE.parent / "gtex-liver-emeans-neighbourhoods" / "results"
 EMEANS_SETS = ("composition", "density", "composition+density")
 WORSE = 0.002  # log ratio of W_k above which a fit is named worse than k-means++'s (the e-means study's report)
 PACKED = 3  # (set, k) whose packed labels of every cohort cell (63 MB each) stay in memory
@@ -101,7 +103,7 @@ def slide_table(pathology: pd.DataFrame, slide_ids: list[str], bounds: np.ndarra
 
 
 def load_slide_table() -> pd.DataFrame:
-    """``slide_table`` from the sibling study's pathology.csv and density.npz and this study's pilot.csv."""
+    """``slide_table`` from the pathology study's pathology.csv and density.npz and the chromatic pilot's pilot.csv."""
     pathology = pd.read_csv(c.SIB / "pathology.csv", usecols=["slide_id", "group"])
     with np.load(c.SIB / "density.npz", allow_pickle=False) as density:
         slide_ids = [str(s) for s in density["slide_ids"]]
@@ -355,8 +357,8 @@ def cluster_profiles(features: np.ndarray, labels: np.ndarray, k: int) -> list[d
 
 
 def load_pilot_centres() -> dict:
-    """The pilot's sampled centres from ``results/features.npz`` and ``results/pilot.csv``: per slide ID, the
-    centres' slide rows, positions, level-1 features and level-2 scores (``TDA_KEY``)."""
+    """The chromatic pilot's sampled centres from its ``results/features.npz`` and ``results/pilot.csv``: per slide
+    ID, the centres' slide rows, positions, level-1 features and level-2 scores (``TDA_KEY``)."""
     pilot = pd.read_csv(c.RESULTS / "pilot.csv")
     with np.load(c.RESULTS / "features.npz", allow_pickle=False) as f:
         index, rows, xy, l1, l2 = (f[key] for key in ("slide_index", "centre_row", "xy", "L1", TDA_KEY))
@@ -831,7 +833,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         try:
             import openslide  # noqa: F401
         except ImportError:
-            parser.error("--wsi-dir needs openslide-python and openslide-bin (requirements.txt)")
+            parser.error("--wsi-dir needs openslide-python and openslide-bin (see README.md)")
     return args
 
 

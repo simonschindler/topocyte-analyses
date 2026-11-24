@@ -14,7 +14,7 @@ unnormalized, classification." Then: "cohort means pathology group. i want to kn
 
 For one slide and one of the four cell classes (epithelial, stromal, immune, other), the class curve n(t) counts the
 class's cells whose 10-nearest-neighbour density is at or above t cells per mm². The liver cell viewer
-(`../gtex-liver-chromatic-domains/viewer/serve.py`) draws them. The cell-type study
+([`../gtex-liver-viewer`](../gtex-liver-viewer/README.md)) draws them. The cell-type study
 ([gtex-liver-celltype-slices](../gtex-liver-celltype-slices/README.md)) found D+C the representation to beat: 51
 features, the slide's density summaries and its cells of each class at each of the ten density deciles, where the
 class curves give exactly those counts. This study asks whether a functional PCA of the whole curves separates the

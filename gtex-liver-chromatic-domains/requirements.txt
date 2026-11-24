@@ -21,6 +21,6 @@ ripser==0.6.15
 psutil==7.2.2
 pytest==9.2.0
 
-# The viewer's slide tiles (viewer/serve.py --wsi-dir only).
+# The liver cell viewer's slide tiles (../gtex-liver-viewer/serve.py --wsi-dir only); the viewer runs in this venv.
 openslide-python==1.4.6
 openslide-bin==4.0.1.2

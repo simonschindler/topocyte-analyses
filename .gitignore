@@ -3,8 +3,8 @@
 *.npz
 *.npy
 *.html
-# ...except a viewer's page, which is source, not output.
-!*/viewer/static/*.html
+# ...except the liver cell viewer's page, which is source, not output.
+!gtex-liver-viewer/static/*.html
 # Temporary files of the atomic writes (e.g. results/bars/<slide>.npz.tmp) after an interrupted run.
 *.tmp
 logs/

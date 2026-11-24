@@ -90,97 +90,10 @@ $PY build_report.py                             # about 90 s, peak RSS about 7 G
 
 ## Viewer
 
-`viewer/serve.py` shows the cells of every cohort slide in the browser, coloured
-by HistoPLUS cell type or by the four classes, with the slides filtered by
-pathology group (pathology.csv's eight groups). It is adapted from
-`tissuegeometry/web/cosine_viewer`: OpenSeadragon with a WebGL point layer, served
-by the Python standard library. With `--wsi-dir`, a slide whose file
-`<slide_id>.svs` (or another OpenSlide format) is in that folder is shown on its
-H&E; the cells' coordinates are its level-0 pixels. It reads the cohort, the
-slide files and the e-means study's results read only and writes nothing.
-
-```bash
-.venv/bin/python viewer/serve.py                        # point clouds only
-.venv/bin/python viewer/serve.py --wsi-dir ~/data/GTEX/wsi --port 8765
-```
-
-Then open `http://127.0.0.1:8765/`. The page loads OpenSeadragon 4.0.0 from
-cdnjs. The 14 type colours are shades of their class's colour, so the legend's
-toggles and its "only" buttons tell neighbouring types apart.
-The scale bar in µm (1, 2 or 5 × 10^k) uses the slide file's pixel size where
-there is one, else the cohort's assumed 0.4942 µm per pixel; the status line
-says which.
-
-"10-NN density" colours every cell by its 10-nearest-neighbour density from the
-pathology study's `density.npz` (cells per mm², at the assumed 0.4942 µm per
-pixel), binned at the cohort's ten deciles. The deciles are the density slices'
-thresholds, so a cell in the bin that starts at decile j is kept in slices 0 to
-j. The legend gives each bin's range and its cells on the slide. The blue scale
-runs light to dark (dark to light on the dark canvas), so low densities fade
-into the background. The densities are memory-mapped from the uncompressed
-`density.npz` rather than loaded (1 GB for the cohort).
-
-The slider under the legend hides every cell below a density threshold, in any
-colouring. It runs over the cohort's density quantiles in steps of 0.1
-percentile (the pathology study's quantile curve), and its ten marked steps are
-the deciles, so at those steps it shows exactly the cells of density slices 0
-to 9; the note under it gives the threshold and the cells shown. The box under
-the slide list shows the slide's pathology group, its donor's sex, age bracket
-and Hardy scale (the circumstances of death, from the cohort table
-`liver_cohort.csv`), its GTEx pathology categories and notes, and the cohort's
-quality flag where there is one; the slide list shows the categories and notes
-as a tooltip.
-
-The panel in the slide view's bottom-right corner (it can be closed and
-reopened) draws, for the shown slide, how each class thins out as the density
-threshold rises, on the slider's scale with the slider's threshold marked. Its
-menu has three views:
-
-- **stacked** (the default): of the slide's cells, the share that is of each
-  class and at or above the threshold, stacked, so the stack starts at 1 and its
-  height is the share of the slide's cells kept;
-- **among the cells kept:** the share of each class among the cells at or above
-  the threshold (the curves add up to 1; faded where fewer than 1% of the
-  slide's cells are left);
-- **each class's own cells:** the share of each class's cells at or above the
-  threshold (each curve falls from 1).
-
-Hovering gives the values at a threshold. The counts are computed in the
-browser from the densities and bins the slider uses, by the same rule, so at
-the density slices they are the studies' kept counts.
-
-"Composition clusters on this slide" runs k-means with the chosen k (2 to 10)
-on every cell of the shown slide: the pilot's level-1 features of the cell's
-ball (log10 cells, unless "with density" is off, and the four class fractions;
-`features.level1`), z-scored on that slide, with `domains.py`'s
-`KMeans(k, n_init=20, random_state=0)`. The ball's radius is 10 to 500 µm, 150
-µm (the pilot's) by default. Clusters are numbered by size, largest first, and
-the legend shows each cluster's mean composition. The first run at a radius
-counts the balls; on the largest slide (725,038 cells) k = 10 at 150 µm took
-13 s, and k = 4 took 4.6 s at 500 µm and 3.0 s at 50 µm.
-
-On the 30 pilot slides, "Chromatic TDA of the pilot's centres" clusters the
-slide's 1,500 sampled centres instead, by their saved level-2 features
-(`results/features.npz`'s `L2_obs_all`: 20 MFA scores of the residual chromatic
-Betti curves, 150 µm balls, 19 random labellings), with `domains.py`'s k-means
-(`kmeans_fit(L2_obs_all[c], k)`). The centres are drawn larger over the other
-cells in grey, and the legend shows each cluster's mean ball composition. The
-pilot found no subdomains that recur across the slide halves, so these clusters
-are exploratory.
-
-With the results of the sibling study
-[gtex-liver-emeans-neighbourhoods](../gtex-liver-emeans-neighbourhoods/README.md)
-in place, "Cohort e-means clusters (saved)" colours every cell of the shown
-slide by its saved e-means label for the chosen feature set (composition,
-density or both) and k (2 to 10): that study's `results/labels_<set>.npz`,
-fitted to the 150 µm balls of all 126,219,124 cohort cells, nothing refitted.
-The legend's `#j` is the saved label (as in that study's report), the colours go
-to the largest clusters over the cohort first, and each entry's tooltip gives
-the cluster's cohort profile (share of cells, cells per ball, class fractions,
-share of the ball's cells at or above the cohort's median density). The set
-menu shows Tibshirani's k̂; at the four (set, k) whose e-means fit is worse than
-k-means++'s (`kmeans_check.json`) the note says by how much. A set and k is read
-from its file on first use; the last three stay in memory (63 MB each).
+The liver cell viewer, first built for this pilot, has its own folder since
+2026-11-24: [gtex-liver-viewer](../gtex-liver-viewer/README.md). It runs in this
+study's venv and imports this folder's `common.py`, and its "Chromatic TDA of
+the pilot's centres" option reads `results/pilot.csv` and `results/features.npz`.
 
 ## Outputs
 

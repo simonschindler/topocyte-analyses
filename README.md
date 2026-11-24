@@ -12,7 +12,8 @@ have taught us together.
 
 ## Layout
 
-One folder per study. Each holds
+One folder per study, and one for the liver cell viewer, a tool the studies
+share (see [Tools](#tools)). Each study's folder holds
 
 - its scripts, run in the order its README gives;
 - `progress.md`, the ledger: every ruling, with what it costs if wrong, and
@@ -50,3 +51,20 @@ git -C /path/to/topocyte worktree add ../topocyte-bd1d5c0 bd1d5c0
 | [gtex-liver-chromatic-domains](gtex-liver-chromatic-domains/README.md) | Does the local chromatic persistent homology of 150 µm neighbourhoods define microanatomical domains in GTEx liver beyond density, composition and pairwise contacts? | Pilot of 30 slides, rule fixed in advance: does not add. Level 1 gives one composition stratum: each half's gap statistic rises to k = 10, but no split recurs across the slide halves (prediction strength 0.327 / 0.276 at k = 10, at best 0.650 / 0.926 at k = 2); the control passes; level 2 gives no subdomains (0.338 / 0.361 at k = 6, at best 0.737 / 0.926), so the pairwise guard had nothing to test. Post hoc, on random half/half splits of all centres prediction strength at k = 2 is 0.95 or more at both levels, as on cluster-free clouds (0.98–0.99 in design.md and progress.md): no sign of a split, only that the two slide halves differ (half A's balls hold more cells, by 0.35 pooled SD in log10 cells). The design's fallback, the level-1 strata as the regions of a second study, does not hold either; where that study's regions come from is Simon's decision. The H&E atlas is not built (Simon, 2026-11-23): one stratum and no subdomains leave nothing to compare |
 | [gtex-liver-emeans-neighbourhoods](gtex-liver-emeans-neighbourhoods/README.md) | How many clusters does e-means (Bessa et al. 2026) find in the composition, the density profile and both, of every GTEx liver cell's 150 µm ball, by the gap statistic for k = 1–10? | Descriptive, no verdict: against the matched Gaussian, composition's gap rises to k = 10; composition + density stops at k = 3 (sparse parenchyma, denser parenchyma, dense mixed neighbourhoods), and k-means++ agrees; density stops at k = 7 under e-means only, because its k = 8 fit is 4.4% worse than k-means++'s, and with k-means++ it rises to k = 10. In 4 of 27 fits e-means settled 0.8–4.4% above k-means++ in W_k |
 | [gtex-liver-class-curves-fpca](gtex-liver-class-curves-fpca/README.md) | Does a functional PCA of each slide's four class curves (the cells of each class at or above every 10-NN density threshold) separate the eight liver pathology groups better than D+C, the cell-type study's density and composition features? | Level with D+C, by the rule fixed in advance, which means that its readout cannot tell the two apart, not that they are equal: development macro AUC 0.750 against 0.756 for D+C trained on the same cleaned slides, a difference of −0.0064 [−0.0241, +0.0116]; the cell-type study's 118-slide holdout, scored once for the curves, leans the same way, 0.769 against 0.779 (−0.0101 [−0.0421, +0.0169], an interval that its groups of 2 and 4 slides make too narrow). The curves scored below D+C in all 20 repeats, by 0.006 to 0.049 (0.722 against 0.749 on average), and on the holdout. The outlier filter dropped 11.7% of the training slides in the development folds and 55 of 476 in the holdout fit |
+
+## Tools
+
+[gtex-liver-viewer](gtex-liver-viewer/README.md) is the liver cell viewer. It
+shows any cohort slide's cells in the browser, on the H&E where the slide file is
+at hand, coloured by HistoPLUS cell type or class, by 10-NN density, by
+composition clusters computed on the spot, or by the chromatic-domains pilot's
+TDA clusters or the e-means study's saved clusters. A slider hides the cells
+below a density threshold, a panel draws the slide's class curves, and a box
+gives the slide's GTEx pathology notes and its donor. From its folder:
+
+```bash
+../gtex-liver-chromatic-domains/.venv/bin/python serve.py --wsi-dir ~/data/GTEX/wsi
+```
+
+then open `http://127.0.0.1:8765/`. Its README says what each colouring shows and
+which files the viewer reads; it writes nothing.

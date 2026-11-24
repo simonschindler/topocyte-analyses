@@ -501,7 +501,7 @@ hard to beat and advises fixing the composition guard in advance there too.
 
 ### Tooling: the liver cell viewer
 
-`gtex-liver-chromatic-domains/viewer/serve.py` shows any cohort slide's cells in
+[gtex-liver-viewer](gtex-liver-viewer/README.md) shows any cohort slide's cells in
 the browser, on the H&E where the slide file is available. Cells can be
 coloured by:
 

@@ -61,7 +61,7 @@ import folds  # noqa: E402
 OUT = c.HERE / "report.html"
 INK, INK2, MUTED, RULE, SURFACE, CONTEXT = "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#fcfcfb", "#c3c2b7"
 SERIES = ("#2a78d6", "#eb6834")  # the dataviz palette's first two slots, validated as a pair: development, holdout
-# The liver cell viewer's class colours on a light background (gtex-liver-chromatic-domains/viewer/static/palette.js).
+# The liver cell viewer's class colours on a light background (gtex-liver-viewer/static/palette.js).
 CLASS_COLOR = {"epithelial": "#2a78d6", "stromal": "#1baf7a", "immune": "#eb6834", "other": "#52514e"}
 # The sibling reports' pathology-group colours and facets (gtex-liver-celltype-slices/build_report.py): a scatter
 # colours healthy and two other groups, a triple that passes the all-pairs palette check, over all other slides in grey.

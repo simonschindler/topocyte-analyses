@@ -134,7 +134,7 @@ $PY build_report.py
   for k = 2..10 as arrays `k2` … `k10`, two labels per byte, and `n_cells`; `cluster.unpack(z["k5"], int(z["n_cells"]))`
   gives the 126,219,124 labels of k = 5 in the cohort's row order. The fits at composition k = 4, density
   k = 8 and composition + density k = 6 and 9 are 0.8–4.4% above k-means++ in W_k (`kmeans_check.json`),
-  so those labels are a worse partition than k-means++'s. The liver cell viewer (`../gtex-liver-chromatic-domains/viewer/serve.py`, "Cohort e-means clusters
+  so those labels are a worse partition than k-means++'s. The liver cell viewer ([`../gtex-liver-viewer`](../gtex-liver-viewer/README.md), "Cohort e-means clusters
   (saved)") colours any slide's cells by these labels;
 - `results/gap.json`: the settings and, per set, log W_k, the references' mean and SD of log W*_k, Gap(k), s_k,
   both rules' k̂, cluster.py's own k-means check (a separate e-means fit on 500,000 cells, superseded by
