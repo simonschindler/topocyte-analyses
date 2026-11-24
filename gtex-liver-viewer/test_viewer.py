@@ -405,3 +405,32 @@ def test_load_donors_reads_sex_age_and_hardy_scale_and_refuses_a_slide_twice(tmp
     path.write_text(header + "S1,Liver,D1,female,60-69,Slow death,,\nS1,Liver,D1,male,20-29,Ventilator case,,\n")
     with pytest.raises(ValueError, match="twice"):
         serve.load_donors(path)
+
+
+def test_colocalization_request_reads_k_labels_neighbour_type_and_score():
+    n_labels = {"types": 14, "classes": 4}
+    assert serve.colocalization_request({}, n_labels) == (serve.NEIGHBOURS, "types", None, "shrunk")
+    query = {"k": ["20"], "by": ["classes"], "of": ["3"], "score": ["raw"]}
+    assert serve.colocalization_request(query, n_labels) == (20, "classes", 3, "raw")
+    for query in ({"of": ["4"], "by": ["classes"]}, {"of": ["x"]}, {"score": ["mean"]}, {"k": ["1"]}):
+        with pytest.raises(ValueError):
+            serve.colocalization_request(query, n_labels)
+
+
+def test_colocalization_codes_bin_as_the_excess_and_mark_no_estimate():
+    codes = serve.colocalization_codes(np.array([-1.0, 0.0, 0.95, np.nan]))
+    assert codes.tolist() == [0, 5, 10, serve.COLOCALIZATION_NONE]
+
+
+def test_load_colocalization_reads_the_cohort_sums_and_refuses_a_misshapen_file(tmp_path):
+    assert serve.load_colocalization(tmp_path / "missing.json") is None
+    fit = {"labels": ["a", "b"], "pair_excess": [[[1, -1], [0, 2]], [[1, 1], [1, 1]]], "target_excess": [[1, 1], [2, 2]]}
+    data = {"k": [2, 3], "n_slides": 2, "label_sets": {"classes": fit}}
+    path = tmp_path / "scale.json"
+    path.write_text(json.dumps(data))
+    loaded = serve.load_colocalization(path)
+    assert loaded["k"] == [2, 3] and loaded["n_slides"] == 2 and loaded["classes"]["pair"].shape == (2, 2, 2)
+    fit["target_excess"] = [[1, 1]]
+    path.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="sums"):
+        serve.load_colocalization(path)

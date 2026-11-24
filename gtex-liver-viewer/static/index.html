@@ -111,6 +111,18 @@
   }
   .curves-tip[hidden] { display: none; }
   .curves-tip .tip-head { color: var(--ink2); margin-bottom: 2px; }
+  #matrix {
+    position: absolute; right: 16px; top: 16px; z-index: 6; padding: 8px 10px 6px; border-radius: 6px;
+    max-width: 420px; background: color-mix(in srgb, var(--surface) 94%, transparent);
+    box-shadow: 0 0 0 1px var(--rule); color: var(--ink); font-size: 12px;
+  }
+  #matrix[hidden] { display: none; }
+  .matrix-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+  .matrix-head span { flex: 1; }
+  #matrix-close { padding: 0 8px; cursor: pointer; }
+  #matrix-chart svg { display: block; }
+  #matrix-chart svg text { fill: var(--ink2); font-size: 10px; }
+  #matrix .note { max-width: 400px; margin-top: 2px; }
   #curves-open {
     position: absolute; right: 16px; bottom: 16px; z-index: 6; padding: 3px 10px; cursor: pointer;
   }
@@ -145,10 +157,15 @@
     <label><input type="radio" name="layer" value="entropy" id="layer-entropy"> Local entropy</label>
     <label><input type="radio" name="layer" value="excess" id="layer-excess"> Homotypic excess</label>
     <label><input type="radio" name="layer" value="kl" id="layer-kl"> KL divergence</label>
+    <label><input type="radio" name="layer" value="coloc" id="layer-coloc"> Colocalization excess</label>
   </fieldset>
   <div class="neighbourhood" id="neighbourhood" hidden>
     <label>k <input type="number" id="nb-k" min="2" max="100" step="1" value="15"> nearest</label>
     <label>by <select id="nb-by"><option value="types">HistoPLUS type</option><option value="classes">class</option></select></label>
+  </div>
+  <div class="neighbourhood" id="coloc" hidden>
+    <label>excess of <select id="coloc-of"></select></label>
+    <label><select id="coloc-score"><option value="shrunk">shrunk</option><option value="raw">raw</option></select></label>
   </div>
   <div class="neighbourhood" id="scale" hidden>
     <label>colours <select id="cmap"><option value="auto">default</option><option value="blue">blue</option><option value="viridis">viridis</option><option value="diverging">diverging</option></select></label>
@@ -203,6 +220,12 @@
     <div id="curves-tip" class="curves-tip" hidden></div>
   </section>
   <button type="button" id="curves-open" hidden>Class curves</button>
+  <section id="matrix" aria-label="Pooled colocalization excess by focal and neighbour type" hidden>
+    <div class="matrix-head"><span id="matrix-title"></span><button type="button" id="matrix-close" title="Hide the matrix">×</button></div>
+    <div id="matrix-chart"></div>
+    <p class="note" id="matrix-scale"></p>
+    <div id="matrix-tip" class="curves-tip" hidden></div>
+  </section>
 </main>
 <script type="module" src="/static/app.js"></script>
 </body>

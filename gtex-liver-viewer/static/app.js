@@ -1,6 +1,7 @@
 // The viewer's page: the slide list filtered by pathology group, an OpenSeadragon canvas (the slide's H&E
 // tiles, or a blank canvas of the cloud's size) and the WebGL layer of the slide's cells.
 import { CurvesPanel, binOf, classCounts } from "/static/curves.js";
+import { MatrixPanel } from "/static/matrix.js";
 import { PointsOverlay } from "/static/overlay.js";
 import { CLUSTERS, DENSITY, PALETTE, colourScale, rgb } from "/static/palette.js";
 
@@ -10,9 +11,10 @@ const SCALE_MAX_CSS = 150; // the scale bar's longest length on screen
 const BACKGROUND = 15; // the code of the cells that are not centres, in a TDA clustering
 const GREY = { light: "#c3c2b7", dark: "#52514e" }; // those cells, drawn behind the centres
 const CENTRE_SIZE = 2.5; // TDA centres are drawn this much larger than the cells
-const API = 2; // the /api/meta "api" this page is written for (serve.py's API)
+const API = 3; // the /api/meta "api" this page is written for (serve.py's API)
 // The layers of each cell's k nearest other cells, all four from one request (/api/neighbourhood/<id>).
 const NEIGHBOURHOOD = ["homotypic", "entropy", "excess", "kl"];
+const USES_NEIGHBOURS = [...NEIGHBOURHOOD, "coloc"]; // the layers the k and label controls apply to
 const NONE = 15; // the code of a cell without a value (no Voronoi cell) when the slide's percentiles cut the bins
 const LOWEST = -3.4e38; // below every value: where a cell has none, and the threshold that hides nothing
 const $ = (id) => document.getElementById(id);
@@ -30,17 +32,21 @@ const state = {
   densityCounts: null, // cells per density bin on the shown slide
   voronoi: null, // the shown slide's Voronoi density codes and cells per code (/api/voronoi/<id>), once fetched
   neighbourhood: null, // the shown slide's NEIGHBOURHOOD layers for one k and label set, once fetched
+  coloc: null, // the shown slide's colocalization excess for one k, label set, neighbour type and score
+  colocSummary: null, // its pooled excess by focal and neighbour type, for the matrix panel
+  matrixClosed: false, // the matrix panel was closed for this choice of the colouring
   layer: "types", // "types" | "classes" | "clusters" | "density" | "voronoi", or one of NEIGHBOURHOOD
   scale: { map: "auto", mode: "fixed", from: 2, to: 98 }, // the value layers' colour map and bins
   thresholdSource: null, // the values the overlay's threshold compares (state.rho, or a value layer's)
   hidden: {
     types: new Set(), classes: new Set(), clusters: new Set(), density: new Set(), voronoi: new Set(),
-    homotypic: new Set(), entropy: new Set(), excess: new Set(), kl: new Set(),
+    homotypic: new Set(), entropy: new Set(), excess: new Set(), kl: new Set(), coloc: new Set(),
   },
 };
 let viewer = null;
 let overlay = null;
 let curves = null; // the class curves panel
+let matrix = null; // the colocalization matrix panel
 
 function setStatus(text) { $("status").textContent = text; }
 
@@ -64,6 +70,7 @@ function setTheme(theme) {
   try { localStorage.setItem("theme", theme); } catch { /* private window: the theme is not remembered */ }
   applyColors();
   curves?.setColours(classColours(), state.meta.classes);
+  renderMatrix();
 }
 
 // The class colours of the page's theme, for the curves panel (it sits on the page surface, not on the H&E).
@@ -136,6 +143,10 @@ function excessTitle(j) {
   return `Homotypic excess ${excessRange(j, " up to ")}: ${side}.`;
 }
 
+function colocTitle(j) {
+  return `Colocalization excess ${excessRange(j, " up to ")}.`;
+}
+
 function klTitle(j) {
   return `KL divergence of the neighbours' mix from the slide's: ${klRange(j, " up to ")} nats.`;
 }
@@ -149,7 +160,10 @@ const VALUES = {
   },
   voronoi: {
     what: "Voronoi density", name: "Voronoi density", unit: "cells per mm²", digits: 0, bins: 10,
-    label: densityRange, title: voronoiTitle,
+    label: densityRange, title: voronoiTitle, noneLabel: "no Voronoi cell",
+    noneTitle: "On the convex hull of the slide's cells, where the Voronoi cell is unbounded, or at the position "
+      + "of another cell, which shares it.",
+    noneCode: () => state.meta.density.voronoi_none,
   },
   homotypic: {
     what: "Homotypic fraction", name: "homotypic fraction", unit: "", digits: 2, bins: 10, label: unitRange,
@@ -163,7 +177,16 @@ const VALUES = {
     title: excessTitle, centre: 0,
     map: "diverging", signed: true,
   },
-  kl: { what: "KL divergence", name: "KL divergence", unit: "nats", digits: 2, bins: 10, label: klRange, title: klTitle },
+  kl: {
+    what: "KL divergence", name: "KL divergence", unit: "nats", digits: 2, bins: 10, label: klRange, title: klTitle,
+  },
+  coloc: {
+    what: "Colocalization excess", name: "colocalization excess", unit: "", digits: 2, bins: 11, label: excessRange,
+    title: colocTitle, centre: 0, map: "diverging", signed: true, noneLabel: "no estimate",
+    noneTitle: "The null gives this count no variance: the type is missing among the slide's other cells, or it "
+      + "is all of them.",
+    noneCode: () => state.meta.colocalization.none,
+  },
 };
 const VALUE_LAYERS = Object.keys(VALUES);
 
@@ -171,6 +194,7 @@ const VALUE_LAYERS = Object.keys(VALUES);
 function valuesOf(layer) {
   if (layer === "density") return state.rho;
   if (layer === "voronoi") return state.voronoi?.values ?? null;
+  if (layer === "coloc") return state.coloc?.values ?? null;
   return state.neighbourhood?.[layer]?.values ?? null;
 }
 
@@ -178,6 +202,7 @@ function valuesOf(layer) {
 function fixedOf(layer) {
   if (layer === "density") return state.density && { codes: state.density, counts: state.densityCounts };
   if (layer === "voronoi") return state.voronoi;
+  if (layer === "coloc") return state.coloc;
   return state.neighbourhood?.[layer] ?? null;
 }
 
@@ -206,7 +231,7 @@ function quantile(sorted, q) {
 function binsOf(layer) {
   if (state.scale.mode === "fixed") {
     const f = fixedOf(layer);
-    const none = layer === "voronoi" ? state.meta.density.voronoi_none : null;
+    const none = VALUES[layer].noneCode?.() ?? null;
     return f && { n: VALUES[layer].bins, codes: f.codes, counts: f.counts, none };
   }
   const values = valuesOf(layer);
@@ -234,7 +259,7 @@ function binsOf(layer) {
     codes[i] = j;
     counts[j] += 1;
   }
-  const bins = { n, codes, counts, none: layer === "voronoi" ? NONE : null, lo, hi, width, from, to };
+  const bins = { n, codes, counts, none: VALUES[layer].noneLabel ? NONE : null, lo, hi, width, from, to };
   scaledBins.set(values, { key, bins });
   return bins;
 }
@@ -261,7 +286,7 @@ function scaledTitle(layer, bins, j) {
     + `between the slide's percentiles ${bins.from} and ${bins.to}.`;
 }
 
-// The legend of a value layer: its bins in its colour map, and the cells without a value for Voronoi.
+// The legend of a value layer: its bins in its colour map, and the cells without a value where there are such.
 function valueEntries(mode) {
   const layer = state.layer;
   const spec = VALUES[layer];
@@ -274,16 +299,10 @@ function valueEntries(mode) {
     label: scaled ? scaledRange(layer, bins, j) : spec.label(j),
     title: scaled ? scaledTitle(layer, bins, j) : spec.title(j),
   }));
-  if (layer === "voronoi") {
-    const none = bins?.none ?? state.meta.density.voronoi_none;
-    entries.push({
-      key: none,
-      label: "no Voronoi cell",
-      hex: GREY[mode],
-      n: bins ? bins.counts[none] : 0,
-      title: "On the convex hull of the slide's cells, where the Voronoi cell is unbounded, or at the position of "
-        + "another cell, which shares it.",
-    });
+  if (spec.noneLabel) {
+    const none = bins?.none ?? spec.noneCode();
+    const n = bins ? bins.counts[none] : 0;
+    entries.push({ key: none, label: spec.noneLabel, hex: GREY[mode], n, title: spec.noneTitle });
   }
   return entries;
 }
@@ -304,6 +323,20 @@ function valueNote(layer) {
       + "Voronoi cell of their own (grey): on the convex hull it is unbounded, and cells at one position share "
       + "theirs. Cells at the edge of the tissue have large Voronoi cells, so low densities.";
     fixed = "In the 10-NN density's bins, the cohort's ten deciles.";
+  } else if (layer === "coloc") {
+    const { k, by, of, score } = state.coloc;
+    const kind = by === "types" ? "HistoPLUS type" : "class";
+    const target = of === "own" ? `its own ${kind}` : `${state.meta.colocalization.labels[by][Number(of)]} cells`;
+    text = `Each cell's hypergeometric count excess of ${target} among its ${k} nearest other cells: the count less `
+      + "what random labelling of the slide's other cells gives, over the room it has: k (1 − q) on the gain scale, "
+      + "k q on the loss scale, each focal × neighbour pair's scale fixed by the sign of its summed excess over the "
+      + `${state.meta.colocalization.n_slides} cohort slides at this k. `
+      + (score === "shrunk"
+        ? "Shrunk toward the slide's pooled excess by empirical Bayes (DerSimonian–Laird between-cell variance), "
+          + "so noisy estimates count less."
+        : `Unshrunk: ${fmt(bins ? bins.counts[bins.none] : 0)} cells have no estimate (grey), where the null has no `
+          + "variance.");
+    fixed = "In bins of 0.2 about 0, −0.1 to +0.1.";
   } else {
     const { k, by, nLabels } = state.neighbourhood;
     const [kind, kinds] = by === "types" ? ["HistoPLUS type", "HistoPLUS types"] : ["class", "classes"];
@@ -552,12 +585,15 @@ const LAZY = {
   entropy: () => showNeighbourhood("entropy"),
   excess: () => showNeighbourhood("excess"),
   kl: () => showNeighbourhood("kl"),
+  coloc: () => showColoc(),
 };
 
 // After a failed request: check the layer still shown again, and say why.
 function lazyFailed(message) {
   document.querySelector(`input[name=layer][value=${state.layer}]`).checked = true;
-  $("neighbourhood").hidden = !NEIGHBOURHOOD.includes(state.layer);
+  $("neighbourhood").hidden = !USES_NEIGHBOURS.includes(state.layer);
+  $("coloc").hidden = state.layer !== "coloc";
+  $("matrix").hidden = state.layer !== "coloc" || state.matrixClosed;
   $("scale").hidden = !VALUE_LAYERS.includes(state.layer);
   renderLegend();
   $("legend-note").hidden = false;
@@ -578,6 +614,85 @@ function parseNeighbourhood(buffer, n, k, by) {
   if (buffer.byteLength !== 4 + 5 * NEIGHBOURHOOD.length * n) throw new Error("values of another layout");
   const layers = Object.fromEntries(NEIGHBOURHOOD.map((name, j) => [name, part(j)]));
   return { k, by, nLabels, ...layers };
+}
+
+// /api/colocalization/<id>: [n u32][n f32 value][n u8 bin], NaN and its own bin where a cell has no estimate.
+function parseValueBlob(buffer, n) {
+  if (new DataView(buffer).getUint32(0, true) !== n) throw new Error("values for another number of cells");
+  const codes = new Uint8Array(buffer, 4 + 4 * n, n);
+  const counts = new Array(NONE + 1).fill(0);
+  for (let i = 0; i < n; i++) counts[codes[i]] += 1;
+  return { values: new Float32Array(buffer, 4, n), codes, counts };
+}
+
+// The colocalization excess for the k and label set of the neighbourhood controls, of the cell's own type or the
+// one chosen, shrunk or raw, with its pooled matrix for the panel. A later choice wins over a request still running.
+async function showColoc() {
+  const id = state.slide;
+  if (!state.info || state.info.slide_id !== id) return; // the slide's own open handler calls again
+  const { k_min: kMin, k_max: kMax } = state.meta.colocalization;
+  const k = Number($("nb-k").value);
+  const by = $("nb-by").value;
+  const of = $("coloc-of").value;
+  const score = $("coloc-score").value;
+  const note = $("legend-note");
+  if (!Number.isInteger(k) || k < kMin || k > kMax) {
+    note.hidden = false;
+    note.textContent = `k must be a whole number from ${kMin} to ${kMax}.`;
+    return;
+  }
+  const have = state.coloc;
+  if (!have || have.k !== k || have.by !== by || have.of !== of || have.score !== score) {
+    note.hidden = false;
+    note.textContent = `Computing the colocalization excess of ${fmt(state.info.n_cells)} cells …`;
+    try {
+      const slide = `/api/colocalization/${encodeURIComponent(id)}`;
+      const [buffer, summary] = await Promise.all([
+        fetchOk(`${slide}?k=${k}&by=${by}&of=${of}&score=${score}`).then((r) => r.arrayBuffer()),
+        fetchOk(`${slide}/summary?k=${k}&by=${by}`).then((r) => r.json()),
+      ]);
+      const same = Number($("nb-k").value) === k && $("nb-by").value === by && $("coloc-of").value === of
+        && $("coloc-score").value === score;
+      if (state.slide !== id || !same) return;
+      state.coloc = { k, by, of, score, ...parseValueBlob(buffer, state.types.length) };
+      state.colocSummary = summary;
+      renderMatrix();
+    } catch (err) {
+      if (state.slide === id) lazyFailed(`Could not compute the colocalization excess: ${err.message}`);
+      return;
+    }
+  }
+  if ($("layer-coloc").checked) setLayer("coloc");
+}
+
+// The pooled excess of the shown slide as a focal × neighbour matrix, coloured for the page's theme.
+function renderMatrix() {
+  const s = state.colocSummary;
+  if (!s || !matrix) return;
+  const theme = document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+  const signed = (v) => `${v >= 0 ? "+" : "−"}${Math.abs(v).toFixed(3)}`;
+  $("matrix-title").textContent = `Pooled excess on this slide, k = ${s.k}, by ${s.by === "types" ? "type" : "class"}`;
+  matrix.render({
+    labels: s.labels,
+    values: s.pooled_excess,
+    colours: colourScale("diverging", 11, theme),
+    none: GREY[theme],
+    describe: (b, a) => {
+      const v = s.pooled_excess[b][a];
+      const head = `${s.labels[b]} cells (${fmt(s.n_cells[b])}) · ${s.labels[a]} neighbours: `;
+      if (v === null) return `${head}no estimate`;
+      return `${head}pooled excess ${signed(v)} ± ${Math.sqrt(s.pooled_variance[b][a]).toFixed(3)}, median of the `
+        + `shrunk ${signed(s.median[b][a])}; ${s.gain[b][a] ? "gain" : "loss"} scale`;
+    },
+  });
+}
+
+// The neighbour types the colouring can show: the cell's own, or each type or class of the label set.
+function renderColocTargets() {
+  const names = state.meta.colocalization?.labels[$("nb-by").value] ?? [];
+  const options = names.map((name, j) => new Option(name, String(j)));
+  const own = $("nb-by").value === "types" ? "its own type" : "its own class";
+  $("coloc-of").replaceChildren(new Option(own, "own"), ...options);
 }
 
 // Both values come from one request for the k and label set in the controls; a later choice wins over an
@@ -645,6 +760,7 @@ function setLayer(layer) {
   const before = codesOf(state.layer);
   state.layer = layer;
   document.querySelector(`input[name=layer][value=${layer}]`).checked = true;
+  $("matrix").hidden = layer !== "coloc" || state.matrixClosed;
   const codes = codesOf(layer);
   if (overlay && codes && codes !== before) overlay.setCodes(codes);
   if (thresholdSource() !== state.thresholdSource) syncThreshold();
@@ -955,6 +1071,8 @@ async function loadSlide(id) {
       state.densityCounts = binCounts;
       state.voronoi = null; // these are fetched for this slide when their layer is chosen
       state.neighbourhood = null;
+      state.coloc = null;
+      state.colocSummary = null;
       const lazy = Object.keys(LAZY).find((layer) => state.layer === layer || $(`layer-${layer}`).checked);
       if (lazy && state.layer === lazy) state.layer = "types"; // until this slide's values are here
       updateMethod();
@@ -1012,7 +1130,9 @@ async function init() {
   $("hne-only").addEventListener("change", renderSlides);
   $("slides").addEventListener("change", (event) => loadSlide(event.target.value));
   document.querySelectorAll("input[name=layer]").forEach((radio) => radio.addEventListener("change", () => {
-    $("neighbourhood").hidden = !NEIGHBOURHOOD.includes(radio.value);
+    $("neighbourhood").hidden = !USES_NEIGHBOURS.includes(radio.value);
+    $("coloc").hidden = radio.value !== "coloc";
+    if (radio.value === "coloc") state.matrixClosed = false;
     $("scale").hidden = !VALUE_LAYERS.includes(radio.value);
     const next = VALUE_LAYERS.includes(radio.value) ? radio.value : "density";
     if (next !== thresholdOf()) {
@@ -1024,11 +1144,27 @@ async function init() {
   const { k, k_min: kMin, k_max: kMax } = state.meta.neighbourhood;
   Object.assign($("nb-k"), { value: String(k), min: String(kMin), max: String(kMax) });
   const neighbours = () => {
-    const layer = NEIGHBOURHOOD.find((name) => $(`layer-${name}`).checked);
-    if (layer) showNeighbourhood(layer);
+    const layer = USES_NEIGHBOURS.find((name) => $(`layer-${name}`).checked);
+    if (layer) LAZY[layer]();
   };
   $("nb-k").addEventListener("change", neighbours);
-  $("nb-by").addEventListener("change", neighbours);
+  $("nb-by").addEventListener("change", () => {
+    renderColocTargets(); // the label set changes the neighbour types to choose from
+    neighbours();
+  });
+  matrix = new MatrixPanel({ chart: $("matrix-chart"), tip: $("matrix-tip"), scale: $("matrix-scale") });
+  $("layer-coloc").disabled = !state.meta.colocalization;
+  if (!state.meta.colocalization) {
+    $("layer-coloc").parentElement.title = "results/colocalization_scale.json is missing: run fit_colocalization.py";
+  }
+  renderColocTargets();
+  for (const id of ["coloc-of", "coloc-score"]) {
+    $(id).addEventListener("change", () => { if ($("layer-coloc").checked) showColoc(); });
+  }
+  $("matrix-close").addEventListener("click", () => {
+    state.matrixClosed = true;
+    $("matrix").hidden = true;
+  });
   const rescale = () => {
     const from = Number($("pct-from").value);
     const to = Number($("pct-to").value);

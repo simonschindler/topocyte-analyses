@@ -5,7 +5,8 @@ cells). It shows any slide's point cloud, on its H&E where the slide file is at
 hand, coloured by HistoPLUS cell type, by the cell-type study's four classes, by
 10-nearest-neighbour or Voronoi density, by the homotypic fraction or local
 entropy of its nearest cells and their counterparts against the slide's
-composition, or by clusters from three of the studies here. It was built for the
+composition, by its hypergeometric colocalization excess, or by clusters from
+three of the studies here. It was built for the
 [chromatic-domains pilot](../gtex-liver-chromatic-domains/README.md) on
 2026-11-23 and moved to this folder on 2026-11-24, since the later studies use it
 too.
@@ -44,7 +45,14 @@ on its own.
   many cohort slides have one; the other slides are drawn on a blank canvas. The
   cells' coordinates are the slide's level-0 pixels.
 - **Tests.** `../gtex-liver-chromatic-domains/.venv/bin/python -m pytest -q -W error`
-  runs `test_viewer.py`: 34 tests on synthetic inputs, about 2 s.
+  runs `test_viewer.py` and `test_local_colocalization.py`: 51 tests on
+  synthetic inputs, about 3 s.
+- **Colocalization scale.** The colocalization excess needs
+  `results/colocalization_scale.json`, which `fit_colocalization.py` writes from
+  every cohort cell (reading the cohort read only). With the same venv, from this
+  folder: `../gtex-liver-chromatic-domains/.venv/bin/python fit_colocalization.py`
+  (6.7 min and a peak RSS of 3.5 GB on the M4; the JSON is tracked). Without it,
+  that colouring is off.
 
 ## What it shows
 
@@ -172,6 +180,41 @@ neighbourhood values) share two menus:
 Changing either resets the legend's toggles of the value colourings, since the
 bins change with them. The slider and the class curves keep their own scales.
 
+### Colocalization excess
+
+"Colocalization excess" colours every cell by the hypergeometric count excess of
+its k nearest other cells (`local_colocalization.py`), adapted from a
+radius-graph specification after spicyR v2's conditional random labelling and
+room normalisation to the viewer's k nearest neighbours (Simon, 2026-11-24):
+
+- **The null.** For a cell of type B and a neighbour type A, the count o of A
+  among its k neighbours is set against random labelling of the slide's other
+  N − 1 cells, the cell's own position, label and k held fixed: hypergeometric,
+  with q = n′ / (N − 1), where n′ is the slide's count of A less the cell itself
+  when A = B, mean e = k q and variance v = k q (1 − q) (N − 1 − k) / (N − 2).
+- **The scale.** Y = (o − e) / R, where the room R is k (1 − q) on the gain scale
+  and k q on the loss scale. Each (B, A) pair's scale is fixed by the sign of its
+  excess summed over all 594 cohort slides at the same k (`fit_colocalization.py`,
+  for k = 2 to 100 and both label sets), never cell by cell or slide by slide.
+  Y is not clipped, so that its null mean stays 0.
+- **Shrunk or raw** (the menu beside it): shrunk, the default, pulls each cell's
+  Y toward its (B, A) group's pooled excess over room on the slide, by
+  τ² / (τ² + s²) with s² = v / R² and τ² the group's DerSimonian–Laird
+  between-cell variance (0 below 5 valid cells), so noisy estimates count less.
+  Raw is Y itself; a cell without an estimate, where the null has no variance
+  (A missing among the slide's other cells, or all of them), is grey.
+- **Excess of** (the menu): the cell's own type, the default, or any one type or
+  class. k and the label set are the neighbourhood controls'.
+
+It is coloured in 11 bins of 0.2 about 0 (−0.1 to +0.1 in the neutral grey) on
+the diverging scale, or as the colour menus set. The panel at the top right gives
+the shown slide's pooled excess by focal type (rows) and neighbour type
+(columns): the precision-weighted mean of the cells' raw Y (`summarize_cloud`),
+on the diverging scale even about 0 up to the largest value; hovering a square
+gives its value with its standard error, the median shrunk Y and the pair's
+scale. The server computes a slide, k and label set on first use (about 1.3 s on
+the largest slide, 725,038 cells, at k = 15 by type) and keeps the last two.
+
 ### Pathology notes and donor
 
 The box under the slide list shows the slide's pathology group, its donor's sex,
@@ -249,6 +292,7 @@ All read only:
 | `../gtex-liver-pathology-slices/results/pathology.csv` | each slide's group, GTEx pathology categories and notes, and quality flag |
 | `../gtex-liver-chromatic-domains/results/pilot.csv` and `features.npz` | the 30 pilot slides and their sampled centres' features |
 | `../gtex-liver-emeans-neighbourhoods/results/labels_<set>.npz`, `clusters.json`, `gap.json`, `kmeans_check.json` | the saved e-means labels and their summaries; without them, that option is off |
+| `results/colocalization_scale.json` | the cohort's summed excess per k, label set and (focal, neighbour) pair, which fixes each pair's scale; without it, that option is off |
 | the slide files in `--wsi-dir` | the H&E tiles (OpenSlide DeepZoom, 256 px, no overlap) |
 
 ## Code
@@ -259,13 +303,21 @@ All read only:
   types, binary), `/api/density/<id>` (each cell's density and its bin,
   binary), `/api/voronoi/<id>` (each cell's Voronoi density and its bin,
   binary), `/api/neighbourhood/<id>?k=&by=` (each cell's homotypic fraction,
-  local entropy, homotypic excess and KL divergence, and their bins, binary), `/api/cluster/<id>?k=&density=&radius=`,
-  `/api/tda/<id>?k=`, `/api/emeans/<id>?set=&k=` and
-  `/api/tile/<id>/<level>/<col>_<row>.jpeg`. The
+  local entropy, homotypic excess and KL divergence, and their bins, binary),
+  `/api/colocalization/<id>?k=&by=&of=&score=` (each cell's colocalization
+  excess and its bin, binary), `/api/colocalization/<id>/summary?k=&by=` (the
+  pooled matrix), `/api/cluster/<id>?k=&density=&radius=`, `/api/tda/<id>?k=`,
+  `/api/emeans/<id>?set=&k=` and `/api/tile/<id>/<level>/<col>_<row>.jpeg`. The
   last four slides' cells, Voronoi densities, neighbourhood values and slide
-  files stay in memory.
+  files stay in memory, and the last two colocalization excesses.
+- `local_colocalization.py`: `LocalColocalizationExtractor` (fit, transform,
+  summarize_cloud), numpy and scipy only, with `test_local_colocalization.py`
+  (the null by Monte Carlo over 200,000 relabellings, self-exclusion, small
+  clouds, cells at one position, background cells, the frozen fit, shrinkage,
+  the cohort sums); `fit_colocalization.py`, the cohort fit.
 - `static/`: `index.html` (the page and its styles), `app.js` (the slide list,
   the controls and the OpenSeadragon canvas), `overlay.js` (the WebGL point
   layer, from cosine_viewer's `WsiGLOverlay`), `curves.js` (the class-curves
-  panel) and `palette.js` (the type, class and cluster colours).
+  panel), `matrix.js` (the colocalization matrix) and `palette.js` (the colour
+  maps).
 - `test_viewer.py`, the server's tests.

@@ -511,6 +511,8 @@ coloured by:
 - the homotypic fraction and the local Shannon entropy of its k nearest cells,
   by type or by class, and against the slide's composition their excess over
   chance and their Kullback–Leibler divergence;
+- the hypergeometric count excess of each neighbour type among those cells,
+  on a gain/loss scale fitted over the cohort and shrunk within the slide;
 - composition clusters computed on the fly for one slide;
 - the chromatic-domains pilot's TDA features;
 - the saved e-means clusters of study 6.

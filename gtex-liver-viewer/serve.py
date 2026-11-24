@@ -6,9 +6,10 @@ chosen k and radius, or, on that pilot's 30 slides, the 1,500 sampled centres by
 features (level 2), or colours every cell by its saved cohort-wide e-means cluster (gtex-liver-emeans-neighbourhoods).
 Every cell can also be coloured by its 10-nearest-neighbour density, binned at the cohort's deciles, or by its
 Voronoi density (1 / the area of its Voronoi cell) in the same bins, or by its homotypic fraction or local
-Shannon entropy among its k nearest other cells, and the cells below a 10-NN density threshold can be hidden in
-every layer. The shown slide's GTEx pathology notes and its
-donor's sex, age bracket and Hardy scale are shown.
+Shannon entropy among its k nearest other cells, or by its hypergeometric colocalization excess there
+(local_colocalization.py, on the scale fit_colocalization.py fitted over the cohort), and the cells below a
+threshold of the colouring's value can be hidden. The shown slide's GTEx pathology notes and its donor's sex,
+age bracket and Hardy scale are shown.
 
 Adapted from ``tissuegeometry/web/cosine_viewer`` (its DeepZoom tile serving and WebGL point overlay) without
 its local-homology endpoints, its FastAPI backend or its tissuegraphs and Rust imports.
@@ -26,7 +27,8 @@ rows, and every cell's density, memory-mapped) and ``pathology.csv`` (each slide
 categories and notes), the cohort table ``liver_cohort.csv`` beside the ``.h5ad`` (each donor's sex, age
 bracket and Hardy scale), the chromatic-domains study's ``results/pilot.csv`` and ``results/features.npz``,
 the e-means study's ``results/labels_<set>.npz``, ``clusters.json``, ``gap.json`` and ``kmeans_check.json``
-(the e-means option is off when they are not there), and the slide files.
+(the e-means option is off when they are not there), this folder's ``results/colocalization_scale.json``
+(the colocalization option is off without it), and the slide files.
 Nothing is written.
 """
 
@@ -49,6 +51,8 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 import numpy as np
 import pandas as pd
+
+from local_colocalization import LocalColocalizationExtractor
 
 HERE = Path(__file__).resolve().parent
 # The chromatic-domains study's common module: the cohort's paths, the four classes and the pilot's constants.
@@ -89,7 +93,12 @@ UNIT_BINS = 10  # both values lie in [0, 1], coloured in bins of 0.1
 # type, in 11 bins of 0.2 around chance (0), and the Kullback-Leibler divergence in nats, in steps of KL_STEP.
 EXCESS_EDGES = np.array([-0.9, -0.7, -0.5, -0.3, -0.1, 0.1, 0.3, 0.5, 0.7, 0.9])
 KL_STEP = 0.25
-API = 2  # what /api/meta and the endpoints give; app.js refuses a server with another, as one started before an update
+API = 3  # what /api/meta and the endpoints give; app.js refuses a server with another, as one started before an update
+# Colocalization excess: fit_colocalization.py's cohort sums, which fix each pair's gain or loss scale per k.
+COLOCALIZATION = HERE / "results" / "colocalization_scale.json"
+COLOCALIZATION_NONE = len(EXCESS_EDGES) + 1  # the code of a cell without an estimate, after the 11 excess bins
+COLOCALIZATION_CACHE = 2  # (slide, k, label set) whose cell-by-type excess (up to 80 MB each) stays in memory
+COLOCALIZATION_SCORES = ("shrunk", "raw")
 STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css"}
 
 
@@ -334,6 +343,50 @@ def neighbourhood_blob(values: list[np.ndarray], codes: list[np.ndarray]) -> byt
         + b"".join(np.ascontiguousarray(v, dtype="<f4").tobytes() for v in values)
         + b"".join(np.ascontiguousarray(c, dtype=np.uint8).tobytes() for c in codes)
     )
+
+
+def load_colocalization(path: Path) -> dict | None:
+    """fit_colocalization.py's summed excess as arrays, per label set: ``labels``, ``pair`` (k, K, K) and
+    ``target`` (k, K), with the ``k`` they are for and the slides they sum; None without the file."""
+    if not path.is_file():
+        return None
+    data = json.loads(path.read_text())
+    out: dict = {"k": [int(k) for k in data["k"]], "n_slides": int(data["n_slides"])}
+    for by, fit in data["label_sets"].items():
+        pair = np.asarray(fit["pair_excess"], dtype=np.float64)
+        target = np.asarray(fit["target_excess"], dtype=np.float64)
+        n = len(fit["labels"])
+        if pair.shape != (len(out["k"]), n, n) or target.shape != (len(out["k"]), n):
+            raise ValueError(f"{path.name}: {by}'s sums are {pair.shape} and {target.shape} for {n} labels")
+        out[by] = {"labels": list(fit["labels"]), "pair": pair, "target": target}
+    return out
+
+
+def colocalization_request(query: dict[str, list[str]], n_labels: dict[str, int]) -> tuple[int, str, int | None, str]:
+    """k, the label set, the neighbour type (None: the cell's own) and the score (``COLOCALIZATION_SCORES``) of a
+    colocalization request's query; ``ValueError`` if invalid."""
+    k, by = neighbourhood_request(query)
+    of = query.get("of", ["own"])[0]
+    target = None
+    if of != "own":
+        try:
+            target = int(of)
+        except ValueError:
+            raise ValueError("of must be own or the index of a type") from None
+        if not 0 <= target < n_labels[by]:
+            raise ValueError(f"of must be own or from 0 to {n_labels[by] - 1}")
+    score = query.get("score", ["shrunk"])[0]
+    if score not in COLOCALIZATION_SCORES:
+        raise ValueError(f"score must be one of {', '.join(COLOCALIZATION_SCORES)}")
+    return k, by, target, score
+
+
+def colocalization_codes(values: np.ndarray) -> np.ndarray:
+    """``excess_codes`` of each value, and ``COLOCALIZATION_NONE`` where it is NaN (no estimate)."""
+    codes = np.full(len(values), COLOCALIZATION_NONE, dtype=np.uint8)
+    some = np.isfinite(values)
+    codes[some] = excess_codes(values[some])
+    return codes
 
 
 def threshold_curve(curve: np.ndarray, levels: np.ndarray, deciles: np.ndarray) -> np.ndarray:
@@ -652,6 +705,9 @@ class Cohort:
         self._density: OrderedDict[str, bytes] = OrderedDict()  # slide ID -> its cells' densities and bins
         self._voronoi: OrderedDict[str, bytes] = OrderedDict()  # slide ID -> its cells' Voronoi densities and codes
         self._neighbourhood: OrderedDict[tuple, bytes] = OrderedDict()  # (slide ID, k, label set) -> both values
+        self._colocalization: OrderedDict[tuple, dict] = OrderedDict()  # (slide ID, k, label set) -> excess
+        self.colocalization_fit = load_colocalization(COLOCALIZATION)  # None without fit_colocalization.py's
+        self.n_labels = {"types": len(self.types), "classes": len(c.CLASSES)}
         n_cohort = int(self.slides["end"].max())
         self.rho = npz_memmap(c.SIB / "density.npz", "rho")  # every cohort cell's 10-NN density, cells per mm²
         with np.load(c.SIB / "density.npz", allow_pickle=False) as density:
@@ -709,6 +765,15 @@ class Cohort:
                 "kl_step": KL_STEP,
             },
             "api": API,
+            "colocalization": None
+            if self.colocalization_fit is None
+            else {
+                "k_min": min(self.colocalization_fit["k"]),
+                "k_max": max(self.colocalization_fit["k"]),
+                "n_slides": self.colocalization_fit["n_slides"],
+                "none": COLOCALIZATION_NONE,
+                "labels": {by: self.colocalization_fit[by]["labels"] for by in LABEL_SETS},
+            },
             "emeans": None
             if self.emeans_sets is None
             else [
@@ -889,6 +954,69 @@ class Cohort:
         with self._lock:
             return remember(self._voronoi, slide_id, blob, CACHE)
 
+    def colocalization(self, slide_id: str, k: int, by: str) -> dict:
+        """The slide's colocalization excess among every cell's k nearest other cells, by HistoPLUS type or by
+        class: ``LocalColocalizationExtractor`` on the cohort's pair scale for this k (fit_colocalization.py),
+        shrunk toward the slide's pooled excess. Keys: ``codes`` (each cell's label), ``shrunk`` and ``raw`` ((N, K)
+        float32), ``summary`` (``summarize_cloud``) and ``gain`` ((K, K) bool, the pair scale)."""
+        fit = self.colocalization_fit
+        if fit is None:
+            raise KeyError("colocalization: results/colocalization_scale.json is missing (fit_colocalization.py)")
+        if k not in fit["k"]:
+            raise ValueError(f"the cohort fit has k from {min(fit['k'])} to {max(fit['k'])}")
+        key = (slide_id, k, by)
+        with self._lock:
+            if key in self._colocalization:
+                self._colocalization.move_to_end(key)
+                return self._colocalization[key]
+        cells = self.cells(slide_id)
+        codes = cells["types"].astype(np.int64)
+        if by == "classes":
+            codes = self.type_class[codes]
+        n_labels = self.n_labels[by]
+        j = fit["k"].index(k)
+        extractor = LocalColocalizationExtractor.fitted(
+            list(range(n_labels)), fit[by]["pair"][j], fit[by]["target"][j], n_neighbors=k, dtype=np.float32
+        )
+        result = extractor.transform([(cells["xy"], codes)])[0]
+        entry = {
+            "codes": codes,
+            "shrunk": result.Y_shrunk,
+            "raw": result.Y_raw,
+            "summary": extractor.summarize_cloud(result, codes),
+            "gain": extractor.gain_mask_[:n_labels],
+        }
+        with self._lock:
+            return remember(self._colocalization, key, entry, COLOCALIZATION_CACHE)
+
+    def colocalization_values(self, slide_id: str, k: int, by: str, target: int | None, score: str) -> bytes:
+        """Each cell's excess of one neighbour type (``target``; None: the cell's own) as ``density_blob``, with
+        ``colocalization_codes``."""
+        entry = self.colocalization(slide_id, k, by)
+        matrix = entry[score]
+        codes = entry["codes"]
+        values = matrix[np.arange(len(codes)), codes] if target is None else matrix[:, target]
+        return density_blob(values, colocalization_codes(values))
+
+    def colocalization_summary(self, slide_id: str, k: int, by: str) -> dict:
+        """The slide's pooled excess by (focal, neighbour) type for the page's matrix, NaN as null."""
+        entry = self.colocalization(slide_id, k, by)
+        summary = entry["summary"]
+
+        def rows(a: np.ndarray) -> list:
+            return [[round(float(x), 4) if np.isfinite(x) else None for x in row] for row in a]
+
+        return {
+            "k": k,
+            "by": by,
+            "labels": self.colocalization_fit[by]["labels"],
+            "pooled_excess": rows(summary["pooled_excess"]),
+            "pooled_variance": rows(summary["pooled_variance"]),
+            "median": rows(summary["quantiles"][1]),
+            "n_cells": summary["n_cells"].tolist(),
+            "gain": entry["gain"].tolist(),
+        }
+
     def neighbourhood(self, slide_id: str, k: int, by: str) -> bytes:
         """Every cell's homotypic fraction and local entropy among its k nearest other cells, by HistoPLUS type or
         by class (``by``), with their bins, as ``neighbourhood_blob``; computed on first use."""
@@ -1028,6 +1156,16 @@ def make_handler(cohort: Cohort) -> type[BaseHTTPRequestHandler]:
                 self.send(HTTPStatus.OK, cohort.density(parts[2]), "application/octet-stream")
             elif len(parts) == 3 and parts[:2] == ["api", "voronoi"] and parts[2] in cohort.by_id:
                 self.send(HTTPStatus.OK, cohort.voronoi(parts[2]), "application/octet-stream")
+            elif len(parts) == 3 and parts[:2] == ["api", "colocalization"] and parts[2] in cohort.by_id:
+                k, by, target, score = colocalization_request(query, cohort.n_labels)
+                blob = cohort.colocalization_values(parts[2], k, by, target, score)
+                self.send(HTTPStatus.OK, blob, "application/octet-stream")
+            elif len(parts) == 4 and parts[:2] == ["api", "colocalization"] and parts[3] == "summary" and (
+                parts[2] in cohort.by_id
+            ):
+                k, by = neighbourhood_request(query)
+                summary = json.dumps(cohort.colocalization_summary(parts[2], k, by)).encode()
+                self.send(HTTPStatus.OK, summary, "application/json")
             elif len(parts) == 3 and parts[:2] == ["api", "neighbourhood"] and parts[2] in cohort.by_id:
                 k, by = neighbourhood_request(query)
                 self.send(HTTPStatus.OK, cohort.neighbourhood(parts[2], k, by), "application/octet-stream")
@@ -1069,6 +1207,8 @@ def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     cohort = Cohort(args.wsi_dir)
     print(f"{len(cohort.slides)} slides, {len(cohort.types)} cell types", flush=True)
+    if cohort.colocalization_fit is None:
+        print(f"no colocalization: {COLOCALIZATION} is missing (fit_colocalization.py writes it)", flush=True)
     if cohort.emeans_sets is None:
         print(f"no e-means clusters: the e-means study's results are not in {EMEANS}", flush=True)
     if args.wsi_dir is not None:
