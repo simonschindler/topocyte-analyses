@@ -60,11 +60,14 @@ on its own.
 
 The slide list is filtered by pathology group (the pathology study's eight
 groups in `pathology.csv`). The cells are coloured by HistoPLUS cell type or by
-the four classes (epithelial, stromal, immune, other). The 14 type colours are
-shades of their class's colour, so the legend's toggles and its "only" buttons
-tell neighbouring types apart. The scale bar in µm (1, 2 or 5 × 10^k) uses the
-slide file's pixel size where there is one, else the cohort's assumed 0.4942 µm
-per pixel; the status line says which.
+the four classes (epithelial, stromal, immune, other), in viridis's hues to sit
+with the value colourings' default map: epithelial in its blue, stromal in its
+teal-green, immune in its yellow (brightest on the dark canvas, so that the rare
+immune cells stand out) and other in grey. Each type takes a hue near its
+class's (`palette.js` gives the checks), and the legend's toggles and its "only"
+buttons tell neighbouring types apart. The scale bar in µm (1, 2 or 5 × 10^k)
+uses the slide file's pixel size where there is one, else the cohort's assumed
+0.4942 µm per pixel; the status line says which.
 
 ### Density and the threshold slider
 

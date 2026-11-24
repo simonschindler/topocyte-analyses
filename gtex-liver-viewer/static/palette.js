@@ -1,33 +1,37 @@
 // Colours of the four classes and the 14 HistoPLUS types, one set per background (light: light theme or H&E;
-// dark: dark theme without H&E).
+// dark: dark theme without H&E), in viridis's hues, to sit with the value colourings' default map.
 //
-// Classes: categorical slots 1-3 of the dataviz reference palette (blue, aqua, orange), with "other" as a
-// neutral grey (the palette's fold for "Other"). Validated with the dataviz skill's validate_palette.js on all
-// pairs, as a scatter needs: worst CVD ΔE 9.2 light / 9.4 dark (target 8), worst normal-vision ΔE 21.8 light /
-// 20.9 dark (floor 15). The grey fails the chroma floor by design.
-//
-// Types: each type is a shade of its class's colour (OKLCH lightness and hue steps), in the order below;
-// adjacent shades clear CVD ΔE 9.9 and normal-vision ΔE 14.9–15.0 at worst. Fourteen colours cannot all stay
-// apart in one scatter (no palette can), so the legend's per-type toggles and solo are part of the encoding.
+// Classes: epithelial in viridis's blue (OKLCH hue 260), stromal in its teal-green (166) and immune in its yellow
+// (102), with "other" a neutral grey (the dataviz palette's fold for "Other"). Each type takes a hue of viridis's,
+// or next to its yellow end, near its class's: epithelial blue and purple; stromal teal-green, blue-teal, green and
+// teal; immune yellow, lime, gold, olive and amber; the greys as before. Lightness and chroma were searched per
+// background inside the dataviz lightness band (light 0.43-0.77, dark 0.48-0.67) for the widest separation, except
+// that on the dark canvas the immune shades run brighter (L up to 0.90), as viridis's yellow end, so that the rare
+// immune cells stand out. Checked with the dataviz skill's validate_palette.js: the classes on all pairs, as a
+// scatter needs, worst CVD ΔE 10.2 light / 13.6 dark (target 8), worst normal-vision ΔE 16.3 / 16.8 (floor 15);
+// the types on adjacent pairs, worst CVD ΔE 9.4 / 10.6 and normal-vision ΔE 15.8 / 16.1. The greys fail the chroma
+// floor by design, and on the dark canvas the bright immune shades (and the light grey, as before) the band.
+// Fourteen colours cannot all stay apart in one scatter (no palette can), so the legend's per-type toggles and
+// solo are part of the encoding.
 
 export const PALETTE = {
   classes: {
-    light: { epithelial: "#2a78d6", stromal: "#1baf7a", immune: "#eb6834", other: "#52514e" },
-    dark: { epithelial: "#3987e5", stromal: "#199e70", immune: "#d95926", other: "#c3c2b7" },
+    light: { epithelial: "#5179b9", stromal: "#22ac81", immune: "#baa800", other: "#52514e" },
+    dark: { epithelial: "#638bcd", stromal: "#00a075", immune: "#f2e04f", other: "#c3c2b7" },
   },
   types: {
     light: {
-      "Epithelial": "#2a78d6", "Cancer cell": "#6641ac",
-      "Fibroblasts": "#1baf7a", "Endothelial Cell": "#077971", "Muscle Cell": "#66cd87", "Minor Stromal Cell": "#0696ab",
-      "Lymphocytes": "#eb6834", "Macrophages": "#af3005", "Neutrophils": "#fc9a0e", "Plasmocytes": "#d84e77",
-      "Eosinophils": "#c5a600",
+      "Epithelial": "#5179b9", "Cancer cell": "#6c318b",
+      "Fibroblasts": "#22ac81", "Endothelial Cell": "#006b91", "Muscle Cell": "#286000", "Minor Stromal Cell": "#009191",
+      "Lymphocytes": "#baa800", "Macrophages": "#3f5c00", "Neutrophils": "#9a6d00", "Plasmocytes": "#afb53d",
+      "Eosinophils": "#ad5f00",
       "Red blood cell": "#52514e", "Apoptotic Body": "#807f7b", "Mitotic Figures": "#b0afac",
     },
     dark: {
-      "Epithelial": "#3987e5", "Cancer cell": "#7250bb",
-      "Fibroblasts": "#199e70", "Endothelial Cell": "#036a64", "Muscle Cell": "#5dbc7e", "Minor Stromal Cell": "#0e869a",
-      "Lymphocytes": "#d95926", "Macrophages": "#9a2501", "Neutrophils": "#e78d14", "Plasmocytes": "#c63f6a",
-      "Eosinophils": "#b49703",
+      "Epithelial": "#638bcd", "Cancer cell": "#7b409b",
+      "Fibroblasts": "#00a075", "Endothelial Cell": "#007199", "Muscle Cell": "#307100", "Minor Stromal Cell": "#009898",
+      "Lymphocytes": "#f2e04f", "Macrophages": "#8cbb40", "Neutrophils": "#b07d00", "Plasmocytes": "#b8be48",
+      "Eosinophils": "#bd6900",
       "Red blood cell": "#c3c2b7", "Apoptotic Body": "#919086", "Mitotic Figures": "#626158",
     },
   },
