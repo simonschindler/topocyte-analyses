@@ -14,17 +14,22 @@ from __future__ import annotations
 
 import itertools
 import json
+import math
 import pathlib
 import pickle
 import subprocess
+import warnings
 
 import numpy as np
 import pytest
 import ripser
+import topocyte as tc
 
+import betti
 import common as c
 import fetch_upstream
 import inputs as inp
+import oracles
 import safe_pickle
 import wasserstein as ws
 
@@ -196,6 +201,83 @@ def test_w2_matrix_does_not_depend_on_n_jobs():
     rng = np.random.default_rng(3)
     diagrams = [_random_diagram(rng, n, 1) for n in rng.integers(0, 8, 12)]
     assert np.array_equal(ws.w2_matrix(diagrams, n_jobs=2), ws.w2_matrix(diagrams))
+
+
+def _overlaps(diagrams: list[np.ndarray]) -> np.ndarray:
+    """The matrix of ``oracles.overlap`` between every two of ``diagrams``."""
+    return np.array([[oracles.overlap(a, b) for b in diagrams] for a in diagrams])
+
+
+def test_curves_hold_the_finite_bars_shifted_and_refuse_a_nan_death():
+    (curve,) = betti.curves([np.array([[1.0, np.inf], [0.0, 2.0], [-1.0, 0.5]])], 1, shift=3.0)
+    assert (curve.dim, curve.essential.size) == (1, 0)
+    assert np.array_equal(curve.births, [2.0, 3.0]) and np.array_equal(curve.deaths, [3.5, 5.0])
+    with pytest.raises(ValueError, match="invalid bar"):
+        betti.curves([np.array([[0.0, np.nan]])], 0)
+
+
+def test_gram_is_the_sum_of_bar_overlaps():
+    # Births and lengths U(0, 1) and one essential bar each; the two diagrams without a finite bar give zero rows.
+    rng = np.random.default_rng(4)
+    diagrams = [_random_diagram(rng, n, 1) for n in (0, 1, 4, 7, 3, 0, 5)]
+    np.testing.assert_allclose(betti.gram(betti.curves(diagrams, 1), 1), _overlaps(diagrams), rtol=1e-12, atol=0)
+
+
+def test_shift_makes_the_gram_full_line():
+    # Births U(-2, 1) and lengths U(0, 3): some bars lie below 0, some cross it, some lie above it.
+    rng = np.random.default_rng(5)
+    diagrams = [3 * _random_diagram(rng, n, 1) - 2 for n in (6, 3, 0, 8, 5)]
+    s = math.ceil(-min(d[:, 0].min() for d in diagrams))  # FLUID_SHIFT's rule: every value is then at least 0
+    G, G10 = (betti.gram(betti.curves(diagrams, 0, shift), 0) for shift in (s, s + 10))
+    np.testing.assert_allclose(G10, G, rtol=1e-12, atol=0)
+    np.testing.assert_allclose(G, _overlaps(diagrams), rtol=1e-12, atol=0)
+    assert not np.allclose(betti.gram(betti.curves(diagrams, 0), 0), G)  # unshifted, the parts below 0 are lost
+
+
+def test_unshifted_negative_bars_lose_their_part_below_zero():
+    # topocyte's rule: its inner product integrates over [0, inf), so the bar [-2, 1) counts as [0, 1).
+    bar = np.array([[-2.0, 1.0]])
+    assert tc.ph.betti_norm(tc.ph.BettiCurve(bar, dim=1), dim=1) == pytest.approx(1.0)
+    assert math.sqrt(oracles.overlap(bar, bar)) == pytest.approx(math.sqrt(3))  # the full-line norm
+
+
+def test_l2_matrix_is_the_overlap_distance():
+    rng = np.random.default_rng(6)
+    diagrams = [_random_diagram(rng, n, 1) for n in (0, 5, 2, 0, 7, 4)]
+    curves = betti.curves(diagrams, 1)
+    L, full = betti.l2_matrix(curves, 1), _overlaps(diagrams)
+    # ‖f − g‖² = ⟨f, f⟩ + ⟨g, g⟩ − 2⟨f, g⟩; the two diagrams without a finite bar are at distance 0
+    np.testing.assert_allclose(L, np.sqrt(full.diagonal()[:, None] + full.diagonal() - 2 * full), rtol=1e-9, atol=0)
+    assert np.array_equal(L, L.T) and not L.diagonal().any()
+    # every entry is topocyte's direct L² distance, not one from the Gram matrix
+    assert np.array_equal(L, [[tc.ph.betti_l2_distance(f, g, dim=1) for g in curves] for f in curves])
+
+
+def test_fpca_scores_reproduce_topocyte_fit_and_transform():
+    # Gate G3's oracle: topocyte's own fit on the training curves and transform of the test curves.
+    rng = np.random.default_rng(7)
+    for h in (0, 1):
+        train, test = np.split(rng.permutation(30), [20])
+        sizes = rng.integers(1, 8, 30)
+        sizes[[train[0], test[0]]] = 0  # a curve without a finite bar in each set
+        curves = betti.curves([_random_diagram(rng, n, 1) for n in sizes], h)
+        S_train, S_test = betti.fpca_scores(betti.gram(curves, h), train, test)
+        model = tc.ph.FPCA(dim=h, eigen_solver="dense").fit([curves[i] for i in train])
+        expected = (model.result_.scores, model.transform([curves[i] for i in test]))
+        assert model.n_components_ == 19 and S_train.shape == (20, 19) and S_test.shape == (10, 19)
+        for mine, theirs in zip((S_train, S_test), expected, strict=True):
+            np.testing.assert_allclose(mine, theirs, rtol=0, atol=c.G3_TOL * np.abs(theirs).max())
+
+
+def test_fpca_scores_of_an_all_empty_dimension_has_no_columns():
+    # Review Focus 2: training curves without a finite bar give a rank-0 fPCA, with no division by √0.
+    empty = [np.empty((0, 2)), np.array([[0.5, np.inf]]), np.array([[0.0, np.inf], [0.2, np.inf]])]
+    diagrams = [*empty, np.array([[0.1, np.inf]]), np.array([[0.0, 1.0], [0.3, np.inf]])]
+    G = betti.gram(betti.curves(diagrams, 1), 1)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        S_train, S_test = betti.fpca_scores(G, np.arange(3), np.arange(3, 5))
+    assert S_train.shape == (3, 0) and S_test.shape == (2, 0)
 
 
 @needs_upstream
