@@ -1,6 +1,8 @@
-// Class curves over the 10-NN density threshold, for the shown slide: how the cells of each class thin out as
-// the threshold rises. The x axis is the threshold slider's scale, the cohort's density quantiles in steps of 0.1
-// percentile, with the deciles (the density slices) exact at every hundredth step.
+// Class curves over the threshold slider's scale, for the shown slide: how the cells of each class thin out as the
+// threshold rises on the attribute the slider thresholds. For the 10-NN density (its own colouring, and the type,
+// class and cluster colourings) the x axis is the cohort's density quantiles in steps of 0.1 percentile, with the
+// deciles (the density slices) exact at every hundredth step; for any other value colouring, the shown slide's
+// own quantiles of that value, in the same steps.
 //
 // Views:
 //   stacked: of the slide's cells, the share that is of each class and at or above the threshold, stacked, so the
@@ -8,8 +10,9 @@
 //   among:   of the cells at or above the threshold, the share in each class (the curves add up to 1);
 //   own:     of each class's cells, the share at or above the threshold (each curve falls from 1).
 //
-// The counts follow the overlay's rule: by density bin where the bins differ (the server bins in float64) and by
-// float32 density inside the threshold's own bin, so at the density slices they are the studies' kept counts.
+// The counts follow the overlay's rule. For the density: by density bin where the bins differ (the server bins in
+// float64) and by float32 density inside the threshold's own bin, so at the density slices they are the studies'
+// kept counts. For another value: by its float32 value, a cell without one below every threshold but the first.
 
 export const VIEWS = {
   stacked: "Stacked: share of the slide's cells kept, by class",
@@ -71,6 +74,18 @@ export function classCounts({ classes, bins, rho, nClasses, curve, deciles }) {
   return counts;
 }
 
+// counts[k][s]: the slide's cells of class k at or above thresholds[s], by float32 values as the overlay compares
+// them (values: a cell without one at the lowest float, so it counts only where the threshold is that low).
+export function valueClassCounts({ classes, values, nClasses, thresholds }) {
+  const size = new Int32Array(nClasses);
+  for (let i = 0; i < classes.length; i++) size[classes[i]] += 1;
+  const groups = Array.from(size, (m) => new Float32Array(m));
+  const fill = new Int32Array(nClasses);
+  for (let i = 0; i < classes.length; i++) groups[classes[i]][fill[classes[i]]++] = values[i];
+  groups.forEach((g) => g.sort());
+  return groups.map((g) => Float64Array.from(thresholds, (t) => g.length - lowerBound(g, t)));
+}
+
 // Each class's curve in a view, as arrays over the steps (NaN where undefined).
 export function viewValues(view, counts, nCells) {
   if (view === "stacked") return counts.map((c) => Array.from(c, (v) => v / nCells));
@@ -89,11 +104,12 @@ function el(name, attributes = {}, style = {}) {
 }
 
 export class CurvesPanel {
-  // parts: the panel's chart container, legend, tooltip, view select and threshold-to-text function.
-  constructor({ chart, legend, tip, select, describe }) {
-    Object.assign(this, { chart, legend, tip, select, describe });
+  // parts: the panel's chart container, legend, tooltip and view select.
+  constructor({ chart, legend, tip, select }) {
+    Object.assign(this, { chart, legend, tip, select });
     this.view = "stacked";
     this.data = null;
+    this.axis = { caption: "", ticks: [] }; // the x axis' caption and its labels at every tenth of it
     this.colours = null;
     this.names = null;
     this.marker = 0;
@@ -102,10 +118,20 @@ export class CurvesPanel {
     select.addEventListener("change", () => { this.view = select.value; this.render(); });
   }
 
-  // counts from classCounts, the slide's cell count, the class names and the threshold curve.
-  setData(data) { this.data = data; this.render(); }
+  // counts (classCounts or valueClassCounts), the slide's cell count nCells, the x axis' caption and its labels
+  // at every tenth of it (ticks, 11 strings), and describe(s), the head of the hover box at step s.
+  setData(data) {
+    this.data = data;
+    this.axis = { caption: data.caption, ticks: data.ticks };
+    this.render();
+  }
 
-  clear() { this.data = null; this.render(); }
+  // No curves, while the values to threshold load; the caption names the attribute.
+  clear(caption = this.axis.caption) {
+    this.data = null;
+    this.axis = { caption, ticks: [] };
+    this.render();
+  }
 
   setColours(colours, names) { this.colours = colours; this.names = names; this.render(); }
 
@@ -117,12 +143,13 @@ export class CurvesPanel {
 
   render() {
     this.tip.hidden = true;
-    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "img" });
+    const svg = el("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "img" }, { overflow: "visible" });
     this.svg = svg;
-    for (let p = 0; p <= 100; p += 10) {
-      svg.append(el("line", { x1: this.x(p), x2: this.x(p), y1: M.top, y2: H - M.bottom }, { stroke: "var(--rule)" }));
-      const label = el("text", { x: this.x(p), y: H - M.bottom + 12, "text-anchor": "middle" });
-      label.textContent = String(p);
+    for (let j = 0; j <= 10; j++) {
+      const x = this.x(10 * j);
+      svg.append(el("line", { x1: x, x2: x, y1: M.top, y2: H - M.bottom }, { stroke: "var(--rule)" }));
+      const label = el("text", { x, y: H - M.bottom + 12, "text-anchor": "middle" });
+      label.textContent = this.axis.ticks[j] ?? "";
       svg.append(label);
     }
     for (const v of [0, 0.25, 0.5, 0.75, 1]) {
@@ -132,7 +159,7 @@ export class CurvesPanel {
       svg.append(label);
     }
     const caption = el("text", { x: (M.left + W - M.right) / 2, y: H - 3, "text-anchor": "middle" });
-    caption.textContent = "threshold: cohort density percentile (every 10 = a density slice)";
+    caption.textContent = this.axis.caption;
     svg.append(caption);
     if (this.data && this.colours) this.drawCurves(svg);
     this.markerLine = el("line", { y1: M.top, y2: H - M.bottom }, { stroke: "var(--ink)", strokeDasharray: "3 3" });
@@ -218,7 +245,7 @@ export class CurvesPanel {
     const rows = this.names.map((name, k) => `<div><span class="sw" style="background:${this.colours[k]}"></span>`
       + `${name} ${pct(values[k][s])}</div>`);
     if (this.view === "stacked") rows.push(`<div>kept ${pct(values.reduce((sum, v) => sum + v[s], 0))}</div>`);
-    this.tip.innerHTML = `<div class="tip-head">${this.describe(s)}</div>${rows.join("")}`;
+    this.tip.innerHTML = `<div class="tip-head">${this.data.describe(s)}</div>${rows.join("")}`;
     this.tip.hidden = false;
     const left = ((this.x(p) / W) * box.width) + (p > 55 ? -this.tip.offsetWidth - 10 : 10);
     this.tip.style.left = `${left + this.chart.offsetLeft}px`;

@@ -1,6 +1,6 @@
 // The viewer's page: the slide list filtered by pathology group, an OpenSeadragon canvas (the slide's H&E
 // tiles, or a blank canvas of the cloud's size) and the WebGL layer of the slide's cells.
-import { CurvesPanel, binOf, classCounts } from "/static/curves.js";
+import { CurvesPanel, binOf, classCounts, valueClassCounts } from "/static/curves.js";
 import { MatrixPanel } from "/static/matrix.js";
 import { PointsOverlay } from "/static/overlay.js";
 import { CLUSTERS, DENSITY, PALETTE, colourScale, rgb } from "/static/palette.js";
@@ -26,6 +26,7 @@ const state = {
   info: null, // /api/slide/<id> of the shown slide
   counts: null, // cells per type code on the shown slide
   types: null, // the shown slide's type code per cell
+  classes: null, // the shown slide's class code per cell, for the class curves
   clusters: null, // /api/cluster/<id> of the shown slide, with its labels decoded
   density: null, // the shown slide's density bin per cell (/api/density/<id>)
   rho: null, // the shown slide's 10-NN density per cell, float32
@@ -920,8 +921,18 @@ function thresholdSource() {
 
 const thresholdArrays = new WeakMap(); // a layer's values -> the overlay's bins (all 0) and values (none: LOWEST)
 
+// What the overlay thresholds for a value layer: its values as float32, a cell without one at LOWEST, all in bin 0.
+function thresholdArraysOf(source) {
+  if (!thresholdArrays.has(source)) {
+    const values = Float32Array.from(source, (v) => (Number.isNaN(v) ? LOWEST : v));
+    thresholdArrays.set(source, { bins: new Uint8Array(source.length), values });
+  }
+  return thresholdArrays.get(source);
+}
+
 // Give the overlay what the slider thresholds: the 10-NN density's cohort bins and densities (exact at the density
-// slices), or the colouring's own values, where a cell without one is below every threshold.
+// slices), or the colouring's own values, where a cell without one is below every threshold. The class curves
+// follow.
 function syncThreshold() {
   if (!overlay || !state.density) return;
   const on = thresholdOf();
@@ -929,14 +940,11 @@ function syncThreshold() {
   if (on === "density") {
     overlay.setThresholdValues(state.density, state.rho);
   } else if (source) {
-    if (!thresholdArrays.has(source)) {
-      const values = Float32Array.from(source, (v) => (Number.isNaN(v) ? LOWEST : v));
-      thresholdArrays.set(source, { bins: new Uint8Array(source.length), values });
-    }
-    const { bins, values } = thresholdArrays.get(source);
+    const { bins, values } = thresholdArraysOf(source);
     overlay.setThresholdValues(bins, values);
   }
   state.thresholdSource = source;
+  updateCurves();
   applyThreshold();
 }
 
@@ -983,18 +991,24 @@ function applyThreshold() {
     + `${(step / 10).toFixed(1)}${slice}): ${fmt(shown)} of ${fmt(n)} cells shown (${((100 * shown) / n).toFixed(1)}%).`;
 }
 
+// A value layer's threshold at a slider step: the slide's quantile at step / 1000 as float32, LOWEST at step 0.
+function valueThreshold(sorted, step) {
+  return step === 0 || !sorted.length ? LOWEST : Math.fround(quantile(sorted, step / 1000));
+}
+
 function applyValueThreshold(on, step) {
-  curves?.setMarker(0); // the class curves run over the 10-NN density, not this
   const values = valuesOf(on);
   if (!values || state.thresholdSource !== values) {
     overlay?.setThreshold(0, LOWEST);
+    curves?.setMarker(0);
     $("threshold-note").textContent = "";
     return;
   }
   const sorted = sortedOf(values);
   const n = values.length;
-  const t = step === 0 || !sorted.length ? LOWEST : Math.fround(quantile(sorted, step / 1000));
+  const t = valueThreshold(sorted, step);
   overlay?.setThreshold(0, t);
+  curves?.setMarker(step / 10);
   if (step === 0) {
     $("threshold-note").textContent = `No threshold: every cell is shown (${fmt(n)}).`;
     return;
@@ -1005,6 +1019,71 @@ function applyValueThreshold(on, step) {
   const none = n - sorted.length ? `; the ${fmt(n - sorted.length)} cells without a value are hidden` : "";
   $("threshold-note").textContent = `≥ ${valueText(on, t, width)}${unit ? ` ${unit}` : ""} (this slide's percentile `
     + `${(step / 10).toFixed(1)}): ${fmt(shown)} of ${fmt(n)} cells shown (${((100 * shown) / n).toFixed(1)}%)${none}.`;
+}
+
+// --- class curves -----------------------------------------------------------------------------------------
+
+const curveData = new WeakMap(); // a threshold source's values -> its class curves over the slider's steps
+
+// The caption of the class curves' x axis for the attribute the slider thresholds.
+function curvesCaption(on) {
+  if (on === "density") return "threshold: cohort density percentile (every 10 = a density slice)";
+  const { name, unit } = VALUES[on];
+  const short = unit === "cells per mm²" ? "cells/mm²" : unit;
+  return `threshold: ${name}${short ? ` (${short})` : ""}, at this slide's percentiles`;
+}
+
+// A tick label: the value as its layer prints it, shortened from 10,000 on (12.3K).
+function tickText(layer, v) {
+  if (Math.abs(v) < 1e4) return valueText(layer, v, 0);
+  return new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 }).format(v);
+}
+
+// The class curves over the 10-NN density: the slider's cohort quantiles, counted by the overlay's rule.
+function densityCurves() {
+  const { curve, deciles } = state.meta.density;
+  const nClasses = state.meta.classes.length;
+  const counts = classCounts({ classes: state.classes, bins: state.density, rho: state.rho, nClasses, curve, deciles });
+  return {
+    counts,
+    nCells: state.classes.length,
+    caption: curvesCaption("density"),
+    ticks: Array.from({ length: 11 }, (_, j) => String(10 * j)),
+    describe: (s) => `percentile ${(s / 10).toFixed(1)} · ≥ ${fmt(Math.round(curve[s]))} cells per mm²`,
+  };
+}
+
+// The class curves over a value colouring: the slider's thresholds, the shown slide's quantiles of the values, with
+// the values at its deciles as the ticks.
+function valueCurves(on, source) {
+  const sorted = sortedOf(source);
+  const thresholds = Array.from(state.meta.density.curve, (_, s) => valueThreshold(sorted, s));
+  const counts = valueClassCounts({
+    classes: state.classes, values: thresholdArraysOf(source).values, nClasses: state.meta.classes.length, thresholds,
+  });
+  const { unit } = VALUES[on];
+  const width = sorted.length ? (sorted[sorted.length - 1] - sorted[0]) / 1000 : 0;
+  const at = (s) => (s === 0 ? "no threshold" : `≥ ${valueText(on, thresholds[s], width)}${unit ? ` ${unit}` : ""}`);
+  return {
+    counts,
+    nCells: state.classes.length,
+    caption: curvesCaption(on),
+    ticks: Array.from({ length: 11 }, (_, j) => (sorted.length ? tickText(on, quantile(sorted, j / 10)) : "")),
+    describe: (s) => `${at(s)} · this slide's percentile ${(s / 10).toFixed(1)}`,
+  };
+}
+
+// The class curves on the slider's scale for the attribute it thresholds, once its values are here.
+function updateCurves() {
+  if (!curves) return;
+  const on = thresholdOf();
+  const source = state.thresholdSource;
+  if (!source || !state.classes) {
+    curves.clear(curvesCaption(on));
+    return;
+  }
+  if (!curveData.has(source)) curveData.set(source, on === "density" ? densityCurves() : valueCurves(on, source));
+  curves.setData(curveData.get(source));
 }
 
 // --- scale bar --------------------------------------------------------------------------------------------
@@ -1076,6 +1155,7 @@ async function loadSlide(id) {
       state.info = info;
       state.counts = counts;
       state.types = types;
+      state.classes = Uint8Array.from(types, (t) => state.meta.type_class[t]);
       state.density = bins;
       state.rho = rho;
       state.densityCounts = binCounts;
@@ -1093,11 +1173,6 @@ async function loadSlide(id) {
       overlay.setPoints(xy, shownCodes, bins, rho);
       state.thresholdSource = rho;
       syncThreshold();
-      const classes = new Uint8Array(n);
-      for (let i = 0; i < n; i++) classes[i] = state.meta.type_class[types[i]];
-      const { curve, deciles } = state.meta.density;
-      const nClasses = state.meta.classes.length;
-      curves.setData({ counts: classCounts({ classes, bins, rho, nClasses, curve, deciles }), nCells: n });
       $("hne").disabled = !info.wsi;
       applyHne();
       applyColors();
@@ -1211,12 +1286,9 @@ async function init() {
   clearClusters();
   $("threshold").addEventListener("input", applyThreshold);
   curves = new CurvesPanel({
-    chart: $("curves-chart"),
-    legend: $("curves-legend"),
-    tip: $("curves-tip"),
-    select: $("curves-view"),
-    describe: (s) => `percentile ${(s / 10).toFixed(1)} · ≥ ${fmt(Math.round(state.meta.density.curve[s]))} cells per mm²`,
+    chart: $("curves-chart"), legend: $("curves-legend"), tip: $("curves-tip"), select: $("curves-view"),
   });
+  updateCurves(); // the caption until a slide is here
   curves.setColours(classColours(), state.meta.classes);
   $("curves-close").addEventListener("click", () => showCurves(false));
   $("curves-open").addEventListener("click", () => showCurves(true));

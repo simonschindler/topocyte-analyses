@@ -229,10 +229,17 @@ as a tooltip.
 ### Class curves
 
 The panel in the slide view's bottom-right corner (it can be closed and
-reopened) draws, for the shown slide, how each class thins out as the 10-NN
-density threshold rises, on the slider's scale for that density, with the
-slider's threshold marked while the slider is on the 10-NN density. Its menu has
-three views:
+reopened) draws, for the shown slide, how each class thins out as the slider's
+threshold rises, on the slider's scale for the attribute it thresholds, with the
+slider's threshold marked:
+
+- under the 10-NN density, type, class and cluster colourings, the 10-NN
+  density on the cohort's percentiles, every 10 a density slice;
+- under every other value colouring, that value on the shown slide's own
+  percentiles, the ticks giving the value at each tenth. The stack's height then
+  falls about evenly by construction, so the composition is what changes.
+
+Its menu has three views:
 
 - **stacked** (the default): of the slide's cells, the share that is of each
   class and at or above the threshold, stacked, so the stack starts at 1 and its
@@ -244,11 +251,11 @@ three views:
   threshold (each curve falls from 1).
 
 Hovering gives the values at a threshold. The counts are computed in the
-browser from the densities and bins the slider uses, by the same rule, so at
-the density slices they are the studies' kept counts. The
+browser from the values the slider compares, by the same rule, so at the
+density slices they are the studies' kept counts. The
 [class-curve study](../gtex-liver-class-curves-fpca/README.md) runs a functional
-PCA on the counts behind them, the cells of each class at or above every
-threshold.
+PCA on the counts behind the density curves, the cells of each class at or
+above every threshold.
 
 ### Clusters
 
