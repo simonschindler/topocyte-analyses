@@ -756,13 +756,21 @@ async function showVoronoi() {
   if ($("layer-voronoi").checked) setLayer("voronoi");
 }
 
+// The per-cell codes the overlay holds now. Compared with this, not with the codes of the layer shown before: a
+// lazy layer's new values (another k, label set or neighbour type) replace its codes before setLayer runs.
+let shownCodes = null;
+
+function uploadCodes(codes) {
+  if (!overlay || !codes || codes === shownCodes) return;
+  overlay.setCodes(codes);
+  shownCodes = codes;
+}
+
 function setLayer(layer) {
-  const before = codesOf(state.layer);
   state.layer = layer;
   document.querySelector(`input[name=layer][value=${layer}]`).checked = true;
   $("matrix").hidden = layer !== "coloc" || state.matrixClosed;
-  const codes = codesOf(layer);
-  if (overlay && codes && codes !== before) overlay.setCodes(codes);
+  uploadCodes(codesOf(layer));
   if (thresholdSource() !== state.thresholdSource) syncThreshold();
   applyColors();
 }
@@ -872,7 +880,7 @@ async function runClusters() {
       for (let i = 0; i < centres.length; i++) labels[rows.getUint32(4 * i, true)] = centres[i];
     }
     if (labels.length !== state.types.length) throw new Error(`${labels.length} labels for ${state.types.length} cells`);
-    if (state.layer === "clusters") overlay.setCodes(state.types); // the old labels leave before the new ones come
+    if (state.layer === "clusters") uploadCodes(state.types); // the old labels leave before the new ones come
     state.layer = "types";
     state.clusters = { ...result, labels };
     state.hidden.clusters.clear();
@@ -1079,7 +1087,8 @@ async function loadSlide(id) {
       clearClusters();
       overlay ??= new PointsOverlay(viewer, CELL_UM / info.um_per_px);
       overlay.cellPx = CELL_UM / info.um_per_px;
-      overlay.setPoints(xy, codesOf(state.layer), bins, rho);
+      shownCodes = codesOf(state.layer);
+      overlay.setPoints(xy, shownCodes, bins, rho);
       state.thresholdSource = rho;
       syncThreshold();
       const classes = new Uint8Array(n);
@@ -1177,7 +1186,7 @@ async function init() {
     state.scale = { map: $("cmap").value, mode: $("scale-mode").value, from, to };
     VALUE_LAYERS.forEach((layer) => state.hidden[layer].clear()); // the bins, and so the toggles, change
     const codes = VALUE_LAYERS.includes(state.layer) ? codesOf(state.layer) : null;
-    if (overlay && codes) overlay.setCodes(codes);
+    uploadCodes(codes);
     applyColors();
   };
   for (const id of ["cmap", "scale-mode", "pct-from", "pct-to"]) $(id).addEventListener("change", rescale);
