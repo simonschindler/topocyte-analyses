@@ -3,8 +3,8 @@
 A browser viewer of the GTEx liver cohort's cells (594 slides, 126,219,124
 cells). It shows any slide's point cloud, on its H&E where the slide file is at
 hand, coloured by HistoPLUS cell type, by the cell-type study's four classes, by
-10-nearest-neighbour density, or by clusters from three of the studies here. It
-was built for the
+10-nearest-neighbour or Voronoi density, or by clusters from three of the
+studies here. It was built for the
 [chromatic-domains pilot](../gtex-liver-chromatic-domains/README.md) on
 2026-11-23 and moved to this folder on 2026-11-24, since the later studies use it
 too.
@@ -40,7 +40,7 @@ the internet.
   many cohort slides have one; the other slides are drawn on a blank canvas. The
   cells' coordinates are the slide's level-0 pixels.
 - **Tests.** `../gtex-liver-chromatic-domains/.venv/bin/python -m pytest -q -W error`
-  runs `test_viewer.py`: 22 tests on synthetic inputs, about 2 s.
+  runs `test_viewer.py`: 27 tests on synthetic inputs, about 2 s.
 
 ## What it shows
 
@@ -65,11 +65,29 @@ runs light to dark (dark to light on the dark canvas), so low densities fade
 into the background. The densities are memory-mapped from the uncompressed
 `density.npz` rather than loaded (1 GB for the cohort).
 
-The slider under the legend hides every cell below a density threshold, in any
-colouring. It runs over the cohort's density quantiles in steps of 0.1
-percentile (the pathology study's quantile curve), and its ten marked steps are
-the deciles, so at those steps it shows exactly the cells of density slices 0
-to 9; the note under it gives the threshold and the cells shown.
+"Voronoi density" colours every cell by 1 / the area of its Voronoi cell among
+the slide's cells, in cells per mm² at the same 0.4942 µm per pixel, in the same
+ten bins (values below the second decile fall in the first bin, values from the
+top decile on in the last), so the two colourings compare bin for bin. The
+server computes it for the shown slide on first use, exactly, from the Delaunay
+triangulation (`scipy.spatial.Delaunay`): a bounded Voronoi cell is the polygon
+of the circumcentres of the triangles around its cell, of area
+(1/8) Σ (cot α + cot β) |ab|² over the cell's Delaunay edges ab, where α and β
+are the angles opposite ab (`voronoi_areas`; the tests check it against scipy's
+Voronoi polygons and on square and hexagonal lattices). A cell on the convex
+hull of the slide's cells has an unbounded Voronoi cell, and cells at one
+position share theirs: these have no value and are drawn grey ("no Voronoi
+cell"). On the largest slide (725,038 cells) the densities took 2.4 s, 44 cells
+had none, and the median was 3,261 cells per mm², against 3,060 for the 10-NN
+density. Cells next to empty space, at the tissue's edges or around a gap in it,
+have large Voronoi cells and so low densities.
+
+The slider under the legend hides every cell below a 10-NN density threshold, in
+any colouring, the Voronoi density's included. It runs over the cohort's density
+quantiles in steps of 0.1 percentile (the pathology study's quantile curve), and
+its ten marked steps are the deciles, so at those steps it shows exactly the
+cells of density slices 0 to 9; the note under it gives the threshold and the
+cells shown.
 
 ### Pathology notes and donor
 
@@ -155,9 +173,10 @@ All read only:
   data endpoints are `/api/meta` (the groups, types, classes, settings, density
   deciles and slide table), `/api/slide/<id>`, `/api/cells/<id>` (positions and
   types, binary), `/api/density/<id>` (each cell's density and its bin,
+  binary), `/api/voronoi/<id>` (each cell's Voronoi density and its bin,
   binary), `/api/cluster/<id>?k=&density=&radius=`, `/api/tda/<id>?k=`,
   `/api/emeans/<id>?set=&k=` and `/api/tile/<id>/<level>/<col>_<row>.jpeg`. The
-  last four slides' cells and slide files stay in memory.
+  last four slides' cells, Voronoi densities and slide files stay in memory.
 - `static/`: `index.html` (the page and its styles), `app.js` (the slide list,
   the controls and the OpenSeadragon canvas), `overlay.js` (the WebGL point
   layer, from cosine_viewer's `WsiGLOverlay`), `curves.js` (the class-curves

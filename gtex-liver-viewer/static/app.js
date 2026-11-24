@@ -23,8 +23,9 @@ const state = {
   density: null, // the shown slide's density bin per cell (/api/density/<id>)
   rho: null, // the shown slide's 10-NN density per cell, float32
   densityCounts: null, // cells per density bin on the shown slide
-  layer: "types", // "types" | "classes" | "clusters" | "density"
-  hidden: { types: new Set(), classes: new Set(), clusters: new Set(), density: new Set() },
+  voronoi: null, // the shown slide's Voronoi density codes and cells per code (/api/voronoi/<id>), once fetched
+  layer: "types", // "types" | "classes" | "clusters" | "density" | "voronoi"
+  hidden: { types: new Set(), classes: new Set(), clusters: new Set(), density: new Set(), voronoi: new Set() },
 };
 let viewer = null;
 let overlay = null;
@@ -99,6 +100,28 @@ function legendEntries() {
       title: densityTitle(j),
     }));
   }
+  if (state.layer === "voronoi") {
+    const none = state.meta.density.voronoi_none;
+    const counts = state.voronoi?.counts;
+    return [
+      ...DENSITY[mode].map((hex, j) => ({
+        key: j,
+        label: densityRange(j),
+        hex,
+        n: counts ? counts[j] : 0,
+        title: `Voronoi density in cohort decile ${j + 1} of the 10-NN density: `
+          + `${densityRange(j, " to ")} cells per mm².`,
+      })),
+      {
+        key: none,
+        label: "no Voronoi cell",
+        hex: GREY[mode],
+        n: counts ? counts[none] : 0,
+        title: "On the convex hull of the slide's cells, where the Voronoi cell is unbounded, or at the position of "
+          + "another cell, which shares it.",
+      },
+    ];
+  }
   if (state.layer === "clusters") {
     const { emeans } = state.clusters;
     const entries = state.clusters.clusters.map((cluster, j) => ({
@@ -148,6 +171,14 @@ function applyColors() {
   const table = new Float32Array(16 * 4);
   if (state.layer === "density") {
     DENSITY[mode].forEach((hex, j) => table.set([...rgb(hex), state.hidden.density.has(j) ? 0 : 1], j * 4));
+    overlay?.setColors(table);
+    renderLegend();
+    return;
+  }
+  if (state.layer === "voronoi") {
+    const none = state.meta.density.voronoi_none;
+    DENSITY[mode].forEach((hex, j) => table.set([...rgb(hex), state.hidden.voronoi.has(j) ? 0 : 1], j * 4));
+    table.set([...rgb(GREY[mode]), state.hidden.voronoi.has(none) ? 0 : 1], none * 4);
     overlay?.setColors(table);
     renderLegend();
     return;
@@ -229,12 +260,20 @@ function renderLegend() {
     return row;
   }));
   const note = $("legend-note");
-  note.hidden = state.layer !== "density";
-  if (!note.hidden) {
+  note.hidden = state.layer !== "density" && state.layer !== "voronoi";
+  if (state.layer === "density") {
     const { k_nn: k, um_per_px: um } = state.meta.density;
     note.textContent = `Each cell's ${k}-nearest-neighbour density in cells per mm² (the pathology study's `
       + `density.npz, at ${um} µm per pixel), in the cohort's ten deciles: the thresholds of the density slices. `
       + "Low densities fade into the background.";
+  }
+  if (state.layer === "voronoi") {
+    const { um_per_px: um, voronoi_none: none } = state.meta.density;
+    note.textContent = "Each cell's Voronoi density, 1 / the area of its Voronoi cell among the slide's cells, in "
+      + `cells per mm² (at ${um} µm per pixel, as the 10-NN density), in the same bins: the cohort's ten deciles `
+      + `of the 10-NN density. ${fmt(state.voronoi.counts[none])} cells have no Voronoi cell of their own (grey): `
+      + "on the convex hull it is unbounded, and cells at one position share theirs. Cells at the edge of the "
+      + "tissue have large Voronoi cells, so low densities. The slider still hides by 10-NN density.";
   }
 }
 
@@ -304,7 +343,42 @@ function renderSlides() {
 function codesOf(layer) {
   if (layer === "clusters") return state.clusters?.labels ?? null;
   if (layer === "density") return state.density;
+  if (layer === "voronoi") return state.voronoi?.codes ?? null;
   return state.types;
+}
+
+// /api/voronoi/<id>: [n u32][n f32 Voronoi density][n u8 code], the code VORONOI_NONE for cells without one.
+function parseVoronoi(buffer, n) {
+  if (new DataView(buffer).getUint32(0, true) !== n) throw new Error("Voronoi densities for another number of cells");
+  const codes = new Uint8Array(buffer, 4 + 4 * n, n);
+  const counts = new Array(state.meta.density.voronoi_none + 1).fill(0);
+  for (let i = 0; i < n; i++) counts[codes[i]] += 1;
+  return { codes, counts };
+}
+
+// The Voronoi layer: the server triangulates the shown slide's cells on first use, which takes a few seconds on
+// a large slide; the layer switches once the densities are here, if it is still the one chosen.
+async function showVoronoi() {
+  const id = state.slide;
+  if (!state.info || state.info.slide_id !== id) return; // the slide's own open handler calls again
+  const note = $("legend-note");
+  if (!state.voronoi) {
+    note.hidden = false;
+    note.textContent = `Computing the Voronoi cells of ${fmt(state.info.n_cells)} cells …`;
+    try {
+      const buffer = await fetchOk(`/api/voronoi/${encodeURIComponent(id)}`).then((r) => r.arrayBuffer());
+      if (state.slide !== id) return;
+      state.voronoi = parseVoronoi(buffer, state.types.length);
+    } catch (err) {
+      if (state.slide !== id) return;
+      document.querySelector(`input[name=layer][value=${state.layer}]`).checked = true;
+      renderLegend();
+      note.hidden = false;
+      note.textContent = `Could not compute the Voronoi densities: ${err.message}`;
+      return;
+    }
+  }
+  if ($("layer-voronoi").checked) setLayer("voronoi");
 }
 
 function setLayer(layer) {
@@ -543,6 +617,9 @@ async function loadSlide(id) {
       state.density = bins;
       state.rho = rho;
       state.densityCounts = binCounts;
+      state.voronoi = null; // fetched for this slide when its layer is chosen
+      const voronoi = state.layer === "voronoi" || $("layer-voronoi").checked;
+      if (state.layer === "voronoi") state.layer = "types"; // until this slide's Voronoi densities are here
       updateMethod();
       clearClusters();
       overlay ??= new PointsOverlay(viewer, CELL_UM / info.um_per_px);
@@ -559,6 +636,10 @@ async function loadSlide(id) {
       applyColors();
       updateScaleBar();
       setStatus(slideStatus(info));
+      if (voronoi) {
+        $("layer-voronoi").checked = true; // clearClusters checked the layer shown meanwhile
+        showVoronoi();
+      }
     });
     viewer.addOnceHandler("open-failed", (event) => {
       if (state.slide === id) setStatus(`Could not open ${id}: ${event.message}`);
@@ -590,7 +671,7 @@ async function init() {
   $("hne-only").addEventListener("change", renderSlides);
   $("slides").addEventListener("change", (event) => loadSlide(event.target.value));
   document.querySelectorAll("input[name=layer]").forEach((radio) => radio.addEventListener("change", () => {
-    setLayer(radio.value);
+    if (radio.value === "voronoi") showVoronoi(); else setLayer(radio.value);
   }));
   $("emeans-set").replaceChildren(...(state.meta.emeans ?? []).map((s) => new Option(
     `${s.name} (${s.columns} columns, k̂ ${s.k_tibshirani})`, s.name,

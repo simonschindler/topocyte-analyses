@@ -4,8 +4,9 @@ or by the cell-type study's four classes, with the slides filtered by pathology 
 also clusters every cell by the composition of its ball (the chromatic-domains pilot's level-1 features) with a
 chosen k and radius, or, on that pilot's 30 slides, the 1,500 sampled centres by their saved chromatic TDA
 features (level 2), or colours every cell by its saved cohort-wide e-means cluster (gtex-liver-emeans-neighbourhoods).
-Every cell can also be coloured by its 10-nearest-neighbour density, binned at the cohort's deciles, and the
-cells below a density threshold can be hidden in every layer. The shown slide's GTEx pathology notes and its
+Every cell can also be coloured by its 10-nearest-neighbour density, binned at the cohort's deciles, or by its
+Voronoi density (1 / the area of its Voronoi cell) in the same bins, and the cells below a 10-NN density
+threshold can be hidden in every layer. The shown slide's GTEx pathology notes and its
 donor's sex, age bracket and Hardy scale are shown.
 
 Adapted from ``tissuegeometry/web/cosine_viewer`` (its DeepZoom tile serving and WebGL point overlay) without
@@ -77,6 +78,7 @@ WORSE = 0.002  # log ratio of W_k above which a fit is named worse than k-means+
 PACKED = 3  # (set, k) whose packed labels of every cohort cell (63 MB each) stay in memory
 DENSITY_BINS = 10  # the density layer's bins: the cohort's deciles of the 10-NN density, the density slices
 CURVE_STEPS = 1000  # the threshold slider's steps: the cohort's density quantiles at levels 0, 0.001, ..., 1
+VORONOI_NONE = DENSITY_BINS  # the code of a cell without a Voronoi density, after the ten density bins
 STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css"}
 
 
@@ -161,6 +163,60 @@ def density_blob(rho: np.ndarray, bins: np.ndarray) -> bytes:
         + np.ascontiguousarray(rho, dtype="<f4").tobytes()
         + np.ascontiguousarray(bins, dtype=np.uint8).tobytes()
     )
+
+
+def voronoi_areas(xy: np.ndarray) -> np.ndarray:
+    """The area of each point's Voronoi cell among the points ``xy`` (n × 2), in squared units of ``xy``.
+
+    NaN where a point has no cell of its own: on the convex hull its cell is unbounded, and points at one
+    position share theirs. Exact on the Delaunay triangulation (``scipy.spatial.Delaunay``): a bounded cell is
+    the polygon of the circumcentres of the triangles around its point, of area (1/8) Σ (cot α + cot β) |ab|²
+    over the point's edges ab, where α and β are the angles opposite ab; the sum is taken triangle by triangle.
+    Fewer than three points, or points on one line, give NaN everywhere.
+    """
+    from scipy.spatial import Delaunay, QhullError
+
+    q = np.asarray(xy, dtype=np.float64)
+    n = len(q)
+    area = np.full(n, np.nan)
+    if n < 3:
+        return area
+    q = q - q.mean(axis=0)
+    try:
+        tri = Delaunay(q)
+    except QhullError:  # no three points off one line
+        return area
+    corners = q[tri.simplices]  # triangles × 3 × 2
+    e1, e2 = corners[:, 1] - corners[:, 0], corners[:, 2] - corners[:, 0]
+    twice = np.abs(e1[:, 0] * e2[:, 1] - e1[:, 1] * e2[:, 0])  # twice each triangle's area
+    flat = twice == 0
+    total = np.zeros(n)
+    for a in range(3):
+        b, d = (a + 1) % 3, (a + 2) % 3
+        u, v = corners[:, b] - corners[:, a], corners[:, d] - corners[:, a]
+        cot = np.where(flat, 0.0, (u * v).sum(axis=1) / np.where(flat, 1.0, twice))  # the angle at corner a
+        share = cot * ((corners[:, d] - corners[:, b]) ** 2).sum(axis=1) / 8  # to both ends of the edge opposite a
+        total += np.bincount(tri.simplices[:, b], share, n) + np.bincount(tri.simplices[:, d], share, n)
+    none = np.zeros(n, dtype=bool)
+    none[tri.convex_hull.ravel()] = True
+    none[tri.coplanar[:, 0]] = True  # left out of the triangulation: at (or within rounding of) a vertex's position
+    none[tri.coplanar[:, 2]] = True  # that vertex
+    none[tri.simplices[flat].ravel()] = True
+    area[~none] = total[~none]
+    return area
+
+
+def voronoi_density(xy: np.ndarray, um_per_px: float) -> np.ndarray:
+    """Each cell's Voronoi density, 1 / the area of its Voronoi cell, in cells per mm²; NaN where it has none."""
+    return 1e6 / (voronoi_areas(xy) * um_per_px**2)
+
+
+def voronoi_codes(rho: np.ndarray, deciles: np.ndarray) -> np.ndarray:
+    """Each cell's bin by ``density_codes``' rule on the 10-NN deciles, and ``VORONOI_NONE`` where ``rho`` is NaN."""
+    codes = np.full(len(rho), VORONOI_NONE, dtype=np.uint8)
+    some = np.isfinite(rho)
+    codes[some] = density_codes(rho[some], deciles)
+    return codes
 
 
 def threshold_curve(curve: np.ndarray, levels: np.ndarray, deciles: np.ndarray) -> np.ndarray:
@@ -477,6 +533,7 @@ class Cohort:
         self.emeans_sets = load_emeans(EMEANS)  # None without the e-means study's results
         self._packed: OrderedDict[tuple, np.ndarray] = OrderedDict()  # (set, k) -> packed labels of every cell
         self._density: OrderedDict[str, bytes] = OrderedDict()  # slide ID -> its cells' densities and bins
+        self._voronoi: OrderedDict[str, bytes] = OrderedDict()  # slide ID -> its cells' Voronoi densities and codes
         n_cohort = int(self.slides["end"].max())
         self.rho = npz_memmap(c.SIB / "density.npz", "rho")  # every cohort cell's 10-NN density, cells per mm²
         with np.load(c.SIB / "density.npz", allow_pickle=False) as density:
@@ -523,6 +580,7 @@ class Cohort:
                 "k_nn": self.k_nn,
                 "um_per_px": self.density_um_per_px,
                 "curve": self.curve.tolist(),
+                "voronoi_none": VORONOI_NONE,
             },
             "emeans": None
             if self.emeans_sets is None
@@ -692,6 +750,18 @@ class Cohort:
         with self._lock:
             return remember(self._density, slide_id, blob, CACHE)
 
+    def voronoi(self, slide_id: str) -> bytes:
+        """Every cell's Voronoi density (``voronoi_density``, at the 10-NN density's µm per px; NaN without one)
+        and code (``voronoi_codes``) on the slide, as ``density_blob``; computed on first use."""
+        with self._lock:
+            if slide_id in self._voronoi:
+                self._voronoi.move_to_end(slide_id)
+                return self._voronoi[slide_id]
+        rho = voronoi_density(self.cells(slide_id)["xy"], self.density_um_per_px)
+        blob = density_blob(rho, voronoi_codes(rho, self.deciles))
+        with self._lock:
+            return remember(self._voronoi, slide_id, blob, CACHE)
+
     def packed(self, name: str, k: int) -> np.ndarray:
         """The e-means study's packed labels of every cohort cell for one set and k."""
         key = (name, k)
@@ -803,6 +873,8 @@ def make_handler(cohort: Cohort) -> type[BaseHTTPRequestHandler]:
                 self.send(HTTPStatus.OK, json.dumps(cohort.tda(parts[2], k)).encode(), "application/json")
             elif len(parts) == 3 and parts[:2] == ["api", "density"] and parts[2] in cohort.by_id:
                 self.send(HTTPStatus.OK, cohort.density(parts[2]), "application/octet-stream")
+            elif len(parts) == 3 and parts[:2] == ["api", "voronoi"] and parts[2] in cohort.by_id:
+                self.send(HTTPStatus.OK, cohort.voronoi(parts[2]), "application/octet-stream")
             elif len(parts) == 3 and parts[:2] == ["api", "emeans"] and parts[2] in cohort.by_id:
                 name, k = emeans_request(query)
                 self.send(HTTPStatus.OK, json.dumps(cohort.emeans(parts[2], name, k)).encode(), "application/json")

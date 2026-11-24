@@ -224,6 +224,63 @@ def test_density_blob_layout():
         serve.density_blob(rho[:2], bins)
 
 
+def test_voronoi_areas_of_a_square_lattice_are_its_squares_and_the_hull_has_none():
+    # 7 × 7 points 3 px apart, far from the origin: every four neighbours are cocircular, the triangulation's
+    # worst case, and the 24 points on the outer square (corners and edges alike) have unbounded cells.
+    grid = np.arange(7) * 3.0 + 40_000.5
+    xy = np.array([(x, y) for x in grid for y in grid])
+    area = serve.voronoi_areas(xy)
+    border = np.isin(xy[:, 0], grid[[0, -1]]) | np.isin(xy[:, 1], grid[[0, -1]])
+    assert border.sum() == 24 and np.all(np.isnan(area[border]))
+    np.testing.assert_allclose(area[~border], 9.0, rtol=1e-9)
+
+
+def test_voronoi_areas_of_a_hexagonal_lattice_are_its_hexagons():
+    s = 2.0
+    xy = np.array([(i * s + (j % 2) * s / 2, j * s * np.sqrt(3) / 2) for j in range(9) for i in range(9)])
+    area = serve.voronoi_areas(xy)
+    inner = [9 * j + i for j in range(2, 7) for i in range(2, 7)]
+    np.testing.assert_allclose(area[inner], s * s * np.sqrt(3) / 2, rtol=1e-9)
+
+
+def test_voronoi_areas_are_scipys_voronoi_polygons():
+    from scipy.spatial import ConvexHull, Voronoi
+
+    xy = np.random.default_rng(3).uniform(0, 500, size=(400, 2))
+    vor = Voronoi(xy)
+    expected = np.full(len(xy), np.nan)
+    for i, r in enumerate(vor.point_region):
+        region = vor.regions[r]
+        if region and -1 not in region:
+            expected[i] = ConvexHull(vor.vertices[region]).volume
+    area = serve.voronoi_areas(xy)
+    assert np.array_equal(np.isnan(area), np.isnan(expected)) and np.isfinite(area).sum() > 350
+    np.testing.assert_allclose(area, expected, rtol=1e-9)
+
+
+def test_voronoi_areas_leave_out_shared_positions_and_need_three_points_off_a_line():
+    xy = np.random.default_rng(4).uniform(0, 100, size=(60, 2))
+    twin = np.vstack([xy, xy[[30]]])  # a 61st cell at the 31st cell's position: neither has a cell of its own
+    area = serve.voronoi_areas(twin)
+    assert np.isnan(area[30]) and np.isnan(area[60])
+    np.testing.assert_allclose(np.delete(area[:60], 30), np.delete(serve.voronoi_areas(xy), 30), rtol=1e-12)
+    assert np.all(np.isnan(serve.voronoi_areas(xy[:2])))
+    assert np.all(np.isnan(serve.voronoi_areas(np.array([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0], [3.0, 3.0]]))))
+    assert serve.voronoi_areas(np.zeros((0, 2))).shape == (0,)
+
+
+def test_voronoi_density_is_cells_per_mm2_and_its_codes_mark_cells_without_one():
+    grid = np.arange(5) * 3.0
+    xy = np.array([(x, y) for x in grid for y in grid])
+    rho = serve.voronoi_density(xy, um_per_px=0.5)  # a 3 px square is 1.5 µm on a side
+    np.testing.assert_allclose(rho[12], 1e6 / 1.5**2, rtol=1e-9)
+    assert np.isnan(rho[0])
+    deciles = np.array([5.0, 10, 20, 30, 40, 50, 60, 70, 80, 90])
+    codes = serve.voronoi_codes(np.array([0.5, np.nan, 15.0, 1e9]), deciles)
+    assert codes.dtype == np.uint8 and codes.tolist() == [0, serve.VORONOI_NONE, 1, 9]
+    assert serve.VORONOI_NONE == serve.DENSITY_BINS
+
+
 def test_threshold_curve_puts_the_deciles_at_every_hundredth_step():
     levels = np.linspace(0, 1, serve.CURVE_STEPS + 1)
     curve = 1000 * levels**2
