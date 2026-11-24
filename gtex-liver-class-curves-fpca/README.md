@@ -47,7 +47,7 @@ eight pathology groups better.
 
 `design.md` holds the question, Simon's rulings and the rule; `plan.md` the implementation plan; `progress.md` the
 ledger of what ran; `report.html` each group's mean curves, the dropped slides, the fractions of variance, the chosen
-k, the holdout model's score spaces (scatter plots by pathology group) and the readouts.
+k, the holdout fit's score spaces, the curves' and D+C's (scatter plots by pathology group), and the readouts.
 
 ## Results
 

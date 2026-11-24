@@ -18,8 +18,9 @@ Four results no stage saved are computed here, and used by no verdict:
 - each block's fractions of variance, from ``folds.BlockFPCA`` fitted on all development slides;
 - the holdout model's score spaces on the development slides: the holdout stage's filter, eight block fPCAs and
   MFA, fitted again with ``folds`` (asserted to drop the slides ``holdout.npz`` records and to give
-  ``folds.curve_space``'s scores), and a UMAP of its weighted blocks with the cell-type study's settings, for the
-  scatter plots by pathology group;
+  ``folds.curve_space``'s scores), and a UMAP of its weighted blocks with the cell-type study's settings, beside
+  D+C's space for its D+C arm (the features standardized as its classifier standardizes them, their principal
+  components on the kept slides, and a UMAP), for the scatter plots by pathology group;
 - post hoc, the per-repeat paired difference of the curves at the chosen k minus D+C: the mean over the repeats of
   each repeat's macro AUC difference, with the 2.5 and 97.5 percentiles over the readouts' bootstrap draws
   (``stratified_bootstrap``, 4000, ``default_rng(12345)``), each draw scoring every repeat on its slides
@@ -328,6 +329,20 @@ def variance_fractions(grams: dict[str, np.ndarray], dev: np.ndarray) -> dict[st
     return out
 
 
+def agrees(a: np.ndarray, b: np.ndarray) -> bool:
+    """Equal up to the order of floating-point summation: the same arithmetic, done again."""
+    return a.shape == b.shape and float(np.abs(a - b).max()) <= 1e-9 * float(np.abs(b).max())
+
+
+def embed(X: np.ndarray) -> np.ndarray:
+    """A UMAP of the rows of ``X`` with ``UMAP_PARAMS``, the cell-type study's settings."""
+    import umap  # here rather than at the top: slow to import, and only section 6's plots need it
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message=".*n_jobs value 1 overridden.*")
+        return np.asarray(umap.UMAP(**UMAP_PARAMS).fit_transform(X), dtype=np.float64)
+
+
 def holdout_space(grams: dict[str, np.ndarray], labels: np.ndarray, dev_mask: np.ndarray, dropped: np.ndarray) -> dict:
     """The holdout model's score spaces on the development slides, for section 6's scatter plots.
 
@@ -340,10 +355,6 @@ def holdout_space(grams: dict[str, np.ndarray], labels: np.ndarray, dev_mask: np
     variance and names); ``umap``, a UMAP of the development slides' weighted blocks (``UMAP_PARAMS``). No holdout slide
     enters: the plots add no look at the holdout.
     """
-
-    def agrees(a: np.ndarray, b: np.ndarray) -> bool:  # the same arithmetic, so equal up to the order of summation
-        return a.shape == b.shape and float(np.abs(a - b).max()) <= 1e-9 * float(np.abs(b).max())
-
     dev = np.flatnonzero(dev_mask)
     keep = folds.outlier_keep(grams, dev, np.where(dev_mask, labels, -1))
     assert np.array_equal(~keep, dropped), "the filter does not drop the slides the holdout fit dropped"
@@ -366,11 +377,6 @@ def holdout_space(grams: dict[str, np.ndarray], labels: np.ndarray, dev_mask: np
     weighted = np.hstack([block * w for block, w in zip(blocks, mfa.weights_, strict=True)])
     scores, evr, _ = c.celltype.pca(weighted[keep])
     assert agrees(scores[:, : space.shape[1]], space[keep]), "the MFA's fractions of variance are not its own"
-    import umap  # here rather than at the top: slow to import, and only these plots need it
-
-    with warnings.catch_warnings():
-        warnings.filterwarnings("ignore", message=".*n_jobs value 1 overridden.*")
-        embedding = np.asarray(umap.UMAP(**UMAP_PARAMS).fit_transform(weighted), dtype=np.float64)
     return {
         "keep": keep,
         "mfa": space,
@@ -378,8 +384,27 @@ def holdout_space(grams: dict[str, np.ndarray], labels: np.ndarray, dev_mask: np
         "blocks": blocks,
         "block_evr": block_evr,
         "block_names": block_names,
-        "umap": embedding,
+        "umap": embed(weighted),
     }
+
+
+def dc_space(DC: np.ndarray, dev: np.ndarray, keep: np.ndarray) -> dict:
+    """D+C as the holdout fit's D+C arm sees it, on the development slides, for section 6's scatter plots.
+
+    The arm's features standardized as its classifier standardizes them (``run_study.fit_predict``: the kept slides'
+    mean and SD, an SD of 0 counting as 1), their principal components fitted on the kept slides (``celltype.pca``)
+    with the dropped slides projected, and a UMAP of all development slides' standardized features. The classifier
+    reads the standardized features, not the components: the PCA only draws them. Keys: ``pcs`` (development slides ×
+    components), ``evr`` and ``umap``.
+    """
+    X = DC[dev]
+    mean, sd = X[keep].mean(axis=0), X[keep].std(axis=0)
+    sd[sd == 0] = 1.0
+    Z = (X - mean) / sd
+    scores, evr, vt = c.celltype.pca(Z[keep])
+    pcs = (Z - Z[keep].mean(axis=0)) @ vt.T
+    assert agrees(pcs[keep], scores), "the projection does not give the kept slides their PCA scores"
+    return {"pcs": pcs, "evr": evr, "umap": embed(Z)}
 
 
 def draw_weights(draws: np.ndarray) -> np.ndarray:
@@ -566,8 +591,8 @@ def group_legend(counts: dict, n_dropped: int) -> tuple[list[Line2D], int]:
 
 
 def fig_space(space: np.ndarray, evr: np.ndarray, group: np.ndarray, dropped: np.ndarray, embedding: np.ndarray,
-              title: str) -> bytes:
-    """Every pair of the first four MFA components and the UMAP, one facet row per group triple (sibling layout)."""
+              title: str, umap_title: str) -> bytes:
+    """Every pair of the first four components and the UMAP, one facet row per group triple (sibling layout)."""
     counts = {g: int(np.sum(group == g)) for g in GROUPS}
     panels = [
         (space[:, i], space[:, j], f"PC{i + 1} ({100 * evr[i]:.1f}%)", f"PC{j + 1} ({100 * evr[j]:.1f}%)")
@@ -586,7 +611,7 @@ def fig_space(space: np.ndarray, evr: np.ndarray, group: np.ndarray, dropped: np
             if col == len(panels) - 1:
                 ax.tick_params(labelbottom=False, labelleft=False)
                 if row == 0:
-                    ax.set_title("UMAP of the weighted blocks", loc="left", color=INK, fontsize=8.5)
+                    ax.set_title(umap_title, loc="left", color=INK, fontsize=8.5)
             if col == 0:
                 ax.set_title(facet_title, loc="left", color=INK, fontsize=8.5)
     handles, ncol = group_legend(counts, int(dropped.sum()))
@@ -653,6 +678,7 @@ def main() -> None:
     curves = mean_curves(inputs)
     fractions = variance_fractions(grams, dev)
     space = holdout_space(grams, labels, inputs["dev"], hold_dropped)
+    dc = dc_space(inputs["DC"], dev, space["keep"])
 
     n_dev, n_hold, n_all = dev.size, hold.size, len(ids)
     n_repeats, n_splits = split.shape[0], dropped.shape[1]
@@ -1040,27 +1066,25 @@ seed {hold_json["fit"]["inner_seed"]}), chose k = {hold_k}.</p>
     mfa_share = {k: float(space["mfa_evr"][:k].sum()) for k in (2, 4, hold_k)}
     dev_counts = {g: int(np.sum(group == g)) for g in GROUPS}
     medians = np.array([[np.median(space["mfa"][group == g, j]) for j in range(4)] for g in GROUPS])
+    dc_medians = np.array([[np.median(dc["pcs"][group == g, j]) for j in range(4)] for g in GROUPS])
     median_rows = [
-        [f"{html.escape(g)} ({dev_counts[g]})", *(num(v, 2) for v in row)]
-        for g, row in zip(GROUPS, medians, strict=True)
+        [f"{html.escape(g)} ({dev_counts[g]})", *(num(v, 2) for v in row), *(num(v, 2) for v in dc_row)]
+        for g, row, dc_row in zip(GROUPS, medians, dc_medians, strict=True)
     ]
+    n_features = inputs["DC"].shape[1]
+    dc_share = {k: float(dc["evr"][:k].sum()) for k in (2, 4)}
     furthest = GROUPS.index("cirrhosis")
-    assert all(np.argmax(medians[:, j]) == furthest for j in range(2)), "cirrhosis's medians are not the highest on PC1-2"
-    second = [int(np.argsort(-medians[:, j])[1]) for j in range(2)]  # the next-highest median on PC1, on PC2
-    if second[0] == second[1]:
-        i = second[0]
-        next_highest = (
-            f"the next highest, on both, is {html.escape(GROUPS[i])}'s: {num(medians[i, 0], 2)} and "
-            f"{num(medians[i, 1], 2)}"
-        )
-    else:
-        next_highest = (
-            f"the next highest are {html.escape(GROUPS[second[0]])}'s {num(medians[second[0], 0], 2)} on PC1 and "
-            f"{html.escape(GROUPS[second[1]])}'s {num(medians[second[1], 1], 2)} on PC2"
-        )
+    for values in (medians, dc_medians):  # as the reading states: in both spaces, the farthest from 0 on PC1 and PC2
+        assert all(np.argmax(np.abs(values[:, j])) == furthest for j in range(2)), "cirrhosis is not the farthest out"
     space_png = fig_space(
         space["mfa"], space["mfa_evr"], group, ~keep, space["umap"],
         "The holdout model's MFA space: every pair of the first four components and a UMAP; one row per group triple",
+        "UMAP of the weighted blocks",
+    )
+    dc_png = fig_space(
+        dc["pcs"], dc["evr"], group, ~keep, dc["umap"],
+        "D+C on the same slides: every pair of the first four components and a UMAP; one row per group triple",
+        "UMAP of the features",
     )
     blocks_png = fig_blocks(
         space["blocks"], space["block_evr"], space["block_names"], group, ~keep,
@@ -1080,8 +1104,6 @@ pair by pair. On the holdout it scored macro AUC {num(hauc["curves"])} at k = {h
 {num(hauc["curves4"])} at k = 4. Components 1–2 hold {pct(mfa_share[2], 1)} of the variance of the weighted blocks,
 1–4 hold {pct(mfa_share[4], 1)} and 1–{hold_k} {pct(mfa_share[hold_k], 1)}. The holdout slides are not drawn, so
 that these plots add no look at them.</p>
-<p>Cirrhosis reaches furthest along the first two components: its median is the highest of the {len(GROUPS)} groups
-on both, {num(medians[furthest, 0], 2)} on PC1 and {num(medians[furthest, 1], 2)} on PC2; {next_highest}.</p>
 {
         figure(
             space_png,
@@ -1093,6 +1115,25 @@ on both, {num(medians[furthest, 0], 2)} on PC1 and {num(medians[furthest, 1], 2)
             "the filter dropped, projected. A component's sign is arbitrary: a flip would mirror its axis.",
         )
     }
+<p>D+C, the arm the curves are compared with, drawn the same way on the same slides: its {n_features} features
+standardized with the {n_kept} kept slides' means and SDs, as its classifier standardizes them, and their principal
+components fitted on those slides, with the dropped slides projected. The classifier reads the {n_features}
+standardized features, not the components: the PCA only draws them. Components 1–2 hold {pct(dc_share[2], 1)} of the
+standardized features' variance, 1–4 hold {pct(dc_share[4], 1)}. On the holdout, D+C trained on the kept slides scored
+macro AUC {num(hauc["dc"])}.</p>
+{
+        figure(
+            dc_png,
+            "D+C on the same slides: scatter matrix of PC1 to PC4 and a UMAP, by pathology group",
+            "<strong>D+C's space.</strong> The first six columns are the pairs of its first four principal components, "
+            "each with its share of the standardized features' variance; the last is a UMAP of the standardized "
+            f"features (no units; {umap_settings}). Rows, colours and hollow marks as in the figure above.",
+        )
+    }
+<p>In both spaces cirrhosis lies farthest out along the first two components: of the {len(GROUPS)} groups, its median
+is the farthest from 0, the kept slides' mean, on both: {num(medians[furthest, 0], 2)} on PC1 and
+{num(medians[furthest, 1], 2)} on PC2 in the curves' space, {num(dc_medians[furthest, 0], 2)} and
+{num(dc_medians[furthest, 1], 2)} in D+C's.</p>
 {
         figure(
             blocks_png,
@@ -1103,9 +1144,15 @@ on both, {num(medians[furthest, 0], 2)} on PC1 and {num(medians[furthest, 1], 2)
             "development slides.",
         )
     }
-<p>Each group's median of the first four components over its development slides, the dropped ones included: the table
-view of the matrix.</p>
-{table(["pathology group (slides)", *(f"PC{j + 1}" for j in range(4))], median_rows)}
+<p>Each group's median of the first four components in each space over its development slides, the dropped ones
+included: the table view of the two matrices.</p>
+{
+        table(
+            ["pathology group (slides)", *(f"curves PC{j + 1}" for j in range(4)),
+             *(f"D+C PC{j + 1}" for j in range(4))],
+            median_rows,
+        )
+    }
 """
 
     # ---------------- section 7: the AUCs
@@ -1297,7 +1344,7 @@ D+C, on {n_all} GTEx liver slides in {len(GROUPS)} pathology groups</p>
 {variance_section}
 <h2>5. The chosen k</h2>
 {k_section}
-<h2>6. The holdout model's score space</h2>
+<h2>6. The holdout fit's score spaces: the curves and D+C</h2>
 {space_section}
 <h2>7. AUCs per arm and the paired differences</h2>
 {auc_section}
