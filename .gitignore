@@ -14,3 +14,7 @@ superseded/
 __pycache__/
 .DS_Store
 .venv/
+
+# A study's pinned clone of a third party's repository is data, fetched at its
+# pinned commit by the study's script (betti-fpca-regression-benchmark/fetch_upstream.py).
+upstream/

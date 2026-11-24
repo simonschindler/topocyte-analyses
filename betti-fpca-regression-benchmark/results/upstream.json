@@ -1,0 +1,21 @@
+{
+ "description": "upstream, the paper's code and data, cloned into upstream/ at the pinned commit (data only)",
+ "sha": "fe7d652eff478ffe6081c7e6765458651ad3cd74",
+ "source": "/private/tmp/claude-502/-Users-simon-rep-lbi-reindero-topocyte--claude-worktrees-fpca-betti-curves-benchmark-9a48f4/4b9274ef-48aa-4f9f-977f-e27f8a354f3a/scratchpad/upstream/krpd",
+ "cloned": true,
+ "date": "2026-11-24 13:48:24",
+ "provenance": {
+  "md5": {
+   "fetch_upstream.py": "15ab6d0c4dce33418778cb3edf131f88",
+   "common.py": "18810fa1ae71c2602d91a6ff04ea5474"
+  },
+  "versions": {
+   "numpy": "2.5.1",
+   "scipy": "1.18.0",
+   "pandas": "3.0.5",
+   "ripser": "0.6.15"
+  },
+  "topocyte_commit": "18e3aa5",
+  "upstream_sha": "fe7d652eff478ffe6081c7e6765458651ad3cd74"
+ }
+}
