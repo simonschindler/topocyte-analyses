@@ -30,6 +30,7 @@ import common as c
 import estimators as est
 import fetch_upstream
 import inputs as inp
+import matrices as mat
 import oracles
 import safe_pickle
 import wasserstein as ws
@@ -76,17 +77,38 @@ def test_r2_is_one_minus_sse_over_sst():
     assert c.r2(y, p) == pytest.approx(1 - 1.25 / np.sum((y - y.mean()) ** 2))
 
 
-def test_ensure_upstream_refuses_a_clone_at_another_commit(tmp_path, monkeypatch):
-    # a fresh `git init` repository with one commit stands in for upstream
+def _stand_in_upstream(tmp_path: pathlib.Path) -> pathlib.Path:
+    """A fresh `git init` repository with one commit, standing in for upstream: a clean tree at another commit."""
     repo = tmp_path / "upstream"
     repo.mkdir()
     (repo / "README.md").write_text("a stand-in for upstream\n")
     config = ["-c", "user.name=test", "-c", "user.email=test@example.invalid", "-c", "commit.gpgsign=false"]
     for args in (["init", "-q"], ["add", "README.md"], ["commit", "-q", "--no-verify", "-m", "a"]):
         subprocess.run(["git", "-C", str(repo), *config, *args], check=True, capture_output=True)
-    monkeypatch.setattr(fetch_upstream, "UPSTREAM", repo)
+    return repo
+
+
+def test_ensure_upstream_refuses_a_clone_at_another_commit(tmp_path, monkeypatch):
+    monkeypatch.setattr(fetch_upstream, "UPSTREAM", _stand_in_upstream(tmp_path))
     with pytest.raises(RuntimeError, match="fe7d652"):
         fetch_upstream.ensure_upstream()
+
+
+def test_check_upstream_refuses_a_repository_at_another_commit(tmp_path, monkeypatch):
+    monkeypatch.setattr(c, "UPSTREAM", _stand_in_upstream(tmp_path))
+    with pytest.raises(RuntimeError, match="fe7d652"):
+        c.check_upstream()
+    with pytest.raises(RuntimeError, match="fe7d652"):  # not a clone at all, as before fetch_upstream.py has run
+        c.check_upstream(tmp_path / "absent")
+
+
+def test_check_upstream_accepts_a_clean_pin_and_refuses_a_changed_tree(tmp_path, monkeypatch):
+    repo = _stand_in_upstream(tmp_path)
+    monkeypatch.setattr(c, "UPSTREAM_SHA", c._git(repo, "rev-parse", "HEAD"))  # the stand-in's commit is the pin
+    c.check_upstream(repo)
+    (repo / "untracked.txt").write_text("not upstream's\n")
+    with pytest.raises(RuntimeError, match="tree changed: True"):
+        c.check_upstream(repo)
 
 
 def test_fluid_sim_ids_follow_upstreams_formula():
@@ -119,6 +141,7 @@ def test_same_pairs_sees_a_repairing():
 def test_inputs_stage_records_a_failed_check_and_exits_1(tmp_path, monkeypatch):
     # A missing fluid diagram fails G5; the fluid summary, which reads every diagram, is then not attempted.
     monkeypatch.setattr(c, "check_topocyte", lambda: None)
+    monkeypatch.setattr(c, "check_upstream", lambda: None)
     monkeypatch.setattr(c, "RESULTS", tmp_path)
     monkeypatch.setattr(inp, "_g5", lambda: {"passed": False, "fluid_diagrams_missing": ["pd_sim0000_t1.pkl"]})
     monkeypatch.setattr(inp, "_fluid_summary", lambda: pytest.fail("the fluid summary read the diagrams"))
@@ -474,6 +497,112 @@ def test_arms_give_finite_predictions_with_empty_curves():
             assert np.isfinite(pred).all()
         pred, _, _ = est.fpcr_fit_predict(G0, G1, y[train], train, test)
         assert np.isfinite(pred).all()
+
+
+def test_mkey_names_every_matrix():
+    assert mat.mkey("interp", "w2", 1, 7) == "interp_07_w2_1"
+    assert mat.mkey("fluid", "gram", 0, 4) == "fluid_4_gram_0" and mat.mkey("curv", "l2", 0) == "curv_l2_0"
+
+
+def _large_checks(bars: np.ndarray, checks: list[tuple[int, int, int, int]]) -> int:
+    """How many of G2's ``checks`` have more than 1,000 finite bars on both sides."""
+    return sum(min(bars[t, h, p], bars[t, h, q]) > 1000 for t, h, p, q in checks)
+
+
+def test_g2_sample_caps_size_and_has_ten_large_checks():
+    # Review Focus 4: with counts U(0, 3000), 2/9 of the checks exceed 4,000 bars and are rejected.
+    bars = np.random.default_rng(8).integers(0, 3000, (5, 2, 400))
+    checks = mat.g2_sample(bars, np.random.default_rng(2))
+    assert len(checks) >= 100 and _large_checks(bars, checks) >= 10
+    assert all(bars[t, h, p] + bars[t, h, q] <= 4000 for t, h, p, q in checks) and len(checks) < 200
+    pairs = {(t, p, q) for t, _, p, q in checks}
+    assert len(pairs) == 100 and all(0 <= t < 5 and 0 <= p < q < 400 for t, p, q in pairs)
+    assert mat.g2_sample(bars, np.random.default_rng(2)) == checks
+
+
+def test_g2_sample_adds_pairs_until_ten_large_checks():
+    # Only 40 of the 400 simulations have more than 1,000 finite bars, so 100 uniform pairs hold about 2 large checks.
+    bars = np.random.default_rng(9).integers(0, 1000, (5, 2, 400))
+    bars[:, :, :40] = 1500
+    checks = mat.g2_sample(bars, np.random.default_rng(2))
+    pairs = list(dict.fromkeys((t, p, q) for t, _, p, q in checks))  # in the order drawn
+    assert len(pairs) > 100 and _large_checks(bars, checks) >= 10
+    assert _large_checks(bars, [(t, h, p, q) for t, h, p, q in checks if (t, p, q) != pairs[-1]]) < 10
+    # no check fits under the cap: refused once every pair has been drawn, never an endless loop
+    with pytest.raises(ValueError, match="G2 needs"):
+        mat.g2_sample(np.full((2, 2, 30), 2500), np.random.default_rng(2))
+
+
+def test_dataset_matrices_of_a_tiny_task():
+    rng = np.random.default_rng(20)
+    diagrams = [inp.rips_diagram(rng.normal(size=(12, 2))) for _ in range(6)]
+    M = mat.dataset_matrices(diagrams)
+    assert sorted(M) == ["gram_0", "gram_1", "l2_0", "l2_1", "w2_0", "w2_1"]
+    for key, A in M.items():
+        assert A.shape == (6, 6) and np.array_equal(A, A.T)
+        if key.startswith("gram"):
+            assert np.linalg.eigvalsh(A)[0] >= -1e-9 * np.trace(A)
+        else:
+            assert not A.diagonal().any()
+    for h in (0, 1):  # each matrix is that of its own dimension's diagrams
+        bars = [d[h] for d in diagrams]
+        curves = betti.curves(bars, h)
+        assert np.array_equal(M[f"w2_{h}"], ws.w2_matrix(bars))
+        assert np.array_equal(M[f"l2_{h}"], betti.l2_matrix(curves, h))
+        assert np.array_equal(M[f"gram_{h}"], betti.gram(curves, h))
+    # fluid's call: no W2, and the curves shifted
+    shifted = mat.dataset_matrices(diagrams, shift=3.0, with_w2=False)
+    assert sorted(shifted) == ["gram_0", "gram_1", "l2_0", "l2_1"]
+    assert np.array_equal(shifted["gram_1"], betti.gram(betti.curves([d[1] for d in diagrams], 1, 3.0), 1))
+
+
+def test_g4_is_relative_to_the_largest_entry():
+    # Ruling (7): a tiny entry may move by far more than 1e-12 of itself, as the shifted endpoints round, so long as no
+    # difference exceeds 1e-12 of the matrix's largest entry.
+    G, bars = np.array([[1e4, 1e-6], [1e-6, 2.0]]), np.array([900, 1])
+    rounded = G.copy()
+    rounded[0, 1] = rounded[1, 0] = 1e-6 + 1e-15  # 1e-9 of the entry, 1e-19 of the largest
+    row = mat._g4_measures(G, rounded, bars)
+    assert row["passed"] and row["entrywise"]["worst_relative"] > 1e-12
+    clipped = G.copy()
+    clipped[1, 1] += 2e-12 * 1e4  # 2e-12 of the largest entry
+    assert not mat._g4_measures(G, clipped, bars)["passed"]
+
+
+@pytest.mark.parametrize("g2_passed, g4_passed", [(True, True), (False, None), (True, False)])
+def test_matrices_stage_writes_the_npz_only_if_both_gates_pass(tmp_path, monkeypatch, g2_passed, g4_passed):
+    rips, fluid = {"curv_w2_0": np.eye(2), "curv_y": np.arange(2.0)}, {"fluid_0_gram_0": np.ones((3, 3))}
+
+    def rips_matrices() -> dict[str, np.ndarray]:
+        if not g2_passed:
+            pytest.fail("the matrices were computed after G2 failed")
+        return rips
+
+    monkeypatch.setattr(c, "check_topocyte", lambda: None)
+    monkeypatch.setattr(c, "check_upstream", lambda: None)
+    monkeypatch.setattr(c, "RESULTS", tmp_path)
+    monkeypatch.setattr(inp, "fluid_diagrams", lambda t: [])
+    monkeypatch.setattr(inp, "fluid_cached_w2", lambda t, h: np.zeros((0, 0)))
+    monkeypatch.setattr(mat, "_g2", lambda diagrams, cached: {"passed": g2_passed})
+    monkeypatch.setattr(mat, "_rips_matrices", rips_matrices)
+    monkeypatch.setattr(mat, "_fluid_matrices", lambda diagrams, cached: (fluid, {"passed": g4_passed}))
+    if g2_passed and g4_passed:
+        mat.main()
+        saved = mat.load_matrices()
+        assert saved.keys() == rips.keys() | fluid.keys()
+        assert all(np.array_equal(saved[key], A) for key, A in {**rips, **fluid}.items())
+    else:
+        with pytest.raises(SystemExit) as stop:
+            mat.main()
+        assert stop.value.code == 1 and not (tmp_path / "matrices.npz").exists()
+    record = json.loads((tmp_path / "matrices.json").read_text())
+    assert record["passed"] is bool(g2_passed and g4_passed) and record["g2"]["passed"] is g2_passed
+    assert record["g4"] == (None if g4_passed is None else {"passed": g4_passed})
+
+
+@needs_upstream
+def test_check_upstream_accepts_the_pinned_clone():
+    c.check_upstream()
 
 
 @needs_upstream

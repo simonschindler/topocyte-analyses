@@ -76,6 +76,24 @@ def check_topocyte() -> None:
         raise RuntimeError(f"topocyte checkout is at {head[:7]} (package changed: {bool(changed)}), not a clean {TOPOCYTE_COMMIT}")
 
 
+def check_upstream(path: Path | None = None) -> None:
+    """Refuse an upstream clone other than a clean git checkout at ``UPSTREAM_SHA`` (``design.md``, "Inputs").
+
+    ``path`` defaults to ``UPSTREAM``; ``fetch_upstream.ensure_upstream`` passes its own. ``RuntimeError``, naming
+    the pinned SHA, if ``path`` holds no git clone of its own, if its ``HEAD`` is another commit, or if its tree
+    differs from that commit (untracked files included). Every stage that reads upstream calls it first.
+    """
+    path = UPSTREAM if path is None else path
+    if not (path / ".git").exists():  # else git would read the repository around it
+        raise RuntimeError(f"{path} is not a git clone at {UPSTREAM_SHA}; move it aside, then run fetch_upstream.py")
+    head = _git(path, "rev-parse", "HEAD")
+    changed = _git(path, "status", "--porcelain")
+    if head != UPSTREAM_SHA or changed:
+        raise RuntimeError(
+            f"upstream clone {path} is at {head[:7]} (tree changed: {bool(changed)}), not a clean {UPSTREAM_SHA}"
+        )
+
+
 def r2(y: np.ndarray, p: np.ndarray) -> float:
     """The paper's R² of predictions ``p`` of ``y``: ``1 - SSE/SST``, with SST about ``y.mean()``."""
     return float(1.0 - np.sum((y - p) ** 2) / np.sum((y - y.mean()) ** 2))

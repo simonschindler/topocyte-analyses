@@ -21,29 +21,23 @@ import subprocess
 import time
 from collections.abc import Sequence
 
-from common import HERE, RESULTS, UPSTREAM, UPSTREAM_SHA, UPSTREAM_URL, _git, check_topocyte, provenance
+from common import HERE, RESULTS, UPSTREAM, UPSTREAM_SHA, UPSTREAM_URL, _git, check_topocyte, check_upstream, provenance
 
 
 def ensure_upstream(source: str = UPSTREAM_URL) -> str:
     """The pinned clone's SHA, cloned from ``source`` if ``UPSTREAM`` is absent.
 
     A new clone is checked out at ``UPSTREAM_SHA``, detached, and its
-    ``origin`` set to ``UPSTREAM_URL``. ``RuntimeError`` unless ``UPSTREAM``
-    is then a git clone whose ``HEAD`` is ``UPSTREAM_SHA``, with a clean tree.
+    ``origin`` set to ``UPSTREAM_URL``. ``RuntimeError`` from
+    ``check_upstream`` unless ``UPSTREAM`` is then a git clone whose ``HEAD``
+    is ``UPSTREAM_SHA``, with a clean tree.
     """
     if not UPSTREAM.exists():
         subprocess.run(["git", "clone", "--no-checkout", source, str(UPSTREAM)], check=True)
         _git(UPSTREAM, "checkout", "--quiet", "--detach", UPSTREAM_SHA)
         _git(UPSTREAM, "remote", "set-url", "origin", UPSTREAM_URL)
-    if not (UPSTREAM / ".git").exists():  # else git would read the repository around it
-        raise RuntimeError(f"{UPSTREAM} is not a git clone; move it aside, then fetch again")
-    head = _git(UPSTREAM, "rev-parse", "HEAD")
-    changed = _git(UPSTREAM, "status", "--porcelain")
-    if head != UPSTREAM_SHA or changed:
-        raise RuntimeError(
-            f"upstream clone {UPSTREAM} is at {head[:7]} (tree changed: {bool(changed)}), not a clean {UPSTREAM_SHA}"
-        )
-    return head
+    check_upstream(UPSTREAM)
+    return UPSTREAM_SHA
 
 
 def main(argv: Sequence[str] | None = None) -> None:

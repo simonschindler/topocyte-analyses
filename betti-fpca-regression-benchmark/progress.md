@@ -18,6 +18,29 @@ analyses." Then he chose approach B of `design.md`.
 - **Approach B:** the FPCR head-to-head, as laid out on 2026-11-24 (including the 100 fluid splits), plus an
   exploratory arm that runs `PD_kernel`'s estimator on Betti-curve distances.
 
+## Rulings during the build
+
+Claude's calls while building (2026-11-24), each with its reason. None changes a number of `design.md`.
+
+1. **The whitelist's round-trip test pickles at protocol 4,** as all 2,068 upstream pickles do; the whitelist stays
+   the design's 11 globals (protocol 5, Python 3.14's default, needs a 12th, `numpy._core.numeric._frombuffer`).
+2. **The test and verification oracles live in `oracles.py`,** shared by `test_study.py` and `verify_results.py`
+   and apart from the code they check.
+3. **Arm K's kernel keeps upstream's `np.e **` expression,** so that K rounds as upstream did (G1); **the
+   closed-form LOO subtracts median(y) first,** which is exact, since every design has the intercept.
+4. **The plan's rank rule σ_min ≤ 1e-12 σ_max is kept,** though `design.md` does not state it: it only refuses
+   rank-deficient designs.
+5. **Every stage checks the upstream pin (`common.check_upstream`),** as `design.md` asks: "refuse to use a clone at
+   any other commit".
+6. **The per-dataset function is `matrices.dataset_matrices(diagrams, shift=0.0, with_w2=True)`,** keys
+   `{kind}_{h}`: the plan's test names it only as "the stage's per-dataset function".
+7. **G4 is relative to each matrix's largest entry:** per time and dimension, max |G(s + 10) − G(s)| ≤ 1e-12 ×
+   max |G(s)|, as G3 is relative to the largest score. `design.md`'s "1e-12 relative" names no reference, and
+   entry by entry it would test the float64 rounding of the shifted endpoints on tiny overlaps, not a part clipped
+   below 0, which is what G4 is for. Measured: at most 4.97e-15 of the largest entry, in the failed run and the
+   passing one alike; entry by entry up to 2.98e-8, on entries of 3e-7 to 6e-5, where both Grams lie within
+   3.4e-14 of the exact full-line values (rationals). `matrices.json` keeps the entry-wise worst for information.
+
 ## Results
 
 - 2026-11-24 13:48: `fetch_upstream.py --source <the design's scratch clone>`, in the foreground, 2.1 s wall. It
@@ -45,3 +68,33 @@ analyses." Then he chose approach B of `design.md`.
     of each equal the store's, and no off-diagonal entry is 0. Diagrams with only essential bars, no finite bar in
     either dimension: 9, 3, 3, 2, 3 at the five times. The plan's Review Focus 1 gives 6–14 per time for these;
     that range is one dimension's, and an empty curve in one dimension already gives that dimension's zero Gram row.
+- 2026-11-24 17:17: `matrices.py`, in the background, 545 s wall (9.1 min), peak RSS 0.81 GB, exit status 1: a gate
+  failed, so `results/matrices.npz` was not written. `results/matrices.json` records the run.
+  - **Gate G2 passed:** the scipy W2 equals upstream's cached fluid distances on 182 checks of 100 same-time pairs
+    (`default_rng(2)`; 82 in H0, 100 in H1; n + m median 948, at most 3,857 finite bars), 19 of them large (more
+    than 1,000 finite bars on both sides). The worst relative difference is 6.3e-16 (5.6e-16 among the large
+    checks); none exceeds 1e-12. 279 s.
+  - **Gate G4 failed as run, entry by entry,** while relative to each matrix's largest entry it holds. The fluid
+    Gram matrices at shifts 26 and 36 differ, entry by entry, by up to 3.0e-8 of the entry (t = 1, H0), with 2,106
+    to 5,061 entries above 1e-12 per matrix; relative to the largest entry, by at most 5.0e-15 (t = 9, H1). The
+    worst entries are tiny (3e-7 to 6e-5, where the largest entries are 846 to 1.6e5): their bars overlap over
+    1e-7 to 1e-5 only. Against the exact full-line inner product, computed in rationals from the unshifted bars,
+    the worst entry of every time and dimension is off by at most 1.8e-14 at shift 26 and 3.4e-14 at shift 36:
+    the rounding of the shifted endpoints, up to half an ulp each (3.6e-15 above 32). The endpoints are full
+    float64 values, and (v + 26) − 26 gives v back for only 9–20% of them (5–15% at 36). No part of a finite bar
+    lies below 0: the lowest finite birth is −24.9999 (t = 1, H0), 1.0 above 0 once shifted. Entry by entry, no
+    shift of these endpoints can meet 1e-12, so G4's "1e-12 relative" needed another reference than the entry
+    itself: ruling 7 takes the matrix's largest entry.
+  - The rest ran: the 100 interpolation datasets in 41.7 s, curvature in 0.9 s, the five fluid times with G4 in
+    220 s (41–48 s each).
+- 2026-11-24 17:31: `matrices.py` again, after ruling 7, in the background, 524 s wall (8.7 min), peak RSS 0.81 GB,
+  exit status 0. **Gates G2 and G4 passed.** G2 made the same 182 checks, with the same worst relative difference,
+  6.3e-16. G4, relative to each matrix's largest entry: at most 4.97e-15 (t = 9, H1), against the tolerance
+  1e-12; entry by entry, for information only, as before (worst 2.98e-8). `results/matrices.npz` holds the 738
+  arrays: 96.0 MB, sha256 `6ac8e74e…`, both recorded in `results/matrices.json`. Parts: G2 264 s, interpolation
+  40.8 s, curvature 0.9 s, the five fluid times with G4 215 s.
+  - Checked after the run (a scratch script, not kept): the md5s in `matrices.json` equal the files. The npz holds
+    exactly the specified keys. Every matrix is symmetric and finite, and every W2 and L² matrix has a zero
+    diagonal. The interpolation sizes and targets, `curv_y` and `fluid_y` equal the loaders', and every fluid W2
+    matrix equals `fluid_cached_w2`. At t = 1 the H0 Gram has 13 zero rows: the 13 empty H0 curves of the inputs
+    stage.

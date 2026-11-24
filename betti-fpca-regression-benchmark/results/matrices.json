@@ -1,0 +1,311 @@
+{
+ "description": "every pairwise matrix of the three tasks (W2, Betti L2, Betti Gram), computed once, and gates G2 (the scipy W2 against upstream's cached fluid distances) and G4 (the fluid Gram matrices at the shift and at the shift + 10) (design.md)",
+ "passed": true,
+ "g2": {
+  "passed": true,
+  "tolerance": 1e-12,
+  "seed": 2,
+  "pairs": 100,
+  "checks": 182,
+  "large_checks": 19,
+  "n_plus_m": {
+   "median": 948.0,
+   "max": 3857
+  },
+  "worst_relative": 6.345390119972574e-16,
+  "worst_relative_large": 5.615884462877783e-16,
+  "worst_check": {
+   "time": 7.5,
+   "h": 1,
+   "p": 370,
+   "q": 383,
+   "sims": [
+    7397,
+    7673
+   ],
+   "finite_bars": [
+    164,
+    343
+   ],
+   "w2": 6.99861161337046,
+   "cached": 6.998611613370464,
+   "relative": 6.345390119972574e-16
+  },
+  "failing_checks": [],
+  "seconds": 264.4
+ },
+ "g4": {
+  "passed": true,
+  "rule": "per time and dimension, max |G(s + 10) - G(s)| <= tolerance * max |G(s)| (ruling 7 in progress.md); entrywise is information only",
+  "tolerance": 1e-12,
+  "shifts": [
+   26.0,
+   36.0
+  ],
+  "per_time_and_dimension": [
+   {
+    "time": 1.0,
+    "h": 0,
+    "passed": true,
+    "relative_to_largest_entry": 3.6165563591657846e-16,
+    "largest_entry": 160947.75010472647,
+    "entrywise": {
+     "worst_relative": 2.9802309065024973e-08,
+     "entries_above_tolerance": 3074,
+     "worst_entry": {
+      "p": 17,
+      "q": 25,
+      "gram": 8.34465399890405e-07,
+      "finite_bars": [
+       3,
+       777
+      ]
+     }
+    }
+   },
+   {
+    "time": 1.0,
+    "h": 1,
+    "passed": true,
+    "relative_to_largest_entry": 3.193977828258075e-16,
+    "largest_entry": 91120.95331170877,
+    "entrywise": {
+     "worst_relative": 3.069238857801334e-10,
+     "entries_above_tolerance": 4162,
+     "worst_entry": {
+      "p": 23,
+      "q": 23,
+      "gram": 5.787613547525439e-05,
+      "finite_bars": [
+       3,
+       3
+      ]
+     }
+    }
+   },
+   {
+    "time": 2.5,
+    "h": 0,
+    "passed": true,
+    "relative_to_largest_entry": 9.9832094236976e-16,
+    "largest_entry": 43729.16948078132,
+    "entrywise": {
+     "worst_relative": 6.622735413574263e-09,
+     "entries_above_tolerance": 5061,
+     "worst_entry": {
+      "p": 20,
+      "q": 20,
+      "gram": 1.0728840749152369e-06,
+      "finite_bars": [
+       1,
+       1
+      ]
+     }
+    }
+   },
+   {
+    "time": 2.5,
+    "h": 1,
+    "passed": true,
+    "relative_to_largest_entry": 9.604667043484818e-16,
+    "largest_entry": 17044.739352019147,
+    "entrywise": {
+     "worst_relative": 1.1920923697064199e-08,
+     "entries_above_tolerance": 3796,
+     "worst_entry": {
+      "p": 0,
+      "q": 20,
+      "gram": 2.9802335532735924e-07,
+      "finite_bars": [
+       1,
+       14
+      ]
+     }
+    }
+   },
+   {
+    "time": 5.0,
+    "h": 0,
+    "passed": true,
+    "relative_to_largest_entry": 1.925800948619271e-15,
+    "largest_entry": 15171.618497437761,
+    "entrywise": {
+     "worst_relative": 3.104407220294264e-10,
+     "entries_above_tolerance": 2106,
+     "worst_entry": {
+      "p": 24,
+      "q": 46,
+      "gram": 1.1444096816859428e-05,
+      "finite_bars": [
+       395,
+       882
+      ]
+     }
+    }
+   },
+   {
+    "time": 5.0,
+    "h": 1,
+    "passed": true,
+    "relative_to_largest_entry": 1.991205097397845e-15,
+    "largest_entry": 4110.803214924119,
+    "entrywise": {
+     "worst_relative": 3.5691388392694486e-10,
+     "entries_above_tolerance": 2273,
+     "worst_entry": {
+      "p": 18,
+      "q": 18,
+      "gram": 2.9861940138431464e-05,
+      "finite_bars": [
+       3,
+       3
+      ]
+     }
+    }
+   },
+   {
+    "time": 7.5,
+    "h": 0,
+    "passed": true,
+    "relative_to_largest_entry": 3.243731181412635e-15,
+    "largest_entry": 7570.404443063264,
+    "entrywise": {
+     "worst_relative": 6.005503134389493e-10,
+     "entries_above_tolerance": 3092,
+     "worst_entry": {
+      "p": 22,
+      "q": 380,
+      "gram": 1.1831527181982437e-05,
+      "finite_bars": [
+       34,
+       1432
+      ]
+     }
+    }
+   },
+   {
+    "time": 7.5,
+    "h": 1,
+    "passed": true,
+    "relative_to_largest_entry": 3.3927084459039594e-15,
+    "largest_entry": 1809.495078888677,
+    "entrywise": {
+     "worst_relative": 3.4924581224244715e-10,
+     "entries_above_tolerance": 2811,
+     "worst_entry": {
+      "p": 150,
+      "q": 306,
+      "gram": 3.0517591515177855e-05,
+      "finite_bars": [
+       129,
+       195
+      ]
+     }
+    }
+   },
+   {
+    "time": 9.0,
+    "h": 0,
+    "passed": true,
+    "relative_to_largest_entry": 4.572086928606658e-15,
+    "largest_entry": 5470.391243496688,
+    "entrywise": {
+     "worst_relative": 7.450577321767345e-09,
+     "entries_above_tolerance": 3801,
+     "worst_entry": {
+      "p": 11,
+      "q": 217,
+      "gram": 9.53674735626464e-07,
+      "finite_bars": [
+       59,
+       1458
+      ]
+     }
+    }
+   },
+   {
+    "time": 9.0,
+    "h": 1,
+    "passed": true,
+    "relative_to_largest_entry": 4.972872629623333e-15,
+    "largest_entry": 845.8718549600987,
+    "entrywise": {
+     "worst_relative": 1.095673136754521e-09,
+     "entries_above_tolerance": 2407,
+     "worst_entry": {
+      "p": 369,
+      "q": 371,
+      "gram": 4.8637411463658964e-05,
+      "finite_bars": [
+       114,
+       287
+      ]
+     }
+    }
+   }
+  ]
+ },
+ "shapes": {
+  "interp": {
+   "60x60": 60,
+   "60": 10,
+   "70x70": 60,
+   "70": 10,
+   "80x80": 60,
+   "80": 10,
+   "90x90": 60,
+   "90": 10,
+   "100x100": 60,
+   "100": 10,
+   "110x110": 60,
+   "110": 10,
+   "120x120": 60,
+   "120": 10,
+   "130x130": 60,
+   "130": 10,
+   "140x140": 60,
+   "140": 10,
+   "150x150": 60,
+   "150": 10
+  },
+  "curv": {
+   "100x100": 6,
+   "100": 1
+  },
+  "fluid": {
+   "400x400": 30,
+   "400": 1
+  }
+ },
+ "npz": {
+  "arrays": 738,
+  "bytes": 96039940,
+  "sha256": "6ac8e74e2b41a6d64b5f6c0dd4268011ba72d9b2fcc98c458f0e41eae6e7cf1f"
+ },
+ "seconds": {
+  "fluid_inputs": 2.0,
+  "g2": 264.4,
+  "interpolation_and_curvature": 41.7,
+  "fluid_and_g4": 214.7,
+  "total": 522.9
+ },
+ "date": "2026-11-24 17:31:21",
+ "provenance": {
+  "md5": {
+   "matrices.py": "f6a19fbac567087c36b3df193245a3eb",
+   "common.py": "31e615d07072189cac5905e611ae58cc",
+   "inputs.py": "d213fcfa6aeea515561ecf20017332de",
+   "safe_pickle.py": "f5d358a62b4932fd640f83a17a2e0eef",
+   "wasserstein.py": "a44760ebbd43998ab7a09cfd76cc876d",
+   "betti.py": "5096038795b3d3a43c7fcd4e210dd741"
+  },
+  "versions": {
+   "numpy": "2.5.1",
+   "scipy": "1.18.0",
+   "pandas": "3.0.5",
+   "ripser": "0.6.15"
+  },
+  "topocyte_commit": "18e3aa5",
+  "upstream_sha": "fe7d652eff478ffe6081c7e6765458651ad3cd74"
+ }
+}

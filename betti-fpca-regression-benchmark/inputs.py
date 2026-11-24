@@ -284,6 +284,7 @@ def _fluid_summary() -> dict:
 
 def main() -> None:
     c.check_topocyte()
+    c.check_upstream()
     # at the start: the code that runs
     provenance = c.provenance(c.HERE / "inputs.py", c.HERE / "common.py", c.HERE / "safe_pickle.py")
     started = time.perf_counter()
