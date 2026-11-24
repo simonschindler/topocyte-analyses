@@ -12,6 +12,7 @@ its pickles only through ``safe_pickle.load_pickle``, and are skipped until
 
 from __future__ import annotations
 
+import itertools
 import json
 import pathlib
 import pickle
@@ -25,6 +26,7 @@ import common as c
 import fetch_upstream
 import inputs as inp
 import safe_pickle
+import wasserstein as ws
 
 needs_upstream = pytest.mark.skipif(not (c.UPSTREAM / ".git").exists(), reason="upstream not fetched")
 
@@ -120,6 +122,82 @@ def test_inputs_stage_records_a_failed_check_and_exits_1(tmp_path, monkeypatch):
     assert stop.value.code == 1 and record["passed"] is False and record["fluid"] is None
 
 
+def _random_diagram(rng: np.random.Generator, n_finite: int, n_essential: int) -> np.ndarray:
+    """``n_finite`` bars with births and lengths U(0, 1), and ``n_essential`` with births U(0, 1), rows shuffled."""
+    births = rng.uniform(0, 1, n_finite + n_essential)
+    deaths = np.concatenate((births[:n_finite] + rng.uniform(0, 1, n_finite), np.full(n_essential, np.inf)))
+    return rng.permutation(np.column_stack((births, deaths)))
+
+
+def _brute_force_w2(a: np.ndarray, b: np.ndarray) -> float:
+    """W2 by enumeration, as an oracle independent of ``wasserstein``.
+
+    The finite cost is the cheapest of all permutations of the augmented matrix in which each bar has a diagonal slot
+    of its own (inf elsewhere); the essential cost is the cheapest of all pairings of the essential births.
+    """
+    fa, fb = a[np.isfinite(a[:, 1])], b[np.isfinite(b[:, 1])]
+    n, m = len(fa), len(fb)
+    C = np.full((n + m, m + n), np.inf)
+    C[:n, :m] = ((fa[:, None, :] - fb[None, :, :]) ** 2).sum(axis=2)
+    C[np.arange(n), m + np.arange(n)] = (fa[:, 1] - fa[:, 0]) ** 2 / 2
+    C[n + np.arange(m), np.arange(m)] = (fb[:, 1] - fb[:, 0]) ** 2 / 2
+    C[n:, m:] = 0
+    permutations = np.array(list(itertools.permutations(range(n + m))), dtype=int)  # (1, 0) if n + m = 0
+    finite = C[np.arange(n + m), permutations].sum(axis=1).min()
+    ea, eb = a[np.isinf(a[:, 1]), 0], b[np.isinf(b[:, 1]), 0]
+    pairings = np.array(list(itertools.permutations(range(len(eb)))), dtype=int)
+    essential = ((ea - eb[pairings]) ** 2).sum(axis=1).min()
+    return float(np.sqrt(finite + essential))
+
+
+def test_w2_of_a_point_against_nothing_is_its_distance_to_the_diagonal():
+    assert ws.w2(np.array([[1.0, 3.0]]), np.empty((0, 2))) == pytest.approx(2 / np.sqrt(2))
+
+
+def test_w2_prefers_the_diagonal_when_it_is_cheaper():
+    a, b = np.array([[0.0, 0.2]]), np.array([[5.0, 5.4]])
+    assert ws.w2(a, b) == pytest.approx(np.sqrt(0.2**2 / 2 + 0.4**2 / 2))
+
+
+def test_w2_matches_essential_births_in_sorted_order():
+    a = np.array([[0.0, np.inf], [0.5, np.inf]])
+    b = np.array([[0.4, np.inf], [0.1, np.inf]])
+    assert ws.w2(a, b) == pytest.approx(np.sqrt(0.1**2 + 0.1**2))
+
+
+def test_w2_is_infinite_for_unequal_essential_counts():
+    assert ws.w2(np.array([[0.0, np.inf]]), np.empty((0, 2))) == np.inf
+
+
+@pytest.mark.parametrize("bar", [[-np.inf, 1.0], [np.nan, 1.0], [np.inf, np.inf], [0.0, np.nan], [0.0, -np.inf]])
+def test_w2_refuses_a_non_finite_birth_and_a_death_neither_finite_nor_inf(bar):
+    with pytest.raises(ValueError, match="finite"):
+        ws.w2(np.array([[0.0, 2.0], bar]), np.array([[0.5, 1.0]]))
+
+
+def test_w2_matches_brute_force_on_small_diagrams():
+    rng = np.random.default_rng(1)
+    for _ in range(200):
+        n_essential = rng.integers(0, 3)
+        a, b = (_random_diagram(rng, rng.integers(0, 4), n_essential) for _ in range(2))
+        np.testing.assert_allclose(ws.w2(a, b), _brute_force_w2(a, b), rtol=1e-12, atol=0)
+
+
+def test_w2_matrix_is_symmetric_with_zero_diagonal():
+    rng = np.random.default_rng(2)
+    diagrams = [_random_diagram(rng, n, 1) for n in (0, 3, 5, 1, 4)]
+    D = ws.w2_matrix(diagrams)
+    assert D.shape == (5, 5) and np.array_equal(D, D.T) and not D.diagonal().any()
+    for p, q in itertools.combinations(range(5), 2):
+        assert D[p, q] == pytest.approx(ws.w2(diagrams[p], diagrams[q]), rel=1e-12, abs=0)
+
+
+def test_w2_matrix_does_not_depend_on_n_jobs():
+    rng = np.random.default_rng(3)
+    diagrams = [_random_diagram(rng, n, 1) for n in rng.integers(0, 8, 12)]
+    assert np.array_equal(ws.w2_matrix(diagrams, n_jobs=2), ws.w2_matrix(diagrams))
+
+
 @needs_upstream
 def test_interpolation_regenerates_from_seed_zero():
     stored, regenerated = inp.interpolation_datasets(), inp.regenerate_interpolation()
@@ -153,3 +231,17 @@ def test_fluid_cached_w2_is_symmetric_and_complete():
     D = inp.fluid_cached_w2(1.0, 0)
     assert D.shape == (400, 400) and np.isfinite(D).all()
     assert np.array_equal(D, D.T) and not D.diagonal().any()
+
+
+@needs_upstream
+def test_w2_reproduces_upstreams_cached_distance_of_small_fluid_diagrams():
+    # The two diagrams with the fewest bars hold only their three essential bars, so a second pair, the two with the
+    # fewest bars among those with finite bars in both dimensions, checks the finite matching too.
+    diagrams = inp.fluid_diagrams(1.0)
+    bars = np.array([len(h0) + len(h1) for h0, h1 in diagrams])
+    with_finite = np.array([all(np.isfinite(h[:, 1]).any() for h in d) for d in diagrams])
+    fewest = np.argsort(bars, kind="stable")
+    for h in (0, 1):
+        cached = inp.fluid_cached_w2(1.0, h)
+        for p, q in (fewest[:2], fewest[with_finite[fewest]][:2]):
+            assert ws.w2(diagrams[p][h], diagrams[q][h]) == pytest.approx(cached[p, q], rel=1e-12, abs=0)
