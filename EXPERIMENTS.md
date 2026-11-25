@@ -508,8 +508,10 @@ on the paper's own three tasks? The rule was fixed before any result.
     distances. Against K it isolates the representation, against F the
     estimator.
 - **Gates:** K had to match upstream's published values behind the paper's
-  Tables 1–3 before F and B ran; four more gates checked the distances, the
-  projection and the inputs.
+  Tables 1–3 (gate G1) before F and B ran. Four more gates checked this
+  study's W2 against upstream's cached distances (G2), the projection of the
+  test curves (G3), that the fluid shift changes no inner product (G4), and
+  the inputs (G5).
 - **Checks:** a verifier passed 14 checks by other routes, from W2 as a
   linear program to F refitted with topocyte's own fPCA.
 
@@ -526,25 +528,42 @@ with its 95% interval:
 - **K matches upstream's 146 published values behind the paper's Tables
   1–3** to 3.6e-16, so the comparison stands on the paper's own footing: the
   verdict does not rest on a weaker reimplementation.
-- **Where the gap comes from:** the representation in interpolation (B falls
-  about as far below K as F does), the estimator in curvature (B is level with
-  K), and both in fluid.
-- **F fails badly in a few fluid fits.** All 51 of the 2,500 fluid cells in
-  which F's R² lies below −10 have the smallest training size, 25, and most
-  of them use as many components as the rule allows (K0 + K1 = n − 2). They
-  set the size of the fluid gap, not its sign: without them the mean Δ is
-  −0.3336, and F beats K in 36 of the 2,500 cells (1.4%).
+- **Where the gap comes from** (exploratory, no verdict): the representation
+  in interpolation (B falls about as far below K as F does), the estimator in
+  curvature (B cannot be told apart from K, an exploratory comparison), and
+  both in fluid, where the representation's part also holds the essential
+  births that W2 compares and the Betti curves drop.
+- **For information, not a readout: F fails badly in a few fluid fits.** All
+  51 of the 2,500 fluid cells in which F's R² lies below −10 have the
+  smallest training size, 25, and most of them use as many components as the
+  rule allows (K0 + K1 = n − 2). They set the size of the fluid gap, not its
+  sign: without them the mean Δ is −0.3336, and F's R² lies above K's in 36
+  of the 2,500 cells (1.4%).
 
 **Learned.** On the kernel paper's own tasks, topocyte's Betti-curve fPCA
-regression does not beat a persistence-diagram kernel. Under the same
-estimator, the Betti curves' distances predict less well than W2 in
-interpolation and fluid. On the same Betti curves, the linear model loses to
-local averaging in curvature, and in fluid at every training size, most of
-all through a few near-saturated fits at the smallest. A follow-up for
-topocyte came out of a gate:
-`FPCA.transform` is inaccurate in near-null components (up to 8.5e-6 of the
-largest score), which matters wherever more than the leading components are
-used.
+regression does not beat a persistence-diagram kernel.
+
+- **Exploratory, no verdict:** under the same estimator, the Betti curves'
+  distances predict less well than W2 in interpolation and fluid. On the same
+  Betti curves, the linear model loses to local averaging in curvature, a
+  comparison that rests on one training set, and in fluid at every training
+  size, most of all through a few near-saturated fits at the smallest.
+- **For information, not a readout:** in interpolation the median Δ(F, K)
+  over the 100 datasets is −0.003795, and F's R² lies above K's in 36 of
+  them. n = 30's mean Δ(F, K), −0.1211, comes 90% from datasets 21, 22 and
+  25, whose K0 + K1 is 26, 27 and 28 against the cap of 28. And the
+  interval of Δ(F, B) that contains 0 there is a cancellation: by size, it
+  lies above 0 at n = 40, 60, 70, 80 and 100 and below 0 at n = 30.
+- **A lesson for future work, not a change to this study:** with
+  K0 + K1 ≤ n − 2, a saturated design leaves one residual degree of freedom;
+  its closed-form leave-one-out error is then essentially a single random
+  number, and choosing among many saturated candidates picks one that
+  extrapolates badly. This rule, binding here, produced F's catastrophic fits
+  at fluid n = 25 and interpolation n = 30, and in one dataset at n = 10. A
+  later FPCR should cap K0 + K1 at a fraction of n.
+- **A follow-up for topocyte** came out of a gate: `FPCA.transform` is
+  inaccurate in near-null components (up to 8.5e-6 of the largest score),
+  which matters wherever more than the leading components are used.
 
 ### 9. Planned: graphcode GNN on all GTEx slides
 

@@ -64,6 +64,10 @@ Claude's calls while building (2026-11-24 and 2026-11-25), each with its reason,
     - Fluid on splits 0–4 resamples those 5 splits, each by its mean Δ over the 5 times × 5 sizes.
     - Every SD in the tables has ddof 1, as upstream's tables use: its fluid `R2_std` is the ddof-1 SD of its
       splits' R².
+14. **G3 checks one curvature cell** (in both dimensions), because the curvature task has a single dataset, one
+    training set and one test set: `design.md`'s "at least 3 cells per task" cannot apply there. G3 ran so in the arms
+    stage (`run_study.G3_INTERP`, `G3_FLUID` and the one curvature cell: 7 cells, 14 cell × dimension checks); recorded
+    at the final review (2026-11-25).
 
 ## Results
 
@@ -273,3 +277,30 @@ Claude's calls while building (2026-11-24 and 2026-11-25), each with its reason,
       0); in curvature the estimator's (Δ(B, K) containing 0, Δ(F, B) 88% of F's mean gap); in fluid both lie below 0,
       the estimator's part 96% of the mean through n = 25, the two of the same order at the larger sizes.
   - Tests: 103 passed with `-W error` (4.8 s).
+- 2026-11-25 (the final review's fixes), wording and documentation only: no stage reran, and no number or verdict
+  changed.
+  - **A correction to `design.md`, which stays as committed:** only 9 of the 10 reported Turkeš et al. methods used
+    geodesic distance matrices. `point_net` took the stored coordinates as 3D point clouds, the 2D ones padded with
+    z = 0 (upstream's `curvature/Turkes_Experiment/turkes_curvature_experiment.py`, lines 217–237, 477 and 537, and
+    `SRC/data_construction.py`'s `calculate_3d_point_clouds`, read as text). The report, the README and the
+    curvature table's new input column say so.
+  - The README's Run section says what a rerun needs: a separate clone or worktree, since `results/*.npz` and `logs/`
+    are the untracked kept copy; each stage's json committed with its scripts before `verify_results.py`, whose
+    provenance check requires it; and the README's run table updated before `build_report.py`, which asserts it.
+  - **Interpolation's information note**, for information and not a readout, computed and asserted by
+    `build_report.py` from `arms.npz` and `readouts.json`: the median Δ(F, K) over the 100 datasets is −0.003795, and
+    F's R² lies above K's in 36 of them; n = 30's mean Δ(F, K), −0.1211, comes 90% from datasets 21, 22 and 25, whose
+    K0 + K1 is 26, 27 and 28 against the cap of 28; the 4 datasets with the lowest Δ(F, K) (21, 3, 22 and 25) all
+    chose K0 + K1 within 2 of n − 2; and Δ(F, B)'s interval over all datasets contains 0 as a cancellation, lying
+    above 0 at n = 40, 60, 70, 80 and 100 and below 0 at n = 30. For fluid, the representation's part Δ(B, K) also
+    holds the essential births, which W2 compares and the Betti curves drop.
+  - A lesson for future work, not a change to this study, in the README and `EXPERIMENTS.md`: with K0 + K1 ≤ n − 2 a
+    saturated design leaves one residual degree of freedom, its closed-form LOO error is then essentially one random
+    number, and choosing among many saturated candidates picks one that extrapolates badly; a later FPCR should cap
+    K0 + K1 at a fraction of n.
+  - The repository's `README.md` labels the study's numbers as differences and gives G1's exact-parse worst too;
+    `EXPERIMENTS.md` drops the verdict words from the exploratory comparisons, labels the notes for information, says
+    that curvature's comparison rests on one training set, and names every gate. Ruling 14 is added above.
+  - `requirements.txt` records pillow 12.3.0, which `build_report.py` imports. Its docstring now names the few
+    structural values written into the text by hand, and the report counts its gates, the rulings in this file and
+    the reported Turkeš et al. methods instead of typing them.

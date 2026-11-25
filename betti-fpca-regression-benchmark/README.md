@@ -58,7 +58,7 @@ globals (`safe_pickle.py`).
   cannot tell the two apart, not that they are equal. No pooled verdict.
 
 `design.md` holds the question, Simon's rulings and the rule; `plan.md` the implementation plan; `progress.md` the
-ledger: the 13 rulings made during the build, each with its reason, and every stage's results in the order they ran;
+ledger: the 14 rulings made during the build, each with its reason, and every stage's results in the order they ran;
 `report.html` the verdicts, the paper's three tables with the reported values beside K, F and B, R² against training
 size as the paper's Figures 6 and 9, the exploratory and descriptive readouts, F's chosen (K0, K1), the gates, the
 caveats and the runs.
@@ -84,19 +84,32 @@ Reading:
   rather than approximating it, so the verdict does not rest on a weaker version of it.
 - **Exploratory, no verdict: the representation or the estimator?** Δ(B, K) compares the representations under one
   estimator, Δ(F, B) the estimators on one representation, and their means add up to Δ(F, K).
-  - In interpolation the gap is the representation's: Δ(B, K) lies below 0, and F cannot be told apart from B.
-  - In curvature it is the estimator's: B cannot be told apart from K, and Δ(F, B) is most of F's gap.
+  - In interpolation the gap is the representation's: Δ(B, K) lies below 0, and F cannot be told apart from B. That
+    is a cancellation: by size, Δ(F, B)'s interval lies above 0 at n = 40, 60, 70, 80 and 100 and below 0 at n = 30.
+  - In curvature it is the estimator's: B cannot be told apart from K, and Δ(F, B) is most of F's gap. Curvature rests
+    on one training set.
   - In fluid both lie below 0. Δ(F, B) is most of the mean, through the smallest training size; at the larger sizes
-    the two parts are of the same order (`report.html`, section 3).
+    the two parts are of the same order (`report.html`, section 3). Here the representation's part, Δ(B, K), also
+    holds the essential births, which W2 compares and the Betti curves drop.
 - **For information, not a readout: arm F fails badly in a few fluid cells.** All 51 cells where F's R² lies below −10
   have n = 25; 32 of them chose K0 + K1 = 23 = n − 2, the most the eligibility rule allows, and 44 chose 21 or more.
   The descriptive fluid readout by training size shows them: n = 25 −15.34 [−28.01, −6.457], and from −0.3164 to
   −0.2434 at the other sizes, every interval below 0. They make the size of fluid's mean Δ, not its sign: without
   them the mean Δ(F, K) is −0.3336, the median over all 2,500 cells is −0.2545, and F's R² lies above K's in 36 of
   the 2,500 cells (1.4%).
+- **For information, not a readout: arm F's interpolation gap.** The median Δ(F, K) over the 100 datasets is
+  −0.003795, and F's R² lies above K's in 36 of them. n = 30's mean Δ(F, K), −0.1211, comes 90% from datasets 21, 22
+  and 25, whose K0 + K1 is 26, 27 and 28 against the cap of 28: near-saturated fits, as in fluid at n = 25.
+- **A lesson for future work, not a change to this study.** With K0 + K1 ≤ n − 2, a saturated design leaves one
+  residual degree of freedom; its closed-form LOO error is then essentially a single random number, and choosing among
+  many saturated candidates picks one that extrapolates badly. This rule, binding here, produces F's catastrophic
+  cells, at fluid n = 25 (above) and in interpolation: the 4 interpolation datasets with the lowest Δ(F, K) (21 at
+  n = 30, 3 at n = 10, 22 at n = 30 and 25 at n = 30) all chose K0 + K1 within 2 of n − 2. A later FPCR should cap
+  K0 + K1 at a fraction of n.
 - **Beside the paper's other methods,** descriptively: F's mean R² lies above the reported `PI_kernel`'s at every
   interpolation size. In curvature, K's and B's MSE lie below all ten reported Turkeš et al. methods and F's below 6
-  of them; those methods used geodesic distance matrices, not these inputs.
+  of them; 9 of those methods used geodesic distance matrices, not these inputs, and `point_net` the stored
+  coordinates as 3D clouds, the 2D ones padded with z = 0.
 - **Two gates needed a reference that `design.md` did not name** (rulings 7 and 8, confirmed by Simon on 2026-11-25):
   G3 compares the first min(20, rank) score columns per dimension, the only ones F can use, relative to the largest
   score over them; G4 is relative to each matrix's largest entry. Behind G3 lies **a follow-up for topocyte, not for
@@ -104,8 +117,9 @@ Reading:
   where it also misses its own fitted scores; F's scores come from the exact Gram projection and use none of them.
 - **Caveats** (`report.html`, section 9):
   - **the curvature inputs:** every arm reads the Euclidean Rips filtration of upstream's stored coordinates, 3D on
-    the sphere for K > 0 and 2D in the Poincaré disk for K < 0, where the Turkeš et al. baselines of Table 2 used
-    geodesic distance matrices; every arm predicts the sign of K right for all 50 test clouds;
+    the sphere for K > 0 and 2D in the Poincaré disk for K < 0, where 9 of the 10 Turkeš et al. baselines of Table 2
+    used geodesic distance matrices and `point_net` the same coordinates as 3D clouds, the 2D ones padded with z = 0;
+    every arm predicts the sign of K right for all 50 test clouds;
   - **the essential bars that F and B drop:** none that matters in the Rips tasks (only H0's, born at 0 in every
     cloud), but in fluid every diagram has one in H0 and two in H1, whose births W2 compares and the Betti curves do
     not hold;
@@ -125,9 +139,20 @@ Needs:
 - no study venv: the scripts run in topocyte's main-checkout venv (Python 3.14.0). `requirements.txt` records its
   versions; nothing is installed.
 
-The run's commands, the stages in the order they ran (the tests ran throughout, as the code grew). A rerun in this
-folder repeats them in order; each stage refuses an npz that its predecessor's json does not vouch for, and
-`build_report.py` refuses a `verify.json` that is older than a stage's json or did not check the files it reads.
+The run's commands, the stages in the order they ran (the tests ran throughout, as the code grew). They are a record,
+not a recipe to repeat in this folder. A rerun needs three things:
+
+- **A separate clone or worktree, not this folder.** `results/*.npz` and `logs/` are untracked: they are the kept copy
+  that `verify.json` vouches for and the report reads. A rerun in place overwrites them, and `logs/` cannot be
+  regenerated with the recorded wall times and peak RSS.
+- **Each stage's json committed with the scripts that wrote it before `verify_results.py` runs.** Its provenance check
+  requires every stage json to be unchanged since the commit that last changed it, and every md5 the json records to
+  be that of the script in that commit.
+- **This README's run table updated before `build_report.py` runs.** The report asserts the table against `logs/` and
+  the jsons, and the README's other numbers against the results.
+
+Each stage refuses an npz that its predecessor's json does not vouch for, and `build_report.py` refuses a `verify.json`
+that is older than a stage's json or did not check the files it reads.
 
 ```bash
 git -C /Users/simon/rep/lbi/reindero/topocyte worktree add --detach ../topocyte-18e3aa5 18e3aa5   # once, for the class-curve study

@@ -11,6 +11,8 @@ pandas==3.0.5
 ripser==0.6.15
 scikit-learn==1.9.0
 matplotlib==3.11.1
+# build_report.py imports PIL to quantize its figures (importlib.metadata, 2026-11-25).
+pillow==12.3.0
 pytest==9.1.1
 
 # topocyte's own dependencies in that venv (importlib.metadata, 2026-11-24):

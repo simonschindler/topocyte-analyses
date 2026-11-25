@@ -25,17 +25,24 @@ loader), for their coordinates; and the logs in ``logs/``, for the stages' wall 
 
 Computed here, for description only, never for a verdict: from ``arms.npz``, the fluid cells in which arm F's R² lies
 below ``FAIL_BELOW``, with the (K0, K1) they chose; the median, the share above 0 and the mean without those cells of
-Δ(F, K) over the fluid cells; arm F's chosen K0 + K1 per fluid training size; and whether the curvature predictions
-have the sign of the true curvature.
+Δ(F, K) over the fluid cells; for interpolation, the median of Δ(F, K) over the datasets, how many lie above 0, and how
+much of the worst training size's mean comes from its datasets whose K0 + K1 lies within ``NEAR_CAP`` of the cap
+n − 2; arm F's chosen K0 + K1 per fluid training size; and whether the curvature predictions have the sign of the true
+curvature.
 
 Writes ``report.html``, with its figures embedded as 128-colour PNGs in the sibling reports' palette and look, and
 nothing else. A few seconds.
 
-No number in the prose is typed by hand: each is formatted from those files or from ``common``, and every sentence that
-states a direction or an outcome is asserted against the numbers it states. ``README.md`` is asserted to state, as
-this report formats them: in its status line, the verdicts with their intervals and gate G1's worst differences;
-elsewhere, its table of the three pairs' readouts row by row, the curvature MSEs, the fluid information note, the G3
-observation, the npz sizes and the table of the stages' runs.
+Every result in the prose is formatted from those files or from ``common``, and every sentence that states a direction
+or an outcome is asserted against the numbers it states. The counts of the gates (their records in the stages' jsons),
+of the build's rulings (numbered in ``progress.md``) and of the reported Turkeš et al. methods are derived, not typed.
+Written into the text by hand are only labels and the design's fixed parameters: the paper's table and figure numbers
+and arXiv id, the ledger's dates and ruling numbers, the 95% of the intervals (asserted against the bootstrap's
+percentiles), the bandwidth grid's [0.1, 2], and the curvature targets' linspace(−2, 2, n) (asserted against the data).
+``README.md`` is asserted to state, as this report formats them: in its status line, the verdicts with their intervals
+and gate G1's worst differences; elsewhere, its table of the three pairs' readouts row by row, the number of rulings,
+the curvature MSEs, the interpolation and fluid information notes, the G3 observation, the npz sizes and the table of
+the stages' runs.
 """
 
 from __future__ import annotations
@@ -82,6 +89,11 @@ PAIR_LABEL = {"F_vs_K": "Δ(F, K): primary", "B_vs_K": "Δ(B, K): representation
 PAIR_MARKER = {"F_vs_K": "o", "B_vs_K": "s", "F_vs_B": "D"}
 PAIR_COLOR = {"F_vs_K": INK, "B_vs_K": INK2, "F_vs_B": MUTED}  # pairs are not arms: ink, not the arms' colours
 VERDICT_TEXT = {"beats": "beats", "below": "is below", "level": "is level with"}
+SIDES = ("above 0", "below 0", "containing 0")  # where an interval lies (``side``)
+# The one reported Turkeš et al. method whose input is not a geodesic distance matrix: upstream's
+# curvature/Turkes_Experiment/turkes_curvature_experiment.py (lines 217-237, 477, 537, read as text) feeds it the
+# stored coordinates as 3D point clouds, the 2D ones padded with z = 0 (data_construction.calculate_3d_point_clouds).
+POINT_NET = "point_net"
 FAIL_BELOW = -10.0  # the information note's threshold on arm F's fluid R² (progress.md, the readouts line)
 NEAR_CAP = 2  # the note counts the failed cells that chose K0 + K1 within this of n − 2
 FLUID_YLIM = (-0.6, 1.0)  # the fluid figure's R² axis; a mean below it is marked at the bottom, its value written
@@ -201,6 +213,11 @@ def minus(text: str) -> str:
     return text.replace("-", "−")
 
 
+def lower_first(text: str) -> str:
+    """``text`` with its first letter in lower case, to continue a sentence."""
+    return text[:1].lower() + text[1:]
+
+
 def num(value: float, digits: int = 4) -> str:
     """A number to ``digits`` decimals, with a typographic minus and no "−0.0000"."""
     return f"{0:.{digits}f}" if round(value, digits) == 0 else minus(f"{value:.{digits}f}")
@@ -281,6 +298,15 @@ def resources(log: str | None) -> dict:
     text = (c.LOGS / log).read_text()
     real, rss = re.findall(r"([\d.]+) real", text), re.findall(r"(\d+)\s+maximum resident set size", text)
     return {"seconds": float(real[-1]), "rss_gb": int(rss[-1]) / 1e9} if real and rss else {}
+
+
+def progress_rulings() -> int:
+    """How many rulings ``progress.md`` numbers in its section "Rulings during the build", asserted to run 1, 2, …"""
+    text = (c.HERE / "progress.md").read_text()
+    section = text.split("## Rulings during the build", 1)[1].split("\n## ", 1)[0]
+    numbers = [int(n) for n in re.findall(r"^(\d+)\. \*\*", section, flags=re.MULTILINE)]
+    assert numbers == list(range(1, len(numbers) + 1)), f"progress.md's rulings are not numbered 1, 2, …: {numbers}"
+    return len(numbers)
 
 
 def check_readme(claims: dict[str, str], status: dict[str, str]) -> None:
@@ -703,6 +729,8 @@ def main() -> None:
     g5_clouds = sum(g5["rips_clouds_compared"].values())
     assert not any(g5["rips_clouds_differing_from_ripser"].values()) and not g5["fluid_diagrams_missing"]
     assert g5["interpolation_equals_its_seed_0_regeneration"]
+    n_gates = len([g1, g2, g3, g4, g5])  # every gate's record, each asserted passed above
+    rulings = progress_rulings()
 
     # ---------------- the exploratory pairs: Δ(F, K) = Δ(F, B) + Δ(B, K), mean by mean
     fk, bk, fb = ({task: pair(readouts, name)[task] for task in TASKS} for name in PAIRS)
@@ -730,10 +758,19 @@ def main() -> None:
     assert small_fk["mean"] < min(rest_fk) and small_fb["mean"] < min(rest_fb)  # the smallest size is the worst
     # at the larger sizes the two parts are of the same order: within a factor of 2 of each other
     assert 0.5 < min(map(abs, rest_fb)) / max(map(abs, rest_bk)) and max(map(abs, rest_fb)) / min(map(abs, rest_bk)) < 2
+    # interpolation's Δ(F, B) contains 0 overall as a cancellation: by size, its interval lies above 0 at some sizes
+    # and below 0 at others
+    fb_sizes = {where: [b["n_train"] for b in fb["interp"]["by_size"] if side(b) == where] for where in SIDES}
+    assert fb_sizes["above 0"] and fb_sizes["below 0"]
+    cancellation = (
+        f"Δ(F, B)'s interval lies above 0 at n = {listing(fb_sizes['above 0'])} and below 0 at n = "
+        f"{listing(fb_sizes['below 0'])}"
+    )
     explore = {
         "interp": f"In interpolation the gap is the representation's: on the Betti curves' L² distances K's own "
         f"estimator falls below K, Δ(B, K) = {delta_text(bk['interp'])}, while F cannot be told apart from B, "
-        f"Δ(F, B) = {delta_text(fb['interp'])}, an interval containing 0.",
+        f"Δ(F, B) = {delta_text(fb['interp'])}, an interval containing 0. That is a cancellation: by size, "
+        f"{cancellation}.",
         "curv": f"In curvature it is the estimator's: B cannot be told apart from K, Δ(B, K) = "
         f"{delta_text(bk['curv'])}, an interval containing 0, while F falls below B, Δ(F, B) = "
         f"{delta_text(fb['curv'])}, {pct(curv_share, 1, 0)} of F's mean gap to K.",
@@ -742,7 +779,8 @@ def main() -> None:
         f"training size n = {n_small}, where Δ(F, B) = {delta_text(small_fb)}. At the larger sizes the two parts are "
         f"of the same order: Δ(B, K) lies between {sig(min(rest_bk))} and {sig(max(rest_bk))} at every training "
         f"size, and Δ(F, B) between {sig(min(rest_fb))} and {sig(max(rest_fb))} at the larger ones, every interval "
-        "below 0.",
+        "below 0. Here the representation's part also holds the essential births, which W2 compares and the Betti "
+        "curves drop.",
     }
 
     # ---------------- the fluid cells in which arm F fails: information, not a readout
@@ -789,13 +827,48 @@ def main() -> None:
     assert sizes_below and sizes_level and len(sizes_below) + len(sizes_level) == len(c.INTERP_SIZES)
     over_pi = [row["F"]["mean"] - row["reported"]["PI_kernel"]["mean"] for row in interp_rows]
     assert min(over_pi) > 0  # F's mean lies above the reported PI_kernel's at every size
+    # for information, not a readout: arm F's interpolation gap dataset by dataset (datasets in size order, then runs)
+    interp_delta = arms["interp_r2_F"] - arms["interp_r2_K"]
+    interp_n = np.repeat(c.INTERP_SIZES, c.INTERP_RUNS)
+    interp_k_total = arms["interp_k_F"].sum(axis=1)
+    assert math.isclose(float(interp_delta.mean()), fk["interp"]["mean"], rel_tol=1e-12)
+    interp_median, interp_above = float(np.median(interp_delta)), int(np.sum(interp_delta > 0))
+    assert interp_median < 0 and interp_above < interp_delta.size / 2  # most datasets lie below K
+    worst_size = min(fk["interp"]["by_size"], key=lambda b: b["mean"])  # the size with the most negative mean Δ
+    n_worst, at = worst_size["n_train"], np.flatnonzero(interp_n == worst_size["n_train"])
+    assert math.isclose(float(interp_delta[at].mean()), worst_size["mean"], rel_tol=1e-12)
+    interp_cap = n_worst - 2  # K0 + K1 ≤ n − 2
+    near = at[interp_k_total[at] >= interp_cap - NEAR_CAP]  # that size's near-saturated datasets
+    share_near = float(interp_delta[near].sum() / interp_delta[at].sum())
+    assert near.size and np.all(interp_delta[near] < 0) and share_near > 0.5 and interp_k_total[at].max() <= interp_cap
+    assert set(near.tolist()) == set(at[np.argsort(interp_delta[at])[: near.size]].tolist())  # they are its worst
+    # over all sizes: the lowest Δ(F, K) belong to near-saturated fits, as many as come before the first that is not
+    by_delta = np.argsort(interp_delta, kind="stable")
+    near_cap = (interp_k_total >= interp_n - 2 - NEAR_CAP)[by_delta]
+    assert near_cap[0] and not near_cap.all()
+    worst_ids = by_delta[: int(np.argmin(near_cap))]  # argmin finds the first False
+    assert set(near.tolist()) <= set(worst_ids.tolist())
+    interp_phrases = {
+        "the worst datasets": f"the {worst_ids.size} interpolation datasets with the lowest Δ(F, K) ("
+        f"{listing(f'{i} at n = {interp_n[i]}' for i in worst_ids)}) all chose K0 + K1 within {NEAR_CAP} of n − 2",
+        "the interpolation median": f"The median Δ(F, K) over the {interp_delta.size} datasets is "
+        f"{sig(interp_median)}, and F's R² lies above K's in {interp_above} of them",
+        "the interpolation size": f"n = {n_worst}'s mean Δ(F, K), {sig(worst_size['mean'])}, comes "
+        f"{pct(share_near, 1, 0)} from datasets {listing(near.tolist())}, whose K0 + K1 is "
+        f"{listing(interp_k_total[near].tolist())} against the cap of {interp_cap}",
+        "the cancellation": cancellation,
+    }
 
     # ---------------- curvature
     curv = tables["curv"]
     mse = {arm: curv[arm] for arm in ARMS}
     assert mse["K"] == curv["reported"]["PD_kernel"] and mse["K"] < mse["B"] < mse["F"]
     turkes = {method: value for method, value in curv["reported"].items() if method != "PD_kernel"}
-    assert len(turkes) == 10 and max(mse["K"], mse["B"]) < min(turkes.values())  # K and B lie below all ten
+    assert max(mse["K"], mse["B"]) < min(turkes.values())  # K and B lie below all of them
+    # upstream's Turkes_Experiment (read as text): point_net reads the stored coordinates as 3D clouds, the 2D ones
+    # padded with z = 0; every other method a geodesic distance matrix
+    assert POINT_NET in turkes
+    n_turkes, n_geodesic = len(turkes), len(turkes) - 1
     turkes_lower = [method for method, value in turkes.items() if value < mse["F"]]
     turkes_higher = [method for method, value in turkes.items() if value > mse["F"]]
     assert turkes_lower and turkes_higher and len(turkes_lower) + len(turkes_higher) == len(turkes)
@@ -907,7 +980,10 @@ def main() -> None:
             f"{num(mse['K'])}",
             "the Turkeš methods": f"F's below {len(turkes_higher)} of them",
             "the curvature signs": f"every arm predicts the sign of K right for all {n_test_curv} test clouds",
+            "the Turkeš inputs": f"{n_geodesic} of those methods used geodesic distance matrices",
             **fail_phrases,
+            **interp_phrases,
+            "the rulings": f"the {rulings} rulings made during the build",
             "the G3 observation": g3_phrase,
             **{f"{name}'s size": text for name, text in npz_text.items()},
             **{f"the run of {row[0]}": readme_row for row, readme_row in zip(STAGES, readme_rows, strict=True)},
@@ -933,15 +1009,17 @@ percentile bootstrap of {boot["n_boot"]:,} resamples. Mean Δ and 95% interval: 
 interval lies below 0, which the rule reads as below <code>PD_kernel</code>.</p>
 <p><strong>The comparison stands on the paper's own footing.</strong> The reimplementation reproduces upstream's
 published results, the {g1_values} values behind the paper's Tables 1–3, {html.escape(g1_phrase)}, against gate G1's
-tolerance of {scientific(g1["tolerance"], 0)}, so the verdict does not rest on a weaker reimplementation. All five
-gates passed.</p>
+tolerance of {scientific(g1["tolerance"], 0)}, so the verdict does not rest on a weaker reimplementation. All
+{n_gates} gates passed.</p>
 <p><strong>Exploratory, no verdict: where F's gap comes from.</strong> Arm B runs K's estimator on the Betti curves'
 L² distances, so Δ(B, K) is the representation's part of the gap and Δ(F, B) the estimator's; their means add up to
 Δ(F, K). {html.escape(explore["interp"])} {html.escape(explore["curv"])} {html.escape(explore["fluid"])}</p>
-<p><strong>For information, not a readout: arm F fails badly in a few fluid cells.</strong>
-{html.escape(fail_phrases["the failed cells"])}; {html.escape(fail_phrases["their (K0, K1)"])}. The fluid readout by
-training size shows it: {html.escape(fail_phrases["the fluid readout by size"])}. They make the size of fluid's mean
-Δ, not its sign: {html.escape(fail_phrases["the sign"])}.</p>
+<p><strong>For information, not a readout: arm F fails badly in a few near-saturated fits.</strong> In fluid,
+{html.escape(lower_first(fail_phrases["the failed cells"]))}; {html.escape(fail_phrases["their (K0, K1)"])}. The fluid
+readout by training size shows it: {html.escape(fail_phrases["the fluid readout by size"])}. They make the size of
+fluid's mean Δ, not its sign: {html.escape(fail_phrases["the sign"])}. In interpolation,
+{html.escape(lower_first(interp_phrases["the interpolation median"]))};
+{html.escape(interp_phrases["the interpolation size"])}.</p>
 """
 
     # ---------------- section 1: the question
@@ -955,9 +1033,9 @@ exploratory arm.</p>
 diagrams</em>, arXiv:2611.25295. Its estimator, <code>PD_kernel</code>, is Nadaraya–Watson regression with a Gaussian
 kernel on the distance W2(H0) + W2(H1) between persistence diagrams, its bandwidth chosen by leave-one-out (LOO)
 cross-validation. The paper compares it with persistence images (<code>PI_kernel</code>) and, for curvature, with the
-reported results of ten methods of Turkeš, Montúfar and Otter (2022). Its code and data, <em>upstream</em>, were cloned
-at <code>{c.UPSTREAM_SHA}</code> ({upstream_date}) and read as data only: no upstream code ran, and its pickles went
-through a whitelist unpickler.</p>
+reported results of {n_turkes} methods of Turkeš, Montúfar and Otter (2022). Its code and data, <em>upstream</em>,
+were cloned at <code>{c.UPSTREAM_SHA}</code> ({upstream_date}) and read as data only: no upstream code ran, and its
+pickles went through a whitelist unpickler.</p>
 <p><strong>Three arms see the same diagrams, training sets and test sets:</strong></p>
 <ul>
 <li><strong>K, <code>PD_kernel</code> reimplemented:</strong> Nadaraya–Watson on W2(H0) + W2(H1), transcribed from
@@ -1084,22 +1162,37 @@ last bits (gate G1).</p>
 mean R² lies above the reported <code>PI_kernel</code>'s at every size, by {num(min(over_pi), 3)} to
 {num(max(over_pi), 3)}.</p>
 {table(["n", "Δ(F, K)", "Δ(B, K)", "Δ(F, B)"], by_size_rows)}
+<h3>For information: arm F's interpolation gap</h3>
+<p>Not a readout. {html.escape(interp_phrases["the interpolation median"])}. {
+        html.escape(interp_phrases["the interpolation size"])
+    }: fits that use nearly all the components the eligibility rule allows, as in fluid at
+n = {n_small} (section 6). Over all sizes, {html.escape(interp_phrases["the worst datasets"])}. The exploratory
+Δ(F, B), whose interval over all {interp_delta.size} datasets contains 0, is a cancellation: by size,
+{html.escape(cancellation)}.</p>
 """
 
     # ---------------- section 5: curvature
+    point_net_input = "the stored coordinates as 3D clouds, the 2D ones padded with z = 0"
     curv_rows = [
-        [f"{html.escape(method)}", num(value), "Turkeš et al., as reported"] for method, value in turkes.items()
+        [
+            html.escape(method),
+            num(value),
+            "Turkeš et al., as reported",
+            point_net_input if method == POINT_NET else "geodesic distance matrices",
+        ]
+        for method, value in turkes.items()
     ]
-    curv_rows.append(["PD_kernel", num(curv["reported"]["PD_kernel"]), "the paper, as reported"])
-    curv_rows += [[ARM_NAME[arm], num(mse[arm]), "this study"] for arm in ARMS]
+    rips_input = "the Rips filtration of the stored coordinates"
+    curv_rows.append(["PD_kernel", num(curv["reported"]["PD_kernel"]), "the paper, as reported", rips_input])
+    curv_rows += [[ARM_NAME[arm], num(mse[arm]), "this study", rips_input] for arm in ARMS]
     curv_section = f"""
 <p>One training set of {clouds["train"].size} clouds, K = linspace(−2, 2, {clouds["train"].size}), and
 {clouds["test"].size} test clouds. Arm K's MSE equals the reported <code>PD_kernel</code>'s bit for bit; F's is
 {mse["F"] / mse["K"]:.1f} times K's, and B's lies between them. F chose (K0, K1) = {k_curv}.</p>
-{table(["method", "MSE on the test clouds", "source"], curv_rows)}
-<p>Of the ten reported methods of Turkeš et al., which used geodesic distance matrices rather than these inputs (see
-Caveats), F's MSE lies below those of {listing(turkes_higher)}, and above those of {listing(turkes_lower)}; K's and B's
-lie below all ten.</p>
+{table(["method", "MSE on the test clouds", "source", "input"], curv_rows)}
+<p>Of the {n_turkes} reported methods of Turkeš et al., {n_geodesic} used geodesic distance matrices rather than these
+inputs, and {POINT_NET} {point_net_input} (see Caveats). F's MSE lies below those of {listing(turkes_higher)}, and
+above those of {listing(turkes_lower)}; K's and B's lie below all {n_turkes}.</p>
 {
         figure(
             fig_curvature(arms, mse),
@@ -1289,8 +1382,9 @@ entry the two shifts differ by up to {scientific(g4_entry)} of the entry, on ent
 lengths: the rounding of the shifted endpoints, which no shift avoids, not a part of a bar clipped below 0, which G4 is
 for (ruling 7 gives the measurements, against the exact full-line values computed in rationals).</li>
 </ul>
-<p><code>progress.md</code> holds all 13 rulings of the build, each with its reason; none changes a number of
-<code>design.md</code>.</p>
+<p><code>progress.md</code> holds all {rulings} rulings of the build, each with its reason; none changes a number of
+<code>design.md</code>. Ruling 14 records that G3 checks one curvature cell, the task's single training set, where
+<code>design.md</code> asked for at least 3 cells per task.</p>
 """
 
     # ---------------- section 9: the caveats
@@ -1299,9 +1393,11 @@ for (ruling 7 gives the measurements, against the exact full-line values compute
 <li><strong>The curvature inputs.</strong> The input of <code>PD_kernel</code>, and so of every arm here, is the
 Euclidean Rips filtration of upstream's stored coordinates: 3D Cartesian coordinates on the sphere of radius 1/√K for
 K &gt; 0 ({int(positive.sum())} of the {y_curv.size} clouds), 2D coordinates in the Poincaré disk of radius 1/√−K for
-K &lt; 0 ({int(negative.sum())}); both asserted on the clouds. The ten Turkeš et al. methods of Table 2 used geodesic
-distance matrices instead, so their row compares other inputs. Every arm predicts the sign of K right for all
-{n_test_curv} test clouds.</li>
+K &lt; 0 ({int(negative.sum())}); both asserted on the clouds. Of the {n_turkes} Turkeš et al. methods of Table 2,
+{n_geodesic} used geodesic distance matrices instead, so their rows compare other inputs; {POINT_NET} read the stored
+coordinates themselves as 3D clouds, the 2D ones padded with z = 0 (upstream's
+<code>curvature/Turkes_Experiment/turkes_curvature_experiment.py</code>, read as text). Every arm predicts the sign of
+K right for all {n_test_curv} test clouds.</li>
 <li><strong>The essential bars that F and B drop.</strong> topocyte's reduced Betti curves hold finite bars only.
 In the Rips tasks the only essential bar is H0's, born at 0 in every cloud (the filtration ends in one simplex over
 all the points), so nothing is lost. In fluid every diagram has one essential bar in H0 and two in H1, whose births
