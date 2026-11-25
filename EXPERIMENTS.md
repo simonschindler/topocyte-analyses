@@ -1,6 +1,6 @@
 # What the topocyte analyses have done, and what they have taught us
 
-A self-contained recap of every study in this repository up to 2026-11-23, for a
+A self-contained recap of every study in this repository up to 2026-11-25, for a
 reader who has not met the project before. Each study's own folder has the full
 detail: a README with the commands, `progress.md` with every decision in the
 order it was made, and a `report.html` with the figures (kept out of git).
@@ -138,6 +138,7 @@ The local studies take the closed disc of radius **150 µm** around each cell
 | 2026-11-20 to 23 | [gtex-liver-chromatic-domains](gtex-liver-chromatic-domains/README.md) | verdict (pilot) | local arrangement of cell types gives no recurring domains |
 | 2026-11-23 | [gtex-liver-emeans-neighbourhoods](gtex-liver-emeans-neighbourhoods/README.md) | descriptive | every cell's neighbourhood clustered; three broad types |
 | 2026-11-23 | [gtex-liver-class-curves-fpca](gtex-liver-class-curves-fpca/README.md) | verdict and holdout | the fPCA of each class's density curve does not beat D+C: level by the rule, below it in every repeat |
+| 2026-11-24/25 | [betti-fpca-regression-benchmark](betti-fpca-regression-benchmark/README.md) | verdict | outside the liver: regression on Betti-curve fPCA scores is below a persistence-diagram kernel on all three of that kernel's published tasks |
 | 2026-11-18 | [gtex-graphcode-gnn](gtex-graphcode-gnn/README.md) | planned | design and related-work survey only |
 
 "Verdict" studies fixed their decision rule before seeing any result;
@@ -476,7 +477,73 @@ holdout at both. The
 whole curves show no gain over the counts at ten density deciles, and D+C
 stays the representation to beat.
 
-### 8. Planned: graphcode GNN on all GTEx slides
+### 8. A benchmark outside the liver: Betti-curve fPCA regression against a persistence-diagram kernel
+
+**Question.** A recent paper (Aggarwal, Nichols and Turner, arXiv:2611.25295)
+predicts a number from persistence diagrams with `PD_kernel`: a weighted
+average of the training targets, the weights falling off with the
+2-Wasserstein distance (W2) between diagrams (Nadaraya–Watson regression). It
+argues that working on the diagrams directly, without turning them into
+vectors, predicts better. topocyte's Betti-curve fPCA does turn them into
+vectors. Does a linear regression on its fPCA scores (FPCR) beat `PD_kernel`
+on the paper's own three tasks? The rule was fixed before any result.
+
+**Done.**
+
+- **Data:** the paper's public code and data, cloned at a pinned commit and
+  read as data only (none of its code ran):
+  - interpolation: clouds of 20 points between a line and a circle, the
+    target the mixing parameter; 100 datasets of 10 to 100 training clouds;
+  - curvature: clouds of 50 points on surfaces of constant curvature, the
+    target the curvature; one training set of 50 clouds;
+  - fluid: 400 simulations of a 2D flow, the target the log Reynolds number,
+    from the vorticity's persistence diagrams at five times; 100 random
+    splits, where the paper used 5.
+- **Arms**, all seeing the same diagrams, training sets and test sets:
+  - K: `PD_kernel`, rerun;
+  - F: FPCR on topocyte's exact Betti-curve fPCA scores, the number of
+    components chosen by leave-one-out;
+  - B (exploratory): `PD_kernel`'s estimator on the Betti curves' exact L²
+    distances. Against K it isolates the representation, against F the
+    estimator.
+- **Gates:** K had to reproduce the paper's published tables before F and B
+  ran; four more gates checked the distances, the projection and the inputs.
+- **Checks:** a verifier passed 14 checks by other routes, from W2 as a
+  linear program to F refitted with topocyte's own fPCA.
+
+**Results.** The paired difference Δ(X, Y), signed so that Δ > 0 favours X,
+with its 95% interval:
+
+| task | Δ(F, K), the verdict's | Δ(B, K): representation | Δ(F, B): estimator |
+|---|---|---|---|
+| interpolation (R²) | −0.02401 (−0.03837 to −0.01141) | −0.02512 (−0.03123 to −0.01954) | +0.001110 (−0.01391 to +0.01470) |
+| curvature (MSE, Y's minus X's) | −0.2478 (−0.4340 to −0.09194) | −0.02964 (−0.08372 to +0.02166) | −0.2182 (−0.4146 to −0.04948) |
+| fluid (R²) | −3.283 (−5.812 to −1.507) | −0.1388 (−0.1441 to −0.1334) | −3.144 (−5.675 to −1.367) |
+
+- **Verdict: below `PD_kernel` on all three tasks,** each interval below 0.
+- **K reproduces the paper's 146 published values** to 3.6e-16, so the
+  comparison stands on the paper's own footing.
+- **Where the gap comes from:** the representation in interpolation (B falls
+  about as far below K as F does), the estimator in curvature (B is level with
+  K), and both in fluid.
+- **F fails badly in a few fluid fits.** All 51 of the 2,500 fluid cells in
+  which F's R² lies below −10 have the smallest training size, 25, and most
+  of them use as many components as the rule allows (K0 + K1 = n − 2). They
+  set the size of the fluid gap, not its sign: without them the mean Δ is
+  −0.3336, and F beats K in 36 of the 2,500 cells (1.4%).
+
+**Learned.** On the kernel paper's own tasks, topocyte's Betti-curve fPCA
+regression does not beat a persistence-diagram kernel. Under the same
+estimator, the Betti curves' distances predict less well than W2 in
+interpolation and fluid. On the same Betti curves, the linear model loses to
+local averaging in curvature, and in fluid at every training size, most of
+all through a few near-saturated fits at the smallest. A follow-up for
+topocyte came out of a gate:
+`FPCA.transform` is inaccurate in near-null components (up to 8.5e-6 of the
+largest score), which matters wherever more than the leading components are
+used.
+
+### 9. Planned: graphcode GNN on all GTEx slides
 
 Design stage only. The plan:
 
@@ -561,9 +628,14 @@ shown added value here, not that it cannot.
 - **Fix the rule before the result, and keep a holdout you score once.** Study 4
   held 118 slides back from the start, and study 7 reused them for its own
   single look. Several rules were written before any
-  run: studies 4, 5 and 7 for their verdicts, study 1 for the death/birth ratio,
-  and studies 2 and 3 for the PC2 check. This kept the conclusions from
+  run: studies 4, 5, 7 and 8 for their verdicts, study 1 for the death/birth
+  ratio, and studies 2 and 3 for the PC2 check. This kept the conclusions from
   drifting with the data.
+- **Reproduce a published baseline before comparing with it.** Study 8 reran
+  the kernel paper's method from its public code and data, and matched all
+  146 published values to 3.6e-16 before any result of topocyte's arms, so its
+  verdict stands on the paper's own footing rather than on a reimplementation
+  that might be weaker.
 - **Cluster-number rules can be fooled.**
   - A gap statistic against a matched Gaussian calls any bounded or skewed
     cloud clustered.
@@ -608,6 +680,9 @@ shown added value here, not that it cannot.
 - **The four weaker e-means fits** (composition k = 4, density k = 8,
   composition + density k = 6 and 9) could be refitted from more starting
   points, so that their saved labels match k-means++ quality.
+- **topocyte's `FPCA.transform` in near-null components.** It misses the exact
+  projection by up to 8.5e-6 of the largest score there, and misses its own
+  fitted scores by as much (study 8, gate G3). A follow-up for the package.
 
 ## Glossary
 
@@ -628,6 +703,8 @@ shown added value here, not that it cannot.
   scaling laws (Bessa et al. 2026).
 - **fPCA:** functional principal component analysis of curves; raw keeps their
   size, cosine only their shape.
+- **FPCR (functional principal component regression):** a linear regression
+  of a target on fPCA scores.
 - **Gap statistic:** compares how much clustering tightens the data with how
   much it tightens a reference without clusters; k̂ is where the gain stops.
 - **Holdout:** slides set aside before any result and scored once.
@@ -635,6 +712,9 @@ shown added value here, not that it cannot.
   conditions.
 - **MFA (multiple factor analysis):** a PCA over several blocks of scores,
   each scaled so that no block dominates.
+- **Nadaraya–Watson regression:** predicts a target as an average of the
+  training targets, each weighted by a kernel of its sample's distance to the
+  one predicted.
 - **PLS-DA, LDA:** supervised projections that look for the directions
   separating the labelled groups.
 - **Prediction strength:** how well clusters found on one half of the data
@@ -643,6 +723,9 @@ shown added value here, not that it cannot.
   bar.
 - **Purity ×chance:** the share of a slide's 15 nearest neighbours that share
   its group, divided by the share expected by chance.
+- **W2 (2-Wasserstein distance between diagrams):** the cost of the best
+  matching of two diagrams' bars, each bar matched to a bar of the other
+  diagram or to the diagonal.
 
 ## Where things are
 

@@ -197,7 +197,8 @@ def _reported(folder: str, name: str) -> pd.DataFrame:
     """Upstream's reported table ``folder/name``, read as a CSV with pandas and nothing else.
 
     ``float_precision="round_trip"`` reads every value as Python's ``float`` reads its text: pandas' default parser
-    misreads some 17-digit values in their last bits, 52 of upstream's 101 reported values.
+    misreads 52 of upstream's 101 reported values in their last bits, 30 of them with 16 significant digits and 22
+    with 17.
     """
     return pd.read_csv(c.UPSTREAM / folder / name, float_precision="round_trip")
 

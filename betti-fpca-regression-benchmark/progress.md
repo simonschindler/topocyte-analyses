@@ -126,8 +126,8 @@ Claude's calls while building (2026-11-24 and 2026-11-25), each with its reason,
   1.58 GB, exit status 0. **Gates G1 and G3 passed;** arms F and B then ran.
   - **G1** compares arm K with upstream's published results, against the tolerance 1e-9 absolute:
     - interpolation's 20 values, each size's mean and SD: worst |difference| 1.25e-16;
-    - curvature's MSE: 8.33e-17, which is pandas' default parse of the reported value, not a difference (see the
-      readouts line);
+    - curvature's MSE: 8.33e-17, the error of pandas' default parse of the reported value, not a difference (see
+      the readouts line);
     - fluid's 125 values (splits 0–4): 3.61e-16.
   - **G3** (ruling 8) compares the projected test scores with `FPCA.transform` in 14 cells × dimensions, ranks
     equal in all of them:
@@ -176,7 +176,7 @@ Claude's calls while building (2026-11-24 and 2026-11-25), each with its reason,
     - Every reported value in `readouts.json` equals the float of its CSV text.
     - Arm K's columns of the tables equal upstream's reported values to 2.2e-16: interpolation 1.1e-16, curvature
       0, fluid splits 0–4 2.2e-16. Arm K's ddof-1 SD over splits 0–4 matches the reported fluid `R2_std` to
-      1.7e-16, where ddof 0 misses by 1.0e-2.
+      1.1e-16 (read exactly), where ddof 0 misses by 1.0e-2.
   - For information, not a readout: arm F fails badly in a few fluid cells, which make the size of fluid's mean Δ
     but not its sign.
     - F's fluid R² has median 0.085 (K 0.365, B 0.178); 755 of the 2,500 cells lie below 0, 96 below −1 and 51
@@ -240,3 +240,36 @@ Claude's calls while building (2026-11-24 and 2026-11-25), each with its reason,
   - The memory comes from the bar-overlap sums of the largest fluid diagrams (up to 5,528 bars in one dimension:
     1.6 GB) and from the fPCA of the fluid cell with 300 training curves. The peak memory footprint was 2.62 to
     2.63 GB in every run. The peak RSS varied from 1.87 to 2.69 GB, lower under memory pressure.
+- 2026-11-25 (Task 10), wording only, no stage rerun for it: `readouts._reported`'s docstring and the comment of
+  `test_readouts_read_the_reported_values_exactly` no longer call the 52 values that pandas' default parser misreads
+  "17-digit": 30 of them have 16 significant digits and 22 have 17 (counted on upstream's three CSVs, a scratch
+  script, not kept). The arms line above now calls G1's curvature gap of 8.33e-17 the parse's error, and the readouts
+  line gives K's ddof-1 SD over splits 0–4 as matching the reported `R2_std` to 1.1e-16, read exactly, where it gave
+  the default parse's 1.7e-16. The docstring changes `readouts.py`'s md5 (702be847… to 7aebc2bc…), which
+  `readouts.json` keeps: the provenance check compares each json with the scripts of the commit that last changed it.
+- 2026-11-25 14:05: `verify_results.py` again, to check that claim, in the background, 19.97 s wall (18.0 s inside
+  the script), peak RSS 2.40 GB (peak memory footprint 2.62 GB), exit status 0. **All 14 checks passed,** each with
+  the same worst value as at 13:27, the provenance check with no problem. `results/verify.json` differs from the 13:27
+  run's only in its date, its seconds, its peak RSS, the md5 of `readouts.py` in its provenance, and one flag of the
+  provenance check's rows: `readouts.py` is no longer equal in the working tree to the md5 that `readouts.json`
+  records, while it is at 36b0648, the commit that last changed `readouts.json`.
+- 2026-11-25 (Task 10): `build_report.py` writes `report.html` (0.2 MB, six figures embedded as PNGs) in seconds,
+  from the saved results; it runs no stage. `README.md`, the study's, is written, and the study is indexed in the
+  repository's `README.md` (Studies) and `EXPERIMENTS.md` (study 8; the planned graphcode study becomes 9).
+  - **Its refusals:** it runs only if `verify.json` comes from this folder's `verify_results.py`, records every check
+    passed, is newer than every stage's json by the dates they record (so that a verifier that crashed after a stage
+    ran again is not trusted), and records the sha256 of every file the report reads: `arms.npz`, upstream's three
+    tables and its four curvature pickles. Checked in memory (a scratch script, not kept): 11 altered records, from a
+    failed check to a stage json dated the same second as the verifier and another npz sha256, were each refused,
+    and the saved ones accepted. It asserts that the README's status line states the three verdicts with their intervals as
+    `readouts.json` gives them, and that the README states its other shared numbers as the report formats them.
+  - **New for information, computed by the report from the saved files and asserted there,** none of them a readout:
+    - every arm predicts the sign of the curvature right for all 50 test clouds; the curvature clouds are 3D on the
+      sphere of radius 1/√K for K > 0 (53) and 2D inside the Poincaré disk of radius 1/√−K for K < 0 (47);
+    - interpolation's Δ(F, K) by size: the interval lies below 0 at n = 30 and 100 and contains 0 at the other eight
+      sizes; F's mean R² lies above the reported `PI_kernel`'s at every size, by 0.090 to 0.265;
+    - curvature: F's MSE lies below 6 of the 10 reported Turkeš et al. methods, K's and B's below all ten;
+    - the exploratory reading: in interpolation the gap is the representation's (Δ(B, K) below 0, Δ(F, B) containing
+      0); in curvature the estimator's (Δ(B, K) containing 0, Δ(F, B) 88% of F's mean gap); in fluid both lie below 0,
+      the estimator's part 96% of the mean through n = 25, the two of the same order at the larger sizes.
+  - Tests: 103 passed with `-W error` (4.8 s).

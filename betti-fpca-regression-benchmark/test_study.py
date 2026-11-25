@@ -1172,8 +1172,9 @@ def test_fluid_by_size_resamples_the_splits_by_their_mean_over_the_times(reporte
 
 
 def test_readouts_read_the_reported_values_exactly(tmp_path, reported_tables):
-    # pandas' default float parser misreads some 17-digit values in their last bits (52 of upstream's 101 reported
-    # values): every reported value must be the float of its CSV text, as Python's float() reads it.
+    # pandas' default float parser misreads 52 of upstream's 101 reported values in their last bits (30 with 16
+    # significant digits, 22 with 17): every reported value must be the float of its CSV text, as Python's float()
+    # reads it.
     tables = ro.readouts(_synthetic_arms(np.random.default_rng(55)))["tables"]
     rows = {}
     for name in reported_tables:
