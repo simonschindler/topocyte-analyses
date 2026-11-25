@@ -1,0 +1,322 @@
+{
+ "description": "arms K, F and B on the three tasks (design.md, Runs), with gate G1 (arm K against upstream's published results) after K, and gate G3 (the test scores projected from the Gram matrices against FPCA.transform) before F and B",
+ "passed": true,
+ "g1": {
+  "passed": true,
+  "tolerance": 1e-09,
+  "interp": {
+   "passed": true,
+   "cells": {
+    "n_train": [
+     10,
+     20,
+     30,
+     40,
+     50,
+     60,
+     70,
+     80,
+     90,
+     100
+    ],
+    "statistic": [
+     "mean",
+     "std"
+    ]
+   },
+   "compared": 20,
+   "worst_abs_diff": 1.249000902703301e-16,
+   "worst": {
+    "n_train": 10,
+    "statistic": "std",
+    "rerun": 0.09008010682472993,
+    "reported": 0.0900801068247298,
+    "abs_diff": 1.249000902703301e-16
+   },
+   "failing": []
+  },
+  "curv": {
+   "passed": true,
+   "cells": {
+    "method": [
+     "PD_kernel"
+    ]
+   },
+   "compared": 1,
+   "worst_abs_diff": 8.326672684688674e-17,
+   "worst": {
+    "method": "PD_kernel",
+    "rerun": 0.22575596585327898,
+    "reported": 0.2257559658532789,
+    "abs_diff": 8.326672684688674e-17
+   },
+   "failing": []
+  },
+  "fluid": {
+   "passed": true,
+   "cells": {
+    "t": [
+     1.0,
+     2.5,
+     5.0,
+     7.5,
+     9.0
+    ],
+    "split": [
+     0,
+     1,
+     2,
+     3,
+     4
+    ],
+    "n_train": [
+     25,
+     50,
+     100,
+     200,
+     300
+    ]
+   },
+   "compared": 125,
+   "worst_abs_diff": 3.608224830031759e-16,
+   "worst": {
+    "t": 7.5,
+    "split": 4,
+    "n_train": 100,
+    "rerun": 0.21031680037528933,
+    "reported": 0.2103168003752897,
+    "abs_diff": 3.608224830031759e-16
+   },
+   "failing": []
+  }
+ },
+ "g3": {
+  "passed": true,
+  "rule": "per cell and dimension, the test scores' first min(K_MAX, rank) columns, the only ones arm F can use: max |fpca_scores - FPCA.transform| <= tolerance * max |FPCA.transform| over those columns (ruling 8 in progress.md: the controller's, confirmed by Simon on 2026-11-25); as an implementation check (ruling 11), a cell whose ranks differ or whose scores are not all finite fails; worst_relative_all_columns is information only",
+  "tolerance": 1e-09,
+  "k_max": 20,
+  "worst_relative": {
+   "interp": 2.177140673794987e-11,
+   "curv": 4.484712756103056e-11,
+   "fluid": 1.3048733322405874e-11
+  },
+  "worst_relative_all_columns": {
+   "interp": 5.050056828352758e-09,
+   "curv": 2.242868243587359e-09,
+   "fluid": 8.53490730085951e-06
+  },
+  "cells": [
+   {
+    "task": "interp",
+    "dataset": 0,
+    "h": 0,
+    "rank": 9,
+    "rank_transform": 9,
+    "compared_columns": 9,
+    "passed": true,
+    "worst_relative": 2.934142617196496e-12,
+    "worst_relative_all_columns": 2.934142617196496e-12
+   },
+   {
+    "task": "interp",
+    "dataset": 0,
+    "h": 1,
+    "rank": 9,
+    "rank_transform": 9,
+    "compared_columns": 9,
+    "passed": true,
+    "worst_relative": 1.050768949122115e-14,
+    "worst_relative_all_columns": 1.050768949122115e-14
+   },
+   {
+    "task": "interp",
+    "dataset": 45,
+    "h": 0,
+    "rank": 49,
+    "rank_transform": 49,
+    "compared_columns": 20,
+    "passed": true,
+    "worst_relative": 1.949403042788801e-11,
+    "worst_relative_all_columns": 4.657787452904704e-10
+   },
+   {
+    "task": "interp",
+    "dataset": 45,
+    "h": 1,
+    "rank": 45,
+    "rank_transform": 45,
+    "compared_columns": 20,
+    "passed": true,
+    "worst_relative": 4.560072635624251e-14,
+    "worst_relative_all_columns": 3.57593416802292e-12
+   },
+   {
+    "task": "interp",
+    "dataset": 99,
+    "h": 0,
+    "rank": 99,
+    "rank_transform": 99,
+    "compared_columns": 20,
+    "passed": true,
+    "worst_relative": 2.177140673794987e-11,
+    "worst_relative_all_columns": 5.050056828352758e-09
+   },
+   {
+    "task": "interp",
+    "dataset": 99,
+    "h": 1,
+    "rank": 82,
+    "rank_transform": 82,
+    "compared_columns": 20,
+    "passed": true,
+    "worst_relative": 8.919959697296544e-14,
+    "worst_relative_all_columns": 1.3279899183395197e-11
+   },
+   {
+    "task": "curv",
+    "h": 0,
+    "rank": 49,
+    "rank_transform": 49,
+    "compared_columns": 20,
+    "passed": true,
+    "worst_relative": 4.484712756103056e-11,
+    "worst_relative_all_columns": 2.242868243587359e-09
+   },
+   {
+    "task": "curv",
+    "h": 1,
+    "rank": 49,
+    "rank_transform": 49,
+    "compared_columns": 20,
+    "passed": true,
+    "worst_relative": 2.418360713530266e-14,
+    "worst_relative_all_columns": 1.2293157573103408e-12
+   },
+   {
+    "task": "fluid",
+    "time": 1.0,
+    "split": 0,
+    "n_train": 25,
+    "h": 0,
+    "rank": 24,
+    "rank_transform": 24,
+    "compared_columns": 20,
+    "passed": true,
+    "worst_relative": 1.6177508430551876e-12,
+    "worst_relative_all_columns": 2.384275809767848e-09
+   },
+   {
+    "task": "fluid",
+    "time": 1.0,
+    "split": 0,
+    "n_train": 25,
+    "h": 1,
+    "rank": 24,
+    "rank_transform": 24,
+    "compared_columns": 20,
+    "passed": true,
+    "worst_relative": 1.3048733322405874e-11,
+    "worst_relative_all_columns": 1.51371127951375e-08
+   },
+   {
+    "task": "fluid",
+    "time": 5.0,
+    "split": 7,
+    "n_train": 100,
+    "h": 0,
+    "rank": 99,
+    "rank_transform": 99,
+    "compared_columns": 20,
+    "passed": true,
+    "worst_relative": 4.050675080876951e-14,
+    "worst_relative_all_columns": 2.6935594730085087e-08
+   },
+   {
+    "task": "fluid",
+    "time": 5.0,
+    "split": 7,
+    "n_train": 100,
+    "h": 1,
+    "rank": 94,
+    "rank_transform": 94,
+    "compared_columns": 20,
+    "passed": true,
+    "worst_relative": 4.7731622205239495e-14,
+    "worst_relative_all_columns": 1.3052786392733682e-09
+   },
+   {
+    "task": "fluid",
+    "time": 9.0,
+    "split": 99,
+    "n_train": 300,
+    "h": 0,
+    "rank": 296,
+    "rank_transform": 296,
+    "compared_columns": 20,
+    "passed": true,
+    "worst_relative": 3.138068012251603e-14,
+    "worst_relative_all_columns": 8.53490730085951e-06
+   },
+   {
+    "task": "fluid",
+    "time": 9.0,
+    "split": 99,
+    "n_train": 300,
+    "h": 1,
+    "rank": 293,
+    "rank_transform": 293,
+    "compared_columns": 20,
+    "passed": true,
+    "worst_relative": 3.950284090646511e-14,
+    "worst_relative_all_columns": 8.517259085946083e-09
+   }
+  ]
+ },
+ "npz": {
+  "arrays": 31,
+  "bytes": 6398316,
+  "sha256": "510348c6bc2a1e73c4b25684fad36e07614e6b8c24839d12dc99f67523bc9eb5"
+ },
+ "seconds": {
+  "load": 0.1,
+  "K": {
+   "interp": 0.2,
+   "curv": 0.0,
+   "fluid": 23.0
+  },
+  "g1": 0.0,
+  "g3": 12.7,
+  "F": {
+   "interp": 2.9,
+   "curv": 0.0,
+   "fluid": 114.2
+  },
+  "B": {
+   "interp": 0.2,
+   "curv": 0.0,
+   "fluid": 23.0
+  },
+  "total": 176.4
+ },
+ "date": "2026-11-25 11:41:06",
+ "provenance": {
+  "md5": {
+   "run_study.py": "d3ae19656cf7fc6e932b07aa18b726ca",
+   "common.py": "31e615d07072189cac5905e611ae58cc",
+   "inputs.py": "d213fcfa6aeea515561ecf20017332de",
+   "safe_pickle.py": "f5d358a62b4932fd640f83a17a2e0eef",
+   "matrices.py": "60b073331da9dff7facde888f1485fd7",
+   "wasserstein.py": "a44760ebbd43998ab7a09cfd76cc876d",
+   "betti.py": "5096038795b3d3a43c7fcd4e210dd741",
+   "estimators.py": "f5d6428e36bb2dc96b1eb7829c8b6cab"
+  },
+  "versions": {
+   "numpy": "2.5.1",
+   "scipy": "1.18.0",
+   "pandas": "3.0.5",
+   "ripser": "0.6.15"
+  },
+  "topocyte_commit": "18e3aa5",
+  "upstream_sha": "fe7d652eff478ffe6081c7e6765458651ad3cd74"
+ }
+}

@@ -110,3 +110,18 @@ Claude's calls while building (2026-11-24), each with its reason. None changes a
     diagonal. The interpolation sizes and targets, `curv_y` and `fluid_y` equal the loaders', and every fluid W2
     matrix equals `fluid_cached_w2`. At t = 1 the H0 Gram has 13 zero rows: the 13 empty H0 curves of the inputs
     stage.
+- 2026-11-25 11:41: `run_study.py arms`, after rulings 8–11, in the background, 177.7 s wall (3.0 min), peak RSS
+  1.58 GB, exit status 0. **Gates G1 and G3 passed;** arms F and B then ran.
+  - **G1** compares arm K with upstream's published results, against the tolerance 1e-9 absolute:
+    - interpolation's 20 values, each size's mean and SD: worst |difference| 1.25e-16;
+    - curvature's MSE: 8.33e-17;
+    - fluid's 125 values (splits 0–4): 3.61e-16.
+  - **G3** (ruling 8) compares the projected test scores with `FPCA.transform` in 14 cells × dimensions, ranks
+    equal in all of them:
+    - worst over the compared columns: 2.18e-11 (interpolation), 4.48e-11 (curvature) and 1.30e-11 (fluid), against
+      1e-9;
+    - over all columns, for information: 5.05e-9, 2.24e-9 and 8.53e-6 (fluid t = 9, H0), as in Task 4's probe.
+  - Parts: loading 0.1 s, arm K 23.2 s, G1 under 0.1 s, G3 12.7 s, arm F 117.1 s, arm B 23.2 s. The fluid cells
+    take nearly all of each arm's time.
+  - Outputs: `results/arms.json`, and `results/arms.npz` with its 31 arrays (6.4 MB, sha256 `510348c6…`, recorded in
+    the json). The md5s in `arms.json` equal the scripts committed in f94fea5.
