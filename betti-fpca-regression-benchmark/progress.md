@@ -186,3 +186,43 @@ Claude's calls while building (2026-11-24 and 2026-11-25), each with its reason,
     - The readout by size shows it: Δ(F, K) is −15.34 at n 25, and −0.24 to −0.32 at the other four sizes, each
       interval below 0.
     - Δ(F, K) lies above 0 in 1.4% of the fluid cells, and its median is −0.25.
+- 2026-11-25 13:02: `verify_results.py`, in the background, 18.4 s wall (17.1 s inside the script), peak RSS
+  2.69 GB, exit status 0. **All 14 checks passed:** the saved results agree with routes other than the code that
+  made them. `results/verify.json` records every check, the sha256 of the data files read (both npz files, the four
+  CSVs, the five interpolation and curvature pickles, and a digest of each fluid time's 400 diagrams) and the md5 of
+  the scripts. The worst value of each family, against its tolerance:
+  - **W2,** 30 entries each of interpolation and curvature (`default_rng(5)`), from `ripser.ripser`'s diagrams and
+    a HiGHS transport LP (`scipy.optimize.linprog`), not `linear_sum_assignment`: 1.6e-16 relative (1e-9).
+  - **Gram,** 30 entries per task (25 off the diagonal, 5 on it; `default_rng(7)`), by `oracles.overlap`, the fluid
+    bars shifted by 26: 2.7e-16 relative (1e-12). 10 of the 90 are 0, all H1: pairs whose bars do not overlap, or of
+    which one diagram has no finite bar. **L2,** the 75 entries off the diagonal from the same sums: 1.8e-16 (1e-9).
+  - **Arrays:** `arms.npz` holds its 31 arrays in their shapes, every prediction finite; its targets equal
+    `matrices.npz`'s, and each fluid split's test set is `default_rng(s).permutation(400)[:100]`: none differ.
+    **Scores:** the 7,803 saved R² and MSE values of K, F and B, recomputed from the saved predictions with
+    `math.fsum`: 6.7e-16 of max(1, |value|) (1e-12).
+  - **G1** again, from arm K's predictions, against upstream's CSVs read exactly: 4.4e-16 absolute over 146 values
+    (1e-9).
+  - **NW:** 5 interpolation cells, curvature and 5 fluid cells per arm, K and B (`default_rng(8)`), by
+    `oracles.upstream_nw`. All 22 bandwidths are the saved ones, and the predictions agree to 3.2e-16 of 1 + the
+    cell's largest prediction (1e-12).
+  - **FPCR:** 5 interpolation cells, curvature, 5 fluid cells and one interpolation cell with n = 10
+    (`default_rng(6)`), by topocyte's `FPCA(dim, eigen_solver="dense")` on the curves and scikit-learn's
+    `LinearRegression` at the saved (K0, K1): 2.0e-11 of 1 + the cell's largest prediction (1e-8).
+    - The worst is a near-saturated cell: t 1, split 93, n 25, (K0, K1) = (2, 20). Its design's condition number is
+      3.4e3, and its scores lie 4.0e-12 of the largest score from arm F's (for information).
+  - **LOO:** in interpolation dataset 4 (n = 10), refitting without each sample picks (3, 2), arm F's choice, among
+    45 candidates. Its LOO MSE is 0.00103; the runner-up, (4, 2), has 0.00182.
+  - **Readouts:** all 216 values of the 72 intervals (3 pairs × 3 tasks, and 21 descriptive per pair), from a
+    bootstrap written apart from `readouts.py`, equal `readouts.json` bit for bit. **Verdicts,** recomputed from
+    them: below, below, below, with no verdict elsewhere.
+  - **Tables:** every reported value equals its CSV bit for bit; the arms' 360 means and SDs agree to 2.2e-16
+    (1e-12); the chosen (K0, K1) counts are equal.
+  - **Provenance:** the five stage jsons are unchanged since the commits that last changed them. Their 22 md5s are
+    those of the scripts in those commits, their pins and gates are the study's, and both npz files are the ones the
+    jsons vouch for. No problems.
+  - Checked before the run (in memory, a scratch script, not kept): 20 mutants of the saved values each fail their
+    check. They include a W2, Gram, L2 or prediction scaled by 1e-11 to 1e-7; one ulp in a readout or a reported
+    value; a bandwidth; a chosen (K0, K1); a misplaced verdict; reversed test sets; another pin; and another npz
+    sha256.
+  - The peak RSS comes from the bar-overlap sums of the largest fluid diagrams (up to 5,528 bars in one dimension:
+    1.6 GB) and from the fPCA of the fluid cell with 300 training curves.

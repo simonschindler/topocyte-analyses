@@ -1,0 +1,1176 @@
+{
+ "description": "the Betti FPCR benchmark's saved results checked by routes other than the code that made them (verify_results.py's docstring): the W2, Gram and L2 entries, arms.npz and its scores, gate G1, arms K, B and F on sampled cells, F's LOO choice in one cell, every readout interval and verdict, the tables, and the stages' provenance",
+ "passed": true,
+ "checks_passed": 14,
+ "checks_total": 14,
+ "families": {
+  "w2": {
+   "checks": 1,
+   "passed": 1,
+   "worst": [
+    1.6104618974195038e-16
+   ],
+   "tolerance": [
+    1e-09
+   ]
+  },
+  "gram": {
+   "checks": 1,
+   "passed": 1,
+   "worst": [
+    2.658181573888606e-16
+   ],
+   "tolerance": [
+    1e-12
+   ]
+  },
+  "l2": {
+   "checks": 1,
+   "passed": 1,
+   "worst": [
+    1.750194741036139e-16
+   ],
+   "tolerance": [
+    1e-09
+   ]
+  },
+  "arrays": {
+   "checks": 1,
+   "passed": 1,
+   "worst": [
+    0
+   ],
+   "tolerance": [
+    0
+   ]
+  },
+  "scores": {
+   "checks": 1,
+   "passed": 1,
+   "worst": [
+    6.661338147750939e-16
+   ],
+   "tolerance": [
+    1e-12
+   ]
+  },
+  "g1": {
+   "checks": 1,
+   "passed": 1,
+   "worst": [
+    4.440892098500626e-16
+   ],
+   "tolerance": [
+    1e-09
+   ]
+  },
+  "nw": {
+   "checks": 1,
+   "passed": 1,
+   "worst": [
+    3.1839235894674236e-16
+   ],
+   "tolerance": [
+    1e-12
+   ]
+  },
+  "fpcr": {
+   "checks": 1,
+   "passed": 1,
+   "worst": [
+    2.013251437225906e-11
+   ],
+   "tolerance": [
+    1e-08
+   ]
+  },
+  "loo": {
+   "checks": 1,
+   "passed": 1,
+   "worst": [
+    0
+   ],
+   "tolerance": [
+    0
+   ]
+  },
+  "readouts": {
+   "checks": 1,
+   "passed": 1,
+   "worst": [
+    0.0
+   ],
+   "tolerance": [
+    0.0
+   ]
+  },
+  "verdicts": {
+   "checks": 1,
+   "passed": 1,
+   "worst": [
+    0
+   ],
+   "tolerance": [
+    0
+   ]
+  },
+  "tables": {
+   "checks": 2,
+   "passed": 2,
+   "worst": [
+    0,
+    2.220446049250313e-16
+   ],
+   "tolerance": [
+    0,
+    1e-12
+   ]
+  },
+  "provenance": {
+   "checks": 1,
+   "passed": 1,
+   "worst": [
+    0
+   ],
+   "tolerance": [
+    0
+   ]
+  }
+ },
+ "checks": [
+  {
+   "family": "w2",
+   "check": "30 entries per task of the interpolation and curvature W2 matrices (default_rng(5)) against the optimum of the transport LP of the diagrams augmented with the diagonal, by scipy.optimize.linprog (HiGHS dual simplex), on ripser.ripser's diagrams (|saved - LP| / LP)",
+   "passed": true,
+   "worst": 1.6104618974195038e-16,
+   "tolerance": 1e-09,
+   "measured": {
+    "entries": {
+     "interp": 30,
+     "curv": 30
+    },
+    "worst_relative": {
+     "interp": 0.0,
+     "curv": 1.6104618974195038e-16
+    },
+    "lp_not_optimal": 0,
+    "entries_zero": 0,
+    "largest_n_plus_m": 98,
+    "worst_entry": {
+     "task": "curv",
+     "dataset": null,
+     "h": 0,
+     "p": 4,
+     "q": 33,
+     "finite_bars": [
+      49,
+      49
+     ],
+     "status": 0,
+     "lp": 0.6893817397382102,
+     "saved": 0.68938173973821,
+     "relative": 1.6104618974195038e-16
+    }
+   }
+  },
+  {
+   "family": "gram",
+   "check": "30 Gram entries per task (25 off the diagonal, 5 on it; default_rng(7)) against oracles.overlap, the sum of the bar overlaps by math.fsum, of the two diagrams (fluid's shifted by FLUID_SHIFT, Rips' not) (|saved - sum| / sum)",
+   "passed": true,
+   "worst": 2.658181573888606e-16,
+   "tolerance": 1e-12,
+   "measured": {
+    "entries": {
+     "interp": 30,
+     "curv": 30,
+     "fluid": 30
+    },
+    "worst_relative": {
+     "interp": 0.0,
+     "curv": 0.0,
+     "fluid": 2.658181573888606e-16
+    },
+    "entries_zero": 10,
+    "worst_entry": {
+     "task": "fluid",
+     "dataset": 0,
+     "h": 0,
+     "p": 101,
+     "q": 101,
+     "overlap": 106.92162533060676,
+     "saved": 106.92162533060673,
+     "relative": 2.658181573888606e-16
+    }
+   }
+  },
+  {
+   "family": "l2",
+   "check": "the 25 L2 entries per task off the diagonal, from the same sums: sqrt(<f, f> + <g, g> - 2 <f, g>) (|saved - from sums| / from sums)",
+   "passed": true,
+   "worst": 1.750194741036139e-16,
+   "tolerance": 1e-09,
+   "measured": {
+    "entries": {
+     "interp": 25,
+     "curv": 25,
+     "fluid": 25
+    },
+    "worst_relative": {
+     "interp": 0.0,
+     "curv": 0.0,
+     "fluid": 1.750194741036139e-16
+    },
+    "entries_zero": 0,
+    "worst_entry": {
+     "task": "fluid",
+     "dataset": 3,
+     "h": 0,
+     "p": 313,
+     "q": 322,
+     "from_sums": 10.149481070595739,
+     "saved": 10.149481070595737,
+     "relative": 1.750194741036139e-16
+    }
+   }
+  },
+  {
+   "family": "arrays",
+   "check": "arms.npz holds exactly its 31 arrays in their shapes, every prediction finite; the interpolation sizes come in the order of the readouts' reshape; its test targets equal matrices.npz's; each fluid split's test set is default_rng(s).permutation(400)[:100] (how many differ)",
+   "passed": true,
+   "worst": 0,
+   "tolerance": 0,
+   "measured": {
+    "keys_missing_or_extra": [],
+    "shapes": [],
+    "predictions_not_finite": [],
+    "interp_sizes": false,
+    "interp_y_test": [],
+    "curv_y_test": false,
+    "fluid_y": false,
+    "fluid_test_splits": [],
+    "arrays": 31
+   }
+  },
+  {
+   "family": "scores",
+   "check": "every saved R2 (interpolation, fluid) and MSE (curvature) of arms K, F and B against its recomputation from the saved predictions and test targets by math.fsum (|saved - recomputed| / max(1, |saved|))",
+   "passed": true,
+   "worst": 6.661338147750939e-16,
+   "tolerance": 1e-12,
+   "measured": {
+    "K": {
+     "interp": 1.1102230246251565e-16,
+     "curv": 0.0,
+     "fluid": 4.440892098500626e-16,
+     "values": 2601
+    },
+    "F": {
+     "interp": 1.1102230246251565e-16,
+     "curv": 0.0,
+     "fluid": 6.661338147750939e-16,
+     "values": 2601
+    },
+    "B": {
+     "interp": 1.1102230246251565e-16,
+     "curv": 0.0,
+     "fluid": 6.661338147750939e-16,
+     "values": 2601
+    }
+   }
+  },
+  {
+   "family": "g1",
+   "check": "gate G1 again from arms.npz: arm K's R2 and MSE recomputed from its predictions by math.fsum, interpolation's mean and SD (ddof 1) over each size's runs, against upstream's results_interpolation.csv, results_curvature.csv and results_fluid_splits.csv (splits 0-4), read exactly (|rerun - reported|)",
+   "passed": true,
+   "worst": 4.440892098500626e-16,
+   "tolerance": 1e-09,
+   "measured": {
+    "csv_cells_as_expected": true,
+    "compared": {
+     "interp": 20,
+     "curv": 1,
+     "fluid": 125
+    },
+    "worst_abs_diff": {
+     "interp": 2.220446049250313e-16,
+     "curv": 0.0,
+     "fluid": 4.440892098500626e-16
+    },
+    "worst": {
+     "task": "fluid",
+     "t": 7.5,
+     "split": 3,
+     "n_train": 100,
+     "rerun": 0.22534635160692906,
+     "reported": 0.2253463516069295,
+     "abs_diff": 4.440892098500626e-16
+    }
+   }
+  },
+  {
+   "family": "nw",
+   "check": "5 cells per task and arm (curvature has one; default_rng(8)), arms K and B: oracles.upstream_nw, a loop transcription of upstream's kernel_estimator, on the saved matrices gives the saved bandwidth exactly and the saved predictions (max |difference| / (1 + max |prediction|))",
+   "passed": true,
+   "worst": 3.1839235894674236e-16,
+   "tolerance": 1e-12,
+   "measured": {
+    "cells": 22,
+    "bandwidths_differing": 0,
+    "per_cell": [
+     {
+      "arm": "K",
+      "task": "interp",
+      "dataset": 69,
+      "n_train": 70,
+      "h": 0.13000094424165162,
+      "same_h": true,
+      "max_abs_diff": 3.3306690738754696e-16,
+      "tolerance": 1.9455173099021977e-12,
+      "measure": 1.7119709276926989e-16
+     },
+     {
+      "arm": "K",
+      "task": "interp",
+      "dataset": 17,
+      "n_train": 20,
+      "h": 0.08798986392330804,
+      "same_h": true,
+      "max_abs_diff": 3.3306690738754696e-16,
+      "tolerance": 1.8926019775340793e-12,
+      "measure": 1.759835989506407e-16
+     },
+     {
+      "arm": "K",
+      "task": "interp",
+      "dataset": 97,
+      "n_train": 100,
+      "h": 0.11295852521532673,
+      "same_h": true,
+      "max_abs_diff": 2.220446049250313e-16,
+      "tolerance": 1.9317522374286797e-12,
+      "measure": 1.1494466040872345e-16
+     },
+     {
+      "arm": "K",
+      "task": "interp",
+      "dataset": 22,
+      "n_train": 30,
+      "h": 0.13618011528083007,
+      "same_h": true,
+      "max_abs_diff": 3.3306690738754696e-16,
+      "tolerance": 1.9100368014259568e-12,
+      "measure": 1.7437721992523526e-16
+     },
+     {
+      "arm": "K",
+      "task": "interp",
+      "dataset": 31,
+      "n_train": 40,
+      "h": 0.19201124349214324,
+      "same_h": true,
+      "max_abs_diff": 2.220446049250313e-16,
+      "tolerance": 1.9013794473102443e-12,
+      "measure": 1.1678079577390147e-16
+     },
+     {
+      "arm": "K",
+      "task": "curv",
+      "h": 0.06827638392169424,
+      "same_h": true,
+      "max_abs_diff": 4.440892098500626e-16,
+      "tolerance": 2.509804784373762e-12,
+      "measure": 1.7694173372168074e-16
+     },
+     {
+      "arm": "K",
+      "task": "fluid",
+      "t": 5.0,
+      "split": 86,
+      "n_train": 200,
+      "h": 3.388082480294462,
+      "same_h": true,
+      "max_abs_diff": 1.7763568394002505e-15,
+      "tolerance": 7.807515576014306e-12,
+      "measure": 2.2751883388583274e-16
+     },
+     {
+      "arm": "K",
+      "task": "fluid",
+      "t": 2.5,
+      "split": 95,
+      "n_train": 50,
+      "h": 6.539592859036155,
+      "same_h": true,
+      "max_abs_diff": 1.7763568394002505e-15,
+      "tolerance": 7.89961201118069e-12,
+      "measure": 2.24866339876704e-16
+     },
+     {
+      "arm": "K",
+      "task": "fluid",
+      "t": 9.0,
+      "split": 34,
+      "n_train": 50,
+      "h": 2.2779450980373888,
+      "same_h": true,
+      "max_abs_diff": 2.6645352591003757e-15,
+      "tolerance": 8.368716095809553e-12,
+      "measure": 3.1839235894674236e-16
+     },
+     {
+      "arm": "K",
+      "task": "fluid",
+      "t": 5.0,
+      "split": 18,
+      "n_train": 300,
+      "h": 2.8276297128557877,
+      "same_h": true,
+      "max_abs_diff": 1.7763568394002505e-15,
+      "tolerance": 8.482615081903085e-12,
+      "measure": 2.0941146359333833e-16
+     },
+     {
+      "arm": "K",
+      "task": "fluid",
+      "t": 1.0,
+      "split": 24,
+      "n_train": 25,
+      "h": 8.038432694753698,
+      "same_h": true,
+      "max_abs_diff": 1.7763568394002505e-15,
+      "tolerance": 8.839090329433914e-12,
+      "measure": 2.009660240132442e-16
+     },
+     {
+      "arm": "B",
+      "task": "interp",
+      "dataset": 84,
+      "n_train": 90,
+      "h": 0.42148327984703826,
+      "same_h": true,
+      "max_abs_diff": 2.220446049250313e-16,
+      "tolerance": 1.9260856549243757e-12,
+      "measure": 1.152828298976919e-16
+     },
+     {
+      "arm": "B",
+      "task": "interp",
+      "dataset": 93,
+      "n_train": 100,
+      "h": 0.5161722142259654,
+      "same_h": true,
+      "max_abs_diff": 2.220446049250313e-16,
+      "tolerance": 1.905384603539279e-12,
+      "measure": 1.1653532022489332e-16
+     },
+     {
+      "arm": "B",
+      "task": "interp",
+      "dataset": 23,
+      "n_train": 30,
+      "h": 0.38777523415396964,
+      "same_h": true,
+      "max_abs_diff": 2.220446049250313e-16,
+      "tolerance": 1.954807929984511e-12,
+      "measure": 1.1358896263879525e-16
+     },
+     {
+      "arm": "B",
+      "task": "interp",
+      "dataset": 52,
+      "n_train": 60,
+      "h": 0.6006001884378188,
+      "same_h": true,
+      "max_abs_diff": 2.220446049250313e-16,
+      "tolerance": 1.8836721601726912e-12,
+      "measure": 1.1787858291894844e-16
+     },
+     {
+      "arm": "B",
+      "task": "interp",
+      "dataset": 46,
+      "n_train": 50,
+      "h": 0.40257527988119346,
+      "same_h": true,
+      "max_abs_diff": 4.440892098500626e-16,
+      "tolerance": 1.986691160252985e-12,
+      "measure": 2.235320812488602e-16
+     },
+     {
+      "arm": "B",
+      "task": "curv",
+      "h": 0.7107906895773982,
+      "same_h": true,
+      "max_abs_diff": 6.661338147750939e-16,
+      "tolerance": 2.669166970282571e-12,
+      "measure": 2.495661838287223e-16
+     },
+     {
+      "arm": "B",
+      "task": "fluid",
+      "t": 5.0,
+      "split": 11,
+      "n_train": 100,
+      "h": 5.865709585000439,
+      "same_h": true,
+      "max_abs_diff": 2.6645352591003757e-15,
+      "tolerance": 9.100905447197181e-12,
+      "measure": 2.927769412131379e-16
+     },
+     {
+      "arm": "B",
+      "task": "fluid",
+      "t": 9.0,
+      "split": 6,
+      "n_train": 100,
+      "h": 15.251498109144173,
+      "same_h": true,
+      "max_abs_diff": 2.6645352591003757e-15,
+      "tolerance": 8.8938133248903e-12,
+      "measure": 2.9959424172344447e-16
+     },
+     {
+      "arm": "B",
+      "task": "fluid",
+      "t": 9.0,
+      "split": 2,
+      "n_train": 25,
+      "h": 46.25446702199489,
+      "same_h": true,
+      "max_abs_diff": 1.7763568394002505e-15,
+      "tolerance": 6.044697736535249e-12,
+      "measure": 2.9387025072628987e-16
+     },
+     {
+      "arm": "B",
+      "task": "fluid",
+      "t": 9.0,
+      "split": 47,
+      "n_train": 50,
+      "h": 41.418879078124306,
+      "same_h": true,
+      "max_abs_diff": 1.7763568394002505e-15,
+      "tolerance": 5.617613187956569e-12,
+      "measure": 3.16212024567396e-16
+     },
+     {
+      "arm": "B",
+      "task": "fluid",
+      "t": 1.0,
+      "split": 96,
+      "n_train": 200,
+      "h": 24.255018901741565,
+      "same_h": true,
+      "max_abs_diff": 1.7763568394002505e-15,
+      "tolerance": 8.50463487966183e-12,
+      "measure": 2.0886926535179882e-16
+     }
+    ]
+   }
+  },
+  {
+   "family": "fpcr",
+   "check": "5 cells per task (curvature has one) and one interpolation cell with 10 training samples (default_rng(6)): topocyte's FPCA(dim, eigen_solver='dense') fitted on the training curves and its transform of the test curves, then scikit-learn's LinearRegression on the first (K0, K1) scores arm F chose, against arm F's saved predictions (max |difference| / (1 + max |prediction|)); the condition number of the design [1, scores] and the scores' largest difference from arm F's (betti.fpca_scores, relative to its largest score) are information",
+   "passed": true,
+   "worst": 2.013251437225906e-11,
+   "tolerance": 1e-08,
+   "measured": {
+    "cells": 12,
+    "per_cell": [
+     {
+      "task": "interp",
+      "dataset": 33,
+      "n_train": 40,
+      "k": [
+       2,
+       1
+      ],
+      "components": [
+       39,
+       35
+      ],
+      "max_abs_diff": 1.3322676295501878e-15,
+      "tolerance": 1.927433320376355e-08,
+      "measure": 6.912133433959968e-16,
+      "design_condition": 5.710123658541019,
+      "score_discrepancy": 1.0837014902865064e-14,
+      "seconds": 0.0
+     },
+     {
+      "task": "interp",
+      "dataset": 42,
+      "n_train": 50,
+      "k": [
+       1,
+       1
+      ],
+      "components": [
+       49,
+       43
+      ],
+      "max_abs_diff": 9.992007221626409e-16,
+      "tolerance": 1.9825725840156065e-08,
+      "measure": 5.039920002014793e-16,
+      "design_condition": 6.9485528341582405,
+      "score_discrepancy": 1.596858975887571e-15,
+      "seconds": 0.0
+     },
+     {
+      "task": "interp",
+      "dataset": 94,
+      "n_train": 100,
+      "k": [
+       1,
+       11
+      ],
+      "components": [
+       99,
+       89
+      ],
+      "max_abs_diff": 9.992007221626409e-15,
+      "tolerance": 2.0635744596957267e-08,
+      "measure": 4.842087075985485e-15,
+      "design_condition": 28.87534532447802,
+      "score_discrepancy": 1.5258362212950386e-14,
+      "seconds": 0.1
+     },
+     {
+      "task": "interp",
+      "dataset": 50,
+      "n_train": 60,
+      "k": [
+       1,
+       3
+      ],
+      "components": [
+       59,
+       55
+      ],
+      "max_abs_diff": 1.4432899320127035e-15,
+      "tolerance": 2.0039232337136923e-08,
+      "measure": 7.202321464869605e-16,
+      "design_condition": 8.196554191351975,
+      "score_discrepancy": 3.3834717426805267e-15,
+      "seconds": 0.1
+     },
+     {
+      "task": "interp",
+      "dataset": 52,
+      "n_train": 60,
+      "k": [
+       1,
+       1
+      ],
+      "components": [
+       59,
+       56
+      ],
+      "max_abs_diff": 4.996003610813204e-16,
+      "tolerance": 1.9180912852122282e-08,
+      "measure": 2.6046745790101536e-16,
+      "design_condition": 6.993876319090835,
+      "score_discrepancy": 3.343816429266966e-15,
+      "seconds": 0.1
+     },
+     {
+      "task": "curv",
+      "k": [
+       1,
+       2
+      ],
+      "components": [
+       49,
+       49
+      ],
+      "max_abs_diff": 2.7977620220553945e-14,
+      "tolerance": 2.910858819325948e-08,
+      "measure": 9.611465879005623e-15,
+      "design_condition": 22.837777251974956,
+      "score_discrepancy": 1.764894568883408e-14,
+      "seconds": 0.0
+     },
+     {
+      "task": "fluid",
+      "t": 9.0,
+      "split": 92,
+      "n_train": 300,
+      "k": [
+       2,
+       1
+      ],
+      "components": [
+       296,
+       292
+      ],
+      "max_abs_diff": 3.907985046680551e-14,
+      "tolerance": 7.441464450292033e-08,
+      "measure": 5.2516343695321776e-15,
+      "design_condition": 10.30649964895314,
+      "score_discrepancy": 9.6691801328993e-15,
+      "seconds": 9.7
+     },
+     {
+      "task": "fluid",
+      "t": 7.5,
+      "split": 37,
+      "n_train": 25,
+      "k": [
+       4,
+       5
+      ],
+      "components": [
+       24,
+       24
+      ],
+      "max_abs_diff": 2.7711166694643907e-13,
+      "tolerance": 1.897224755932843e-07,
+      "measure": 1.460615913216811e-14,
+      "design_condition": 25.599294299642587,
+      "score_discrepancy": 2.174547941246834e-14,
+      "seconds": 0.2
+     },
+     {
+      "task": "fluid",
+      "t": 7.5,
+      "split": 16,
+      "n_train": 25,
+      "k": [
+       0,
+       0
+      ],
+      "components": [
+       24,
+       24
+      ],
+      "max_abs_diff": 2.6645352591003757e-15,
+      "tolerance": 6.231246465422757e-08,
+      "measure": 4.276087094108548e-16,
+      "design_condition": 1.0,
+      "score_discrepancy": 0.0,
+      "seconds": 0.2
+     },
+     {
+      "task": "fluid",
+      "t": 1.0,
+      "split": 93,
+      "n_train": 25,
+      "k": [
+       2,
+       20
+      ],
+      "components": [
+       24,
+       24
+      ],
+      "max_abs_diff": 7.887308584031416e-10,
+      "tolerance": 3.917696735833193e-07,
+      "measure": 2.013251437225906e-11,
+      "design_condition": 3379.8518995973645,
+      "score_discrepancy": 4.029954834679485e-12,
+      "seconds": 0.2
+     },
+     {
+      "task": "fluid",
+      "t": 5.0,
+      "split": 13,
+      "n_train": 100,
+      "k": [
+       1,
+       3
+      ],
+      "components": [
+       98,
+       98
+      ],
+      "max_abs_diff": 2.842170943040401e-14,
+      "tolerance": 1.0425340828083026e-07,
+      "measure": 2.7262139338259015e-15,
+      "design_condition": 21.88461659858779,
+      "score_discrepancy": 6.6968764104646595e-15,
+      "seconds": 1.6
+     },
+     {
+      "task": "interp",
+      "dataset": 4,
+      "n_train": 10,
+      "k": [
+       3,
+       2
+      ],
+      "components": [
+       9,
+       9
+      ],
+      "max_abs_diff": 9.103828801926284e-15,
+      "tolerance": 1.9865298721351067e-08,
+      "measure": 4.582779715334237e-15,
+      "design_condition": 8.273764145489782,
+      "score_discrepancy": 5.364286340382875e-14,
+      "seconds": 0.0
+     }
+    ]
+   }
+  },
+  {
+   "family": "loo",
+   "check": "in the interpolation cell with 10 training samples, (K0, K1) chosen again on the fPCA route's scores: each candidate's LOO error by refitting LinearRegression without each sample in turn, its eligibility (rank, leverage) computed anew; it must equal arm F's choice (pairs differing)",
+   "passed": true,
+   "worst": 0,
+   "tolerance": 0,
+   "measured": {
+    "dataset": 4,
+    "n_train": 10,
+    "chosen": [
+     3,
+     2
+    ],
+    "saved": [
+     3,
+     2
+    ],
+    "loo_mse": 0.0010268420170427746,
+    "runner_up": [
+     4,
+     2
+    ],
+    "runner_up_loo_mse": 0.0018217689861930865,
+    "candidates": 45,
+    "ineligible": 0
+   }
+  },
+  {
+   "family": "readouts",
+   "check": "every interval in readouts.json, the primary pair F vs K, the exploratory pairs B vs K and F vs B, and the descriptive readouts (interpolation by size, fluid by time, by size and on splits 0-4), from a bootstrap written here: Delta from arms.npz, a fresh default_rng(0) per interval, 10000 resamples of the units, the 2.5 and 97.5 percentiles; equal to the bit (largest |difference| over mean, lo and hi)",
+   "passed": true,
+   "worst": 0.0,
+   "tolerance": 0.0,
+   "measured": {
+    "bootstrap_settings_as_recorded": true,
+    "values_compared": 216,
+    "unequal": [],
+    "primary": {
+     "interp": [
+      -0.024006245523905765,
+      -0.03837353267763026,
+      -0.011409382584715362
+     ],
+     "curv": [
+      -0.24782636881971373,
+      -0.43399270689681924,
+      -0.09194157511031208
+     ],
+     "fluid": [
+      -3.2826753802987905,
+      -5.812207979611471,
+      -1.5072344810910625
+     ]
+    }
+   }
+  },
+  {
+   "family": "verdicts",
+   "check": "the primary verdicts by design.md's rule fixed in advance, on the recomputed intervals (beats if lo > 0, below if hi < 0, level otherwise), against readouts.json's; no verdict in the exploratory pairs or the descriptive readouts (verdicts differing or misplaced)",
+   "passed": true,
+   "worst": 0,
+   "tolerance": 0,
+   "measured": {
+    "recomputed": {
+     "interp": "below",
+     "curv": "below",
+     "fluid": "below"
+    },
+    "recorded": {
+     "interp": "below",
+     "curv": "below",
+     "fluid": "below"
+    },
+    "verdicts_elsewhere": []
+   }
+  },
+  {
+   "family": "tables",
+   "check": "readouts.json's tables: every reported value equals upstream's CSV, read exactly (results_interpolation.csv, results_curvature.csv in its order, results_fluid.csv), and the curvature MSEs equal arms.npz's (values differing)",
+   "passed": true,
+   "worst": 0,
+   "tolerance": 0,
+   "measured": {
+    "mismatches": []
+   }
+  },
+  {
+   "family": "tables",
+   "check": "readouts.json's tables: each arm's mean and SD (ddof 1) of R2 over each interpolation size's runs and over each fluid (t, n_train)'s splits 0-4 and 0-99, recomputed by math.fsum (|saved - recomputed| / max(1, |saved|)); and arm F's chosen (K0, K1) counted again with np.unique, per task and fluid time, equal",
+   "passed": true,
+   "worst": 2.220446049250313e-16,
+   "tolerance": 1e-12,
+   "measured": {
+    "means_and_sds": 360,
+    "chosen_k_differing": []
+   }
+  },
+  {
+   "family": "provenance",
+   "check": "each stage's json (upstream, inputs, matrices, arms, readouts) is unchanged since the commit that last changed it; every md5 it records is that of the script in that commit (git show); its pins are the study's and its gates passed; matrices.npz and arms.npz are the files the jsons vouch for (problems; rows: json, commit, script, md5, equal at the commit, equal in the working tree)",
+   "passed": true,
+   "worst": 0,
+   "tolerance": 0,
+   "measured": {
+    "md5s_compared": 22,
+    "problems": [],
+    "npz_vouched": {
+     "matrices.json": true,
+     "arms.json": true,
+     "readouts.json": true
+    },
+    "rows": [
+     [
+      "upstream.json",
+      "64ae02e",
+      "fetch_upstream.py",
+      "15ab6d0c",
+      true,
+      false
+     ],
+     [
+      "upstream.json",
+      "64ae02e",
+      "common.py",
+      "18810fa1",
+      true,
+      false
+     ],
+     [
+      "inputs.json",
+      "4fc8ec0",
+      "inputs.py",
+      "8ea3b658",
+      true,
+      false
+     ],
+     [
+      "inputs.json",
+      "4fc8ec0",
+      "common.py",
+      "18810fa1",
+      true,
+      false
+     ],
+     [
+      "inputs.json",
+      "4fc8ec0",
+      "safe_pickle.py",
+      "f5d358a6",
+      true,
+      true
+     ],
+     [
+      "matrices.json",
+      "e92b16f",
+      "matrices.py",
+      "f6a19fba",
+      true,
+      false
+     ],
+     [
+      "matrices.json",
+      "e92b16f",
+      "common.py",
+      "31e615d0",
+      true,
+      true
+     ],
+     [
+      "matrices.json",
+      "e92b16f",
+      "inputs.py",
+      "d213fcfa",
+      true,
+      true
+     ],
+     [
+      "matrices.json",
+      "e92b16f",
+      "safe_pickle.py",
+      "f5d358a6",
+      true,
+      true
+     ],
+     [
+      "matrices.json",
+      "e92b16f",
+      "wasserstein.py",
+      "a44760eb",
+      true,
+      true
+     ],
+     [
+      "matrices.json",
+      "e92b16f",
+      "betti.py",
+      "50960387",
+      true,
+      true
+     ],
+     [
+      "arms.json",
+      "5473801",
+      "run_study.py",
+      "d3ae1965",
+      true,
+      false
+     ],
+     [
+      "arms.json",
+      "5473801",
+      "common.py",
+      "31e615d0",
+      true,
+      true
+     ],
+     [
+      "arms.json",
+      "5473801",
+      "inputs.py",
+      "d213fcfa",
+      true,
+      true
+     ],
+     [
+      "arms.json",
+      "5473801",
+      "safe_pickle.py",
+      "f5d358a6",
+      true,
+      true
+     ],
+     [
+      "arms.json",
+      "5473801",
+      "matrices.py",
+      "60b07333",
+      true,
+      true
+     ],
+     [
+      "arms.json",
+      "5473801",
+      "wasserstein.py",
+      "a44760eb",
+      true,
+      true
+     ],
+     [
+      "arms.json",
+      "5473801",
+      "betti.py",
+      "50960387",
+      true,
+      true
+     ],
+     [
+      "arms.json",
+      "5473801",
+      "estimators.py",
+      "f5d6428e",
+      true,
+      true
+     ],
+     [
+      "readouts.json",
+      "36b0648",
+      "run_study.py",
+      "9853d486",
+      true,
+      true
+     ],
+     [
+      "readouts.json",
+      "36b0648",
+      "common.py",
+      "31e615d0",
+      true,
+      true
+     ],
+     [
+      "readouts.json",
+      "36b0648",
+      "readouts.py",
+      "702be847",
+      true,
+      true
+     ]
+    ]
+   }
+  }
+ ],
+ "seeds": {
+  "w2": 5,
+  "fpcr": 6,
+  "gram": 7,
+  "nw": 8,
+  "bootstrap": 0
+ },
+ "sha256": {
+  "results/matrices.npz": "6ac8e74e2b41a6d64b5f6c0dd4268011ba72d9b2fcc98c458f0e41eae6e7cf1f",
+  "results/arms.npz": "510348c6bc2a1e73c4b25684fad36e07614e6b8c24839d12dc99f67523bc9eb5",
+  "upstream/interpolation/data/interpolation_dataset.pkl": "283527bd31227359f99dcbcf9a4f591b7f4f719704fcf21db52c579b24c49e5d",
+  "upstream/curvature/data/point_clouds.pkl": "7e77b71a7635c740d3cb0766e30a8608e871adc65a54f150f31d86cf3ea04c9b",
+  "upstream/curvature/data/labels.pkl": "8b72c83a54c52defaf11325c41045066f0d98975fa176839060656250fb1f283",
+  "upstream/curvature/data/train_indices.pkl": "0baa897ab75ce7833a67f43bc1e52ec615466218f4ac6164721c357538180634",
+  "upstream/curvature/data/test_indices.pkl": "aa61eafffb05a95f634f2080d6931d5399347b2e13bfd9a7c6fa76fc00b09d20",
+  "upstream/interpolation/results_interpolation.csv": "b861b6cb40a21ae676411a9a695a17323fb6ca9fecb1da2447c046fba62ad192",
+  "upstream/curvature/results_curvature.csv": "4f055b92f4e73ad5652a025ee30e40f87d75e28d6844080faecf354ea8a41bf1",
+  "upstream/fluid/results_fluid_splits.csv": "49d9b3b43aaf4ea25b664abe3570909c25714486fec34d0218f1a93006e27c80",
+  "upstream/fluid/results_fluid.csv": "75025f04c4286393b675891b7221f4972ae98a1fd434c763a59d1788ebcafb54"
+ },
+ "fluid_diagrams_sha256": {
+  "1": "121d6bdd4f9099a1d73531882966770c4bf288c0403230812491bde361b22a5f",
+  "2.5": "547c2ff97317fb0d3de6413192d2dd48e7cbeafdce888ea36d690f38a0c7ad73",
+  "5": "9bff7647a43eeead66fae6ee3c5ecee33ad4d3f6f00ea22ff60d291ddad9e801",
+  "7.5": "d4a980b20fcec72e4fe510e6ac819b012b85deca5f9a96a1250fd8f5b652bf60",
+  "9": "bf1f9bdd407a172b11a4c4b54b84827971384de7c3fa87ed0ca832d9e85fecce"
+ },
+ "upstream_clean_at": "fe7d652eff478ffe6081c7e6765458651ad3cd74",
+ "seconds": {
+  "load": 0.5,
+  "w2": 0.2,
+  "gram_l2": 2.1,
+  "arrays_scores": 0.1,
+  "g1": 0.0,
+  "nw": 0.7,
+  "fpcr": 12.3,
+  "loo": 0.1,
+  "readouts_verdicts": 0.2,
+  "tables": 0.0,
+  "provenance": 0.4,
+  "total": 17.1
+ },
+ "peak_rss_gb": 2.69,
+ "date": "2026-11-25 13:02:34",
+ "provenance": {
+  "md5": {
+   "verify_results.py": "0355bb21e1dd6e1c3abe8de5a8524fac",
+   "oracles.py": "43e4024c09e92cb9d3213b9dff7c2a7e",
+   "common.py": "31e615d07072189cac5905e611ae58cc",
+   "inputs.py": "d213fcfa6aeea515561ecf20017332de",
+   "safe_pickle.py": "f5d358a62b4932fd640f83a17a2e0eef",
+   "matrices.py": "60b073331da9dff7facde888f1485fd7",
+   "wasserstein.py": "a44760ebbd43998ab7a09cfd76cc876d",
+   "betti.py": "5096038795b3d3a43c7fcd4e210dd741",
+   "run_study.py": "9853d486537c2283e2e717bad533fc80",
+   "estimators.py": "f5d6428e36bb2dc96b1eb7829c8b6cab",
+   "readouts.py": "702be84742d64c382929164c44d47e26"
+  },
+  "versions": {
+   "numpy": "2.5.1",
+   "scipy": "1.18.0",
+   "pandas": "3.0.5",
+   "ripser": "0.6.15",
+   "scikit-learn": "1.9.0",
+   "python": "3.14.0"
+  },
+  "topocyte_commit": "18e3aa5",
+  "upstream_sha": "fe7d652eff478ffe6081c7e6765458651ad3cd74"
+ },
+ "platform": "macOS-26.6.2-arm64-arm-64bit-Mach-O"
+}
