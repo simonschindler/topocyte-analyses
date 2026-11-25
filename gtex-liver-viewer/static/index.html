@@ -132,10 +132,11 @@
 <body>
 <aside>
   <div>
-    <h1>Liver cell viewer</h1>
-    <div class="sub">GTEx liver cohort, HistoPLUS cells</div>
+    <h1 id="title">Liver cell viewer</h1>
+    <div class="sub" id="subtitle">GTEx liver cohort, HistoPLUS cells</div>
   </div>
-  <label class="field">Pathology group <select id="group"></select></label>
+  <label class="field" id="tissue-field" hidden>Tissue <select id="tissue"></select></label>
+  <label class="field" id="group-field">Pathology group <select id="group"></select></label>
   <label class="check"><input type="checkbox" id="hne-only"> <span id="hne-only-label">Only slides with H&amp;E</span></label>
   <div class="row"><span>Slide</span><span id="n-slides"></span></div>
   <select id="slides" size="14" aria-label="Slide"></select>
@@ -148,10 +149,10 @@
   </div>
   <fieldset>
     <legend>Colour by</legend>
-    <label><input type="radio" name="layer" value="types" checked> HistoPLUS type</label>
+    <label><input type="radio" name="layer" value="types" id="layer-types" checked> <span id="types-label">HistoPLUS type</span></label>
     <label><input type="radio" name="layer" value="classes"> Class</label>
     <label><input type="radio" name="layer" value="clusters" id="layer-clusters" disabled> Clusters</label>
-    <label><input type="radio" name="layer" value="density"> 10-NN density</label>
+    <label><input type="radio" name="layer" value="density" id="layer-density"> 10-NN density</label>
     <label><input type="radio" name="layer" value="voronoi" id="layer-voronoi"> Voronoi density</label>
     <label><input type="radio" name="layer" value="homotypic" id="layer-homotypic"> Homotypic fraction</label>
     <label><input type="radio" name="layer" value="entropy" id="layer-entropy"> Local entropy</label>

@@ -9,7 +9,9 @@ composition, by its hypergeometric colocalization excess, or by clusters from
 three of the studies here. It was built for the
 [chromatic-domains pilot](../gtex-liver-chromatic-domains/README.md) on
 2026-11-23 and moved to this folder on 2026-11-24, since the later studies use it
-too.
+too. Since 2026-11-25 it also opens the per-tissue GTEx objects of
+`gtex-liver-cells` (one folder per GTEx Portal tissue site), without the liver
+cohort's precomputed layers ([Other GTEx tissues](#other-gtex-tissues)).
 
 It is adapted from `tissuegeometry/web/cosine_viewer`: that app's OpenSlide
 DeepZoom tiles and WebGL point overlay, without its FastAPI backend, its
@@ -24,7 +26,11 @@ From this folder:
 ```bash
 ../gtex-liver-chromatic-domains/.venv/bin/python serve.py                             # point clouds only
 ../gtex-liver-chromatic-domains/.venv/bin/python serve.py --wsi-dir ~/data/GTEX/wsi   # plus the H&E
+../gtex-liver-chromatic-domains/.venv/bin/python serve.py --tissues ~/data/gtex_tissues        # GTEx tissue folders
+../gtex-liver-chromatic-domains/.venv/bin/python serve.py --tissues ~/data/gtex_tissues/lung   # one of them
 ```
+
+Without `--tissues` the viewer shows the liver cohort, as it always has.
 
 When the server prints `open http://127.0.0.1:8765/  (Ctrl-C stops)`, open that
 address in a browser; `--port` and `--host` change it. Ctrl-C in the terminal
@@ -44,9 +50,17 @@ on its own.
   format OpenSlide reads) is in DIR is shown on its H&E, and the server prints how
   many cohort slides have one; the other slides are drawn on a blank canvas. The
   cells' coordinates are the slide's level-0 pixels.
+- **Tissues.** With `--tissues`, the viewer shows GTEx tissue folders instead of
+  the liver cohort: one folder, or a folder of them, among which the page's
+  *Tissue* menu chooses (it opens `/?tissue=<slug>`; without one, the first
+  folder by name). The terminal lists each folder found with its slides and
+  cell types, any that cannot be opened (also greyed out in the menu, with the
+  reason) and any that hold only one of the two files a tissue folder needs (a
+  copy still running, say). [Other GTEx tissues](#other-gtex-tissues) says what
+  the page shows there.
 - **Tests.** `../gtex-liver-chromatic-domains/.venv/bin/python -m pytest -q -W error`
-  runs `test_viewer.py` and `test_local_colocalization.py`: 51 tests on
-  synthetic inputs, about 3 s.
+  runs `test_viewer.py`, `test_tissues.py` and `test_local_colocalization.py`:
+  79 tests on synthetic inputs, about 4 s.
 - **Colocalization scale.** The colocalization excess needs
   `results/colocalization_scale.json`, which `fit_colocalization.py` writes from
   every cohort cell (reading the cohort read only). With the same venv, from this
@@ -297,6 +311,85 @@ above every threshold.
   (`kmeans_check.json`) the note says by how much. A set and k is read from its
   file on first use; the last three stay in memory (63 MB each).
 
+## Other GTEx tissues
+
+`gtex-liver-cells` builds one AnnData per GTEx Portal tissue site, in the liver
+object's encoding, each in a folder of its own:
+
+```
+<ROOT>/                       ~/data/gtex_tissues (on the cluster: /nobackup/lab_rendeiro/projects/topocyte/topocyte_data/gtex_tissues)
+├── tissues.csv               the build's manifest; not read
+└── <slug>/                   one per tissue: liver, lung, skin_sun_exposed_lower_leg, ...
+    ├── gtex_<slug>_cells.h5ad
+    ├── slides.csv            one row per slide of the object, in its row order
+    ├── provenance.json       not read
+    └── centroids/            not read (may be absent)
+```
+
+A folder is a tissue folder when it holds both `gtex_<its name>_cells.h5ad` and
+`slides.csv`; its name is the tissue's slug, which the page's address and menu
+use. At the start the server checks each folder's `slides.csv` against its
+object: the nine GTEx Portal columns and `n_cells`, `row_start` and `row_end`
+are there, no slide is listed twice or without cells, `n_cells` is
+`row_end − row_start`, the rows run without gaps from 0 to the object's last
+cell, the object names every slide, and the file names one tissue. As for
+liver, a slide's cells are read only if the object names the slide at the first
+and the last of its rows. A folder that fails a check is listed but cannot be
+opened.
+
+In a tissue folder the page shows, as for liver:
+
+- **Slides.** One list by slide ID, with no pathology groups to filter by. The
+  box under it gives the tissue, the donor (its Subject ID, sex, age bracket and
+  Hardy scale) and the GTEx pathology categories and notes from `slides.csv`,
+  and "hidden on the GTEx Portal" where the Portal's Hidden is true. The H&E
+  (`--wsi-dir`, one folder of slide files for every tissue) and the scale bar
+  are as for liver.
+- **Cell types and classes.** The legend calls them cell types (liver's are
+  HistoPLUS's) and lists those of liver's 14 that the tissue has, in their
+  colours, then its others. A cell type outside the cell-type study's four
+  classes, whose map holds exactly liver's 14, counts as **other**: in the class
+  colouring, the class curves, the neighbourhood values by class and the
+  composition clusters' class fractions. It takes pink, orange or red in the type
+  colouring (`EXTRA_TYPES` in `palette.js`, hues none of the 14 take, not
+  validated against them), its legend entry and the classes' "other" say so in
+  their tooltips, a note under the legend names them, and the terminal does at
+  the start. Liver's map is unchanged. A tissue with more than 16 cell types
+  cannot be opened: the page's colour table has 16 entries.
+- **Voronoi density**, at GTEx's assumed 0.4942 µm per pixel as for liver. Its
+  fixed bins are the shown slide's own ten deciles, each a tenth of its cells
+  with a value, since a tissue has no cohort deciles; the legend gives each
+  decile's range. *Slide percentiles* bins are as for liver.
+- **Neighbourhood composition and composition clusters**, unchanged: they need
+  nothing but the slide's cells. The label menu offers cell types or classes.
+- **The threshold slider and the class curves**, under a value colouring (the
+  Voronoi density and the four neighbourhood values) unchanged: the shown
+  slide's own quantiles of that value. Under the type, class and cluster
+  colourings, where for liver they run over the cohort's 10-NN density
+  quantiles, a tissue folder has nothing to threshold: the slider is off, its
+  note says to choose a value colouring, and the class curves panel stays empty
+  with the same caption. This is the simplest honest fallback; thresholding the
+  Voronoi density there instead would compute it for every slide shown and put
+  two different densities under one slider.
+
+Off in a tissue folder, its control greyed out with a tooltip that says why (the
+server answers 404):
+
+| layer | why it is the liver cohort's |
+|---|---|
+| 10-NN density, with its cohort deciles and the slider's cohort quantiles | the pathology study's `density.npz`, computed over the liver cohort |
+| pathology groups | the pathology study's `pathology.csv`, of liver slides |
+| chromatic TDA of the pilot's centres | the chromatic pilot's sampled centres, on 30 liver slides |
+| cohort e-means clusters | fitted to every liver cohort cell's ball |
+| colocalization excess | each pair's gain or loss scale, fitted over the liver cohort (`fit_colocalization.py`) |
+
+Checked on 2026-11-25 on a temporary root whose `liver/` linked the liver
+object, with a `slides.csv` from `liver_cohort.csv` and the row ranges of the
+object's `obs/slide_id/codes`: on three slides (28,530 to 195,091 cells) the
+tissue folder gave byte for byte the cells and neighbourhood values that the
+liver cohort gives, the same composition clusters and Voronoi densities, and
+Voronoi codes with a tenth of each slide's cells per decile.
+
 ## What it reads
 
 All read only:
@@ -312,6 +405,15 @@ All read only:
 | `results/colocalization_scale.json` | the cohort's summed excess per k, label set and (focal, neighbour) pair, which fixes each pair's scale; without it, that option is off |
 | the slide files in `--wsi-dir` | the H&E tiles (OpenSlide DeepZoom, 256 px, no overlap) |
 
+With `--tissues`, instead, of each tissue folder (and none of the liver cohort's
+files above):
+
+| file | what the viewer takes from it |
+|---|---|
+| `<slug>/gtex_<slug>_cells.h5ad` (h5py mode "r") | each cell's slide, cell type and position (`obsm/spatial`, level-0 pixels), as from the liver object |
+| `<slug>/slides.csv` | each slide's rows (`n_cells`, `row_start`, `row_end`), its donor (`Subject ID`, `Sex`, `Age Bracket`, `Hardy Scale`), its `Pathology Categories` and `Pathology Notes`, its `Hidden` flag, and the `Tissue` |
+| the slide files in `--wsi-dir` | the H&E tiles, as for liver |
+
 ## Code
 
 - `serve.py`, the server. `/` is the page and `/static/<file>` its scripts. The
@@ -326,7 +428,14 @@ All read only:
   pooled matrix), `/api/cluster/<id>?k=&density=&radius=`, `/api/tda/<id>?k=`,
   `/api/emeans/<id>?set=&k=` and `/api/tile/<id>/<level>/<col>_<row>.jpeg`. The
   last four slides' cells, Voronoi densities, neighbourhood values and slide
-  files stay in memory, and the last two colocalization excesses.
+  files stay in memory, and the last two colocalization excesses. With
+  `--tissues` every endpoint takes `tissue=<slug>` (without it, the first
+  tissue), `/api/meta` adds the tissue (`tissue`: its slug, name and cell types
+  outside the four classes) and every tissue folder found (`tissues`), and the
+  caches are per tissue, of which only the two used last keep theirs, so that
+  the server needs no more memory for many tissues than for two. A `Cohort` is
+  the liver cohort or one tissue folder; the `Library` holds what the server
+  shows.
 - `local_colocalization.py`: `LocalColocalizationExtractor` (fit, transform,
   summarize_cloud), numpy and scipy only, with `test_local_colocalization.py`
   (the null by Monte Carlo over 200,000 relabellings, self-exclusion, small
@@ -337,4 +446,7 @@ All read only:
   layer, from cosine_viewer's `WsiGLOverlay`), `curves.js` (the class-curves
   panel), `matrix.js` (the colocalization matrix) and `palette.js` (the colour
   maps).
-- `test_viewer.py`, the server's tests.
+- `test_viewer.py`, the server's tests, and `test_tissues.py`, those of the
+  tissue folders: finding them, `slides.csv`, the class map's "other", the slide's
+  own Voronoi deciles, a tissue's layers and the server's routing by tissue, on
+  tissue objects that it writes with h5py in anndata's encoding.

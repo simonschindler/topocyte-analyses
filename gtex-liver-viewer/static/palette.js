@@ -37,6 +37,15 @@ export const PALETTE = {
   },
 };
 
+// A tissue folder's cell types outside the 14 (counted as "other"): the dataviz reference palette's pink, orange
+// and red slots (CLUSTERS' 5th, 2nd and 8th below), hues that none of the 14 take, so that such a type stands out;
+// a fourth such type takes the first again. Not validated against the 14; the legend's toggles and "only" buttons
+// tell them apart.
+export const EXTRA_TYPES = {
+  light: ["#e87ba4", "#eb6834", "#e34948"],
+  dark: ["#d55181", "#d95926", "#e66767"],
+};
+
 // Composition clusters, largest first: the dataviz reference palette's eight categorical slots in its fixed
 // order (validated on adjacent pairs; in a scatter only the first three stay apart on every pair), then two
 // darker (light) or lighter (dark) steps of slots 1 and 2 for k = 9 and 10. The legend's toggles and "only"
