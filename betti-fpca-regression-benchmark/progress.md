@@ -20,7 +20,8 @@ analyses." Then he chose approach B of `design.md`.
 
 ## Rulings during the build
 
-Claude's calls while building (2026-11-24), each with its reason. None changes a number of `design.md`.
+Claude's calls while building (2026-11-24 and 2026-11-25), each with its reason, and Simon's confirmations of
+2026-11-25 (items 8 and 9). None changes a number of `design.md`.
 
 1. **The whitelist's round-trip test pickles at protocol 4,** as all 2,068 upstream pickles do; the whitelist stays
    the design's 11 globals (protocol 5, Python 3.14's default, needs a 12th, `numpy._core.numeric._frombuffer`).
@@ -125,3 +126,32 @@ Claude's calls while building (2026-11-24), each with its reason. None changes a
     take nearly all of each arm's time.
   - Outputs: `results/arms.json`, and `results/arms.npz` with its 31 arrays (6.4 MB, sha256 `510348c6…`, recorded in
     the json). The md5s in `arms.json` equal the scripts committed in f94fea5.
+- 2026-11-25 12:06: `run_study.py readouts`, in the foreground, 1.4 s wall (0.1 s inside the stage), peak RSS
+  0.30 GB, exit status 0. It read `results/arms.npz` through `run_study.load_arms`, which refuses an npz unless
+  `arms.json` records G1 and G3 passed and the npz's sha256 (`510348c6…`, equal), and wrote `results/readouts.json`.
+  - **The verdicts,** by `design.md`'s rule fixed in advance: Δ > 0 favours F, and every interval is a 95%
+    percentile bootstrap of 10,000 resamples from its own `default_rng(0)`. **Arm F is below `PD_kernel` on all
+    three tasks** (copied from `readouts.json`, rounded to 4 significant digits):
+    - interpolation: Δ = R²(F) − R²(K), mean −0.02401, 95% interval [−0.03837, −0.01141]: **below**;
+    - curvature: Δ = MSE(K) − MSE(F), mean −0.2478, 95% interval [−0.4340, −0.09194]: **below**;
+    - fluid: Δ = R²(F) − R²(K), mean −3.283, 95% interval [−5.812, −1.507]: **below**.
+  - Exploratory, no verdict, with the same recipes:
+    - B against K: interpolation −0.02512 [−0.03123, −0.01954], curvature −0.02964 [−0.08372, +0.02166], fluid
+      −0.1388 [−0.1441, −0.1334];
+    - F against B: interpolation +0.00111 [−0.01391, +0.01470], curvature −0.2182 [−0.4146, −0.04948], fluid
+      −3.144 [−5.675, −1.367].
+  - Descriptive, no verdict (`readouts.json` holds the rest):
+    - fluid on the paper's splits 0–4 alone: Δ(F, K) −4.142 [−8.839, −0.7448];
+    - curvature's MSE: K 0.2258 (the reported `PD_kernel`), F 0.4736, B 0.2554;
+    - F's chosen (K0, K1): (1, 2) for curvature; 45 distinct pairs over the 100 interpolation datasets and 239 over
+      the 2,500 fluid cells, (1, 1) the most frequent in both, (0, 0) in 120 fluid cells;
+    - the descriptive intervals resample an interpolation size's 10 runs, a fluid time's 100 splits (each by its
+      mean Δ over the 5 sizes), and the paper's 5 splits. The tables' SDs have ddof 1, as upstream's: its fluid
+      `R2_std` is the ddof-1 SD of its splits' R², which arm K matches to 1.7e-16.
+  - Checked after the run (a scratch script, not kept): all nine intervals (three pairs × three tasks) equal the
+    brief's recipe written out literally on `arms.npz`, bit for bit. Arm K's columns of the tables equal upstream's
+    reported values to 2.2e-16 (interpolation 1.2e-16, curvature 8.3e-17, fluid splits 0–4 2.2e-16).
+  - For information, not a readout: arm F fails badly in a few fluid cells, which make the size of fluid's mean Δ
+    but not its sign. F's fluid R² has median 0.085 (K 0.365, B 0.178); 755 of the 2,500 cells lie below 0, 96
+    below −1 and 51 below −10. The worst, −2,518 (t 2.5, split 92, n 25), chose (K0, K1) = (6, 17): 23 scores for
+    25 training curves. Δ(F, K) lies above 0 in 1.4% of the fluid cells, and its median is −0.25.

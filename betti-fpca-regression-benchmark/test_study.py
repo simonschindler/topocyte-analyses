@@ -34,6 +34,7 @@ import fetch_upstream
 import inputs as inp
 import matrices as mat
 import oracles
+import readouts as ro
 import run_study as rs
 import safe_pickle
 import wasserstein as ws
@@ -962,6 +963,316 @@ def test_arms_stage_writes_every_arm_after_both_gates_pass(tmp_path, monkeypatch
     assert record["passed"] and record["g1"] == {"passed": True} and record["g3"]["passed"]
     assert record["npz"]["sha256"] == hashlib.sha256((tmp_path / "arms.npz").read_bytes()).hexdigest()
     assert {"K", "F", "B"} <= set(record["seconds"]) and set(record["provenance"]["md5"]) == set(rs._SCRIPTS)
+
+
+# The readouts: design.md's "Decision rule, fixed in advance", on the arrays of arms.npz.
+
+
+@pytest.mark.parametrize(
+    "lo,hi,expected",
+    [(0.01, 0.2, "beats"), (-0.2, -0.01, "below"), (-0.1, 0.1, "level"), (0.0, 0.1, "level"), (-0.1, 0.0, "level")],
+)
+def test_verdict_follows_the_rule_fixed_in_advance(lo, hi, expected):
+    assert ro.verdict(lo, hi) == expected
+
+
+@pytest.mark.parametrize("lo, hi", [(np.nan, 0.1), (0.01, np.nan), (np.nan, np.nan), (0.01, np.inf), (-np.inf, -0.01)])
+def test_verdict_refuses_a_bound_that_is_not_finite(lo, hi):
+    # By the rule's comparisons alone, a NaN interval would read "level"; it is no readout at all.
+    with pytest.raises(ValueError, match="finite"):
+        ro.verdict(lo, hi)
+
+
+def test_intervals_of_identical_arms_are_zero():
+    assert ro.interval_interp(np.zeros((10, 10))) == (0.0, 0.0, 0.0)
+
+
+def test_interval_interp_resamples_runs_within_sizes():
+    delta = np.repeat(np.linspace(-1, 1, 10)[:, None], 10, axis=1)  # no variation within a size
+    mean, lo, hi = ro.interval_interp(delta)
+    assert lo == pytest.approx(mean) and hi == pytest.approx(mean)
+
+
+def test_interval_interp_gives_the_mean_over_the_datasets_and_is_reproducible():
+    delta = np.random.default_rng(39).normal(size=(10, 10))
+    mean, lo, hi = ro.interval_interp(delta)
+    assert mean == delta.mean() and lo < mean < hi and ro.interval_interp(delta) == (mean, lo, hi)
+
+
+def test_interval_units_is_reproducible():
+    # Every interval draws from a fresh default_rng(BOOT_SEED): another interval in between changes nothing.
+    values = np.random.default_rng(40).normal(size=50)
+    first = ro.interval_units(values)
+    ro.interval_interp(np.random.default_rng(41).normal(size=(10, 10)))
+    assert ro.interval_units(values) == first
+    mean, lo, hi = first
+    assert mean == values.mean() and lo < mean < hi
+    assert ro.interval_units(np.full(8, 0.25)) == (0.25, 0.25, 0.25)  # units alike: every resample is alike
+
+
+def _synthetic_arms(rng: np.random.Generator) -> dict[str, np.ndarray]:
+    """The arrays of ``arms.npz`` that the readouts read, at their real shapes, with random values."""
+    target = rng.uniform(-2, 2, 50)
+    arms = {"curv_y_test": target, "interp_k_F": rng.integers(0, 4, (100, 2)), "curv_k_F": np.array([3, 1])}
+    arms["fluid_k_F"] = rng.integers(0, 4, (5, 100, 5, 2))
+    for arm in rs.ARMS:
+        arms[f"interp_r2_{arm}"] = rng.uniform(0.5, 1.0, 100)
+        arms[f"curv_pred_{arm}"] = target + rng.normal(0, 0.5, 50)
+        arms[f"curv_mse_{arm}"] = np.mean((target - arms[f"curv_pred_{arm}"]) ** 2)
+        arms[f"fluid_r2_{arm}"] = rng.uniform(0.1, 0.9, (5, 100, 5))
+    return arms
+
+
+_TURKES = (
+    "ml_on_ph0",
+    "ml_on_ph1",
+    "ml_on_ph0_longest",
+    "ml_on_ph1_longest",
+    "ph0_ml",
+    "ph1_ml",
+    "ml_on_dis_mat",
+    "nn_shallow",
+    "nn_deep",
+    "point_net",
+)
+
+
+@pytest.fixture
+def reported_tables(tmp_path, monkeypatch) -> dict[str, pd.DataFrame]:
+    """Upstream's three reported tables, with upstream's columns and random values, in place of upstream's.
+
+    ``c.UPSTREAM`` is ``tmp_path``; the tables are returned by their paths under it.
+    """
+    rng = np.random.default_rng(42)
+    interp = {"n_train": c.INTERP_SIZES}
+    interp |= {
+        f"{method}_R2_{stat}": rng.uniform(0, 1, 10)
+        for method in ("PD_kernel", "PI_kernel")
+        for stat in ("mean", "std")
+    }
+    fluid = [
+        {"t": t, "n_train": n, "R2_mean": rng.uniform(0, 1), "R2_std": rng.uniform(0, 0.1)}
+        for t in c.FLUID_TIMES
+        for n in c.FLUID_SIZES
+    ]
+    tables = {
+        "interpolation/results_interpolation.csv": pd.DataFrame(interp),
+        "curvature/results_curvature.csv": pd.DataFrame(
+            {"method": [*_TURKES, "PD_kernel"], "MSE": rng.uniform(0.2, 3, 11)}
+        ),
+        "fluid/results_fluid.csv": pd.DataFrame(fluid),
+    }
+    for name, table in tables.items():
+        (tmp_path / name).parent.mkdir()
+        table.to_csv(tmp_path / name, index=False)
+    monkeypatch.setattr(c, "UPSTREAM", tmp_path)
+    return tables
+
+
+def _point(readout: dict, value: float) -> bool:
+    """Whether a readout's mean and both bounds are ``value``, to 1e-12: an interval whose resamples are all alike."""
+    return [readout["mean"], readout["lo"], readout["hi"]] == pytest.approx([value] * 3, abs=1e-12)
+
+
+def test_curvature_delta_is_signed_so_positive_favours_f(reported_tables):
+    arms = _synthetic_arms(np.random.default_rng(43))
+    target, err = arms["curv_y_test"], np.random.default_rng(44).uniform(0.1, 0.5, 50) * np.resize([1.0, -1.0], 50)
+    arms["curv_pred_F"], arms["curv_pred_K"] = target + err, target - 2 * err  # se_K = 4 se_F > se_F everywhere
+    curv = ro.readouts(arms)["primary"]["curv"]
+    assert curv["verdict"] == "beats" and curv["lo"] > 0 and curv["mean"] == pytest.approx(np.mean(3 * err**2))
+    assert [curv["mean"], curv["lo"], curv["hi"]] == pytest.approx(ro.interval_units(3 * err**2))  # units: the clouds
+    arms["curv_pred_F"], arms["curv_pred_K"] = arms["curv_pred_K"], arms["curv_pred_F"]
+    assert ro.readouts(arms)["primary"]["curv"]["verdict"] == "below"
+
+
+def test_every_pair_is_signed_so_positive_favours_its_first_arm(reported_tables):
+    # F above B above K on every R², and the reverse on every squared error: every pair's Δ lies above 0.
+    arms = _synthetic_arms(np.random.default_rng(45))
+    for task in ("interp", "fluid"):
+        arms[f"{task}_r2_B"], arms[f"{task}_r2_F"] = arms[f"{task}_r2_K"] + 0.05, arms[f"{task}_r2_K"] + 0.125
+    err = np.random.default_rng(46).uniform(0.1, 0.5, 50)
+    for arm, scale in (("F", 1.0), ("B", 2.0), ("K", 3.0)):
+        arms[f"curv_pred_{arm}"] = arms["curv_y_test"] + scale * err
+    out = ro.readouts(arms)
+    primary, exploratory, se = out["primary"], out["exploratory"], np.mean(err**2)
+    assert primary["pair"] == ["F", "K"] and [primary[task]["verdict"] for task in rs.TASKS] == ["beats"] * 3
+    assert [primary[task]["mean"] for task in rs.TASKS] == pytest.approx([0.125, 9 * se - se, 0.125])
+    assert {name: pair["pair"] for name, pair in exploratory.items()} == {"B_vs_K": ["B", "K"], "F_vs_B": ["F", "B"]}
+    assert [exploratory["B_vs_K"][task]["mean"] for task in rs.TASKS] == pytest.approx([0.05, 9 * se - 4 * se, 0.05])
+    assert [exploratory["F_vs_B"][task]["mean"] for task in rs.TASKS] == pytest.approx([0.075, 4 * se - se, 0.075])
+    for pair in exploratory.values():  # exploratory: the same readouts, no verdict
+        assert all(pair[task]["lo"] > 0 and "verdict" not in pair[task] for task in rs.TASKS)
+    descriptive = primary["interp"]["by_size"] + primary["fluid"]["by_time"] + [primary["fluid"]["paper_splits"]]
+    assert all("verdict" not in readout for readout in descriptive)
+
+
+def test_readouts_resample_the_units_of_the_rule(reported_tables):
+    rng = np.random.default_rng(47)
+    arms = _synthetic_arms(rng)
+    # interpolation: Δ alike within each size (the datasets come in size order, then run order), so the intervals
+    # that resample runs within a size are points; a resample across sizes would not be
+    sizes = np.linspace(-0.2, 0.3, 10)
+    arms["interp_r2_F"] = arms["interp_r2_K"] + np.repeat(sizes, 10)
+    # fluid: Δ alike at every split, so the intervals over splits are points; one over cells would not be
+    e = rng.normal(0, 0.1, (5, 1, 5))
+    arms["fluid_r2_F"] = arms["fluid_r2_K"] + e
+    primary = ro.readouts(arms)["primary"]
+    assert _point(primary["interp"], sizes.mean())
+    assert [readout["n_train"] for readout in primary["interp"]["by_size"]] == list(c.INTERP_SIZES)
+    assert all(_point(readout, v) for readout, v in zip(primary["interp"]["by_size"], sizes, strict=True))
+    assert _point(primary["fluid"], e.mean()) and _point(primary["fluid"]["paper_splits"], e.mean())
+    assert [readout["t"] for readout in primary["fluid"]["by_time"]] == list(c.FLUID_TIMES)
+    assert all(_point(readout, e[ti].mean()) for ti, readout in enumerate(primary["fluid"]["by_time"]))
+    # the paper's splits alone: splits 0-4 one up
+    arms["fluid_r2_F"] = arms["fluid_r2_K"] + e + np.where(np.arange(100) < 5, 1.0, 0.0)[:, None]
+    fluid = ro.readouts(arms)["primary"]["fluid"]
+    assert fluid["paper_splits"]["splits"] == [0, 1, 2, 3, 4] and _point(fluid["paper_splits"], e.mean() + 1)
+    assert fluid["mean"] == pytest.approx(e.mean() + 0.05)
+    # Δ that varies across splits only: each split is one unit, at every time and size together
+    b = rng.normal(0, 0.1, 100)
+    arms["fluid_r2_F"] = arms["fluid_r2_K"] + b[:, None]
+    fluid = ro.readouts(arms)["primary"]["fluid"]
+    assert [fluid["mean"], fluid["lo"], fluid["hi"]] == pytest.approx(ro.interval_units(b), abs=1e-12)
+
+
+def test_readouts_set_the_arms_beside_the_reported_tables(reported_tables):
+    arms = _synthetic_arms(np.random.default_rng(48))
+    tables = ro.readouts(arms)["tables"]
+    interp, curv, fluid = (
+        reported_tables[f"{name}/results_{name}.csv"] for name in ("interpolation", "curvature", "fluid")
+    )
+    # interpolation, size 30 (datasets 20-29), beside the reported PD_kernel and PI_kernel of that size
+    assert [row["n_train"] for row in tables["interp"]] == list(c.INTERP_SIZES)
+    row = tables["interp"][2]
+    for arm in rs.ARMS:
+        runs = arms[f"interp_r2_{arm}"][20:30]
+        assert row[arm] == pytest.approx({"mean": runs.mean(), "std": runs.std(ddof=1)})
+    for method in ("PD_kernel", "PI_kernel"):
+        reported = {"mean": interp[f"{method}_R2_mean"][2], "std": interp[f"{method}_R2_std"][2]}
+        assert row["reported"][method] == pytest.approx(reported)
+    # curvature: every reported method, in the CSV's order, beside each arm's MSE
+    assert list(tables["curv"]["reported"]) == [*_TURKES, "PD_kernel"]
+    assert tables["curv"]["reported"] == pytest.approx(dict(zip(curv["method"], curv["MSE"], strict=True)))
+    assert {arm: tables["curv"][arm] for arm in rs.ARMS} == {arm: float(arms[f"curv_mse_{arm}"]) for arm in rs.ARMS}
+    # fluid, t 7.5 and n 200 (time 3, size 3): the paper's splits 0-4 and all 100, beside the reported row
+    assert [(row["t"], row["n_train"]) for row in tables["fluid"]] == list(
+        itertools.product(c.FLUID_TIMES, c.FLUID_SIZES)
+    )
+    row = tables["fluid"][18]
+    assert row["reported"] == pytest.approx({"mean": fluid["R2_mean"][18], "std": fluid["R2_std"][18]})
+    for arm in rs.ARMS:
+        r2 = arms[f"fluid_r2_{arm}"][3, :, 3]
+        assert row["paper_splits"][arm] == pytest.approx({"mean": r2[:5].mean(), "std": r2[:5].std(ddof=1)})
+        assert row["all_splits"][arm] == pytest.approx({"mean": r2.mean(), "std": r2.std(ddof=1)})
+
+
+@pytest.mark.parametrize(
+    "name, broken",
+    [
+        ("interpolation/results_interpolation.csv", lambda table: table[table["n_train"] != 50]),
+        ("curvature/results_curvature.csv", lambda table: pd.concat([table, table.tail(1)])),  # PD_kernel twice
+        ("curvature/results_curvature.csv", lambda table: table[table["method"] != "PD_kernel"]),
+        ("fluid/results_fluid.csv", lambda table: table.head(24)),  # without t 9.0, n 300
+    ],
+)
+def test_readouts_refuse_a_reported_table_without_its_cells(tmp_path, reported_tables, name, broken):
+    broken(reported_tables[name]).to_csv(tmp_path / name, index=False)
+    with pytest.raises(ValueError, match=name.split("/")[1]):
+        ro.readouts(_synthetic_arms(np.random.default_rng(49)))
+
+
+def test_readouts_count_the_chosen_k_per_task_and_fluid_time(reported_tables):
+    arms = _synthetic_arms(np.random.default_rng(50))
+    arms["interp_k_F"] = np.array([[0, 1]] * 60 + [[2, 3]] * 40)
+    arms["curv_k_F"] = np.array([4, 0])
+    k = np.empty((5, 100, 5, 2), dtype=int)
+    k[0], k[1:, :50], k[1:, 50:] = [1, 0], [0, 2], [3, 1]
+    arms["fluid_k_F"] = k
+    chosen = ro.readouts(arms)["chosen_k"]
+    assert chosen["interp"] == [{"k0": 0, "k1": 1, "count": 60}, {"k0": 2, "k1": 3, "count": 40}]
+    assert chosen["curv"] == [{"k0": 4, "k1": 0, "count": 1}]
+    assert chosen["fluid"] == [
+        {"k0": 0, "k1": 2, "count": 1000},
+        {"k0": 1, "k1": 0, "count": 500},
+        {"k0": 3, "k1": 1, "count": 1000},
+    ]
+    later = [{"k0": 0, "k1": 2, "count": 250}, {"k0": 3, "k1": 1, "count": 250}]
+    assert chosen["fluid_by_time"] == [{"t": 1.0, "counts": [{"k0": 1, "k1": 0, "count": 500}]}] + [
+        {"t": t, "counts": later} for t in (2.5, 5.0, 7.5, 9.0)
+    ]
+
+
+def test_load_arms_refuses_an_npz_that_arms_json_does_not_vouch_for(tmp_path, monkeypatch):
+    # Carried from Task 7's review: an npz that a failed or interrupted arms run left must not be read.
+    monkeypatch.setattr(c, "RESULTS", tmp_path)
+    np.savez(tmp_path / "arms.npz", curv_y_test=np.arange(3.0))
+    sha = hashlib.sha256((tmp_path / "arms.npz").read_bytes()).hexdigest()
+
+    def record(g1: bool, g3: bool | None, sha256: str | None) -> None:
+        gates = {"g1": {"passed": g1}, "g3": None if g3 is None else {"passed": g3}}
+        npz = None if sha256 is None else {"sha256": sha256}
+        (tmp_path / "arms.json").write_text(json.dumps({"passed": g1 and bool(g3), **gates, "npz": npz}))
+
+    record(True, True, sha)
+    assert np.array_equal(rs.load_arms()["curv_y_test"], np.arange(3.0))
+    for g1, g3, sha256 in ((False, None, None), (False, None, sha), (True, False, sha), (True, True, "0" * 64)):
+        record(g1, g3, sha256)
+        with pytest.raises(RuntimeError, match="arms.json"):
+            rs.load_arms()
+    record(True, True, sha)
+    np.savez(tmp_path / "arms.npz", curv_y_test=np.arange(4.0))  # rewritten after its json
+    with pytest.raises(RuntimeError, match="sha256"):
+        rs.load_arms()
+
+
+def _readouts_stage_on(tmp_path, monkeypatch, arms: dict, g3_passed: bool = True) -> tuple[list[str], str]:
+    """``run_study.py readouts`` made ready on ``arms``: the calls it makes to the checks and ``load_arms``, as a list
+    that fills as it runs, and the npz's sha256.
+
+    ``results/`` is ``tmp_path``, with ``arms.npz`` holding ``arms`` and an ``arms.json`` that records G1 passed, G3
+    as ``g3_passed``, and the npz's sha256.
+    """
+    calls, load_arms = [], rs.load_arms
+
+    def spy() -> dict[str, np.ndarray]:
+        calls.append("load_arms")
+        return load_arms()
+
+    monkeypatch.setattr(c, "check_topocyte", lambda: calls.append("check_topocyte"))
+    monkeypatch.setattr(c, "check_upstream", lambda: calls.append("check_upstream"))
+    monkeypatch.setattr(c, "RESULTS", tmp_path)
+    monkeypatch.setattr(rs, "load_arms", spy)
+    np.savez(tmp_path / "arms.npz", **arms)
+    sha = hashlib.sha256((tmp_path / "arms.npz").read_bytes()).hexdigest()
+    record = {"passed": g3_passed, "g1": {"passed": True}, "g3": {"passed": g3_passed}, "npz": {"sha256": sha}}
+    (tmp_path / "arms.json").write_text(json.dumps(record | {"date": "2026-11-25 11:41:06"}))
+    return calls, sha
+
+
+def test_readouts_stage_checks_first_then_writes_readouts_json(tmp_path, monkeypatch, reported_tables):
+    arms = _synthetic_arms(np.random.default_rng(51))
+    calls, _ = _readouts_stage_on(tmp_path, monkeypatch, arms, g3_passed=False)
+    with pytest.raises(RuntimeError, match="arms.json"):
+        rs.main(["readouts"])
+    assert calls == ["check_topocyte", "check_upstream", "load_arms"] and not (tmp_path / "readouts.json").exists()
+    calls, sha = _readouts_stage_on(tmp_path, monkeypatch, arms)
+    rs.main(["readouts"])
+    assert calls == ["check_topocyte", "check_upstream", "load_arms"]
+    record = json.loads((tmp_path / "readouts.json").read_text())
+    expected = ro.readouts(arms)  # the stage writes readouts.readouts of the arms it loaded
+    assert {key: record[key] for key in expected} == expected
+    assert record["arms"] == {"sha256": sha, "date": "2026-11-25 11:41:06"}
+    assert set(record["provenance"]["md5"]) == {"run_study.py", "common.py", "readouts.py"}
+
+
+def test_readouts_stage_writes_no_json_with_a_value_that_is_not_finite(tmp_path, monkeypatch, reported_tables):
+    # A NaN in arm B reaches only the exploratory pairs and the tables, where no verdict refuses it.
+    arms = _synthetic_arms(np.random.default_rng(52))
+    arms["interp_r2_B"][7] = np.nan
+    _readouts_stage_on(tmp_path, monkeypatch, arms)
+    with pytest.raises(ValueError, match="JSON"):
+        rs.main(["readouts"])
+    assert not (tmp_path / "readouts.json").exists()
 
 
 @needs_upstream

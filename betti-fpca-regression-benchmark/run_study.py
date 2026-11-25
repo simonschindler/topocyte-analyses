@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""The Betti FPCR benchmark's arms K, F and B, and the gates between them, G1 and G3 (``design.md``).
+"""The Betti FPCR benchmark's arms K, F and B, the gates between them, G1 and G3, and the readouts (``design.md``).
 
 Stage ``arms``, from this folder::
 
@@ -35,12 +35,22 @@ They see the same cells:
 ``curv_k_F`` (2,) and ``fluid_k_F`` (5, 100, 5, 2). Beside them: ``interp_y_test`` (100, 50), ``curv_y_test`` (50,),
 ``fluid_y`` (400,) and ``fluid_test`` (100, 100), each split's test positions. ``results/arms.json`` holds the
 gates, the seconds per arm and task, the npz's size and sha256, and ``provenance``.
+
+Stage ``readouts``, from this folder, in seconds::
+
+    /usr/bin/time -l $PY run_study.py readouts > logs/readouts.log 2>&1
+
+It reads ``results/arms.npz`` through ``load_arms``, which refuses an npz that ``results/arms.json`` does not vouch
+for, and writes ``results/readouts.json``: ``readouts.readouts`` of the arms (the verdicts of ``design.md``'s
+decision rule, the exploratory and descriptive readouts, arm F's chosen (K0, K1) and the paper's tables), the npz's
+sha256, the seconds and ``provenance``. It prints every pair's readouts.
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
 import math
 import sys
@@ -56,6 +66,7 @@ import common as c
 import estimators as est
 import inputs as inp
 import matrices as mat
+import readouts as ro
 
 ARMS = ("K", "F", "B")  # the stage runs K, then G1 and G3, then F and B
 TASKS = ("interp", "curv", "fluid")
@@ -72,7 +83,8 @@ _SCRIPTS = (
     "wasserstein.py",
     "betti.py",
     "estimators.py",
-)
+)  # the code of stage arms
+_READOUT_SCRIPTS = ("run_study.py", "common.py", "readouts.py")  # the code of stage readouts
 
 
 def fluid_cells() -> Iterator[tuple[int, int, int, np.ndarray, np.ndarray]]:
@@ -404,14 +416,66 @@ def _arms(provenance: dict) -> None:
     print(f"wrote results/arms.json and results/arms.npz in {record['seconds']['total']} s: passed", flush=True)
 
 
+def load_arms() -> dict[str, np.ndarray]:
+    """Every array of ``results/arms.npz`` by its key, if ``results/arms.json`` vouches for the file.
+
+    As ``matrices.load_matrices``: ``RuntimeError`` unless the json records gates G1 and G3 passed and the npz's
+    sha256 equals the one it records, so that an npz that a failed or interrupted run left is refused. The arrays are
+    loaded, with ``allow_pickle=False``, from the bytes that were hashed.
+    """
+    data = (c.RESULTS / "arms.npz").read_bytes()
+    record = json.loads((c.RESULTS / "arms.json").read_text())
+    gates = {gate: (record.get(gate) or {}).get("passed") is True for gate in ("g1", "g3")}
+    recorded, actual = (record.get("npz") or {}).get("sha256"), hashlib.sha256(data).hexdigest()
+    if not all(gates.values()) or actual != recorded:
+        raise RuntimeError(
+            f"results/arms.json does not vouch for results/arms.npz: gates passed {gates}, npz sha256 "
+            f"{actual[:12]}… against the recorded {str(recorded)[:12]}…; rerun run_study.py arms"
+        )
+    with np.load(io.BytesIO(data), allow_pickle=False) as npz:
+        return {key: npz[key] for key in npz.files}
+
+
+def _readouts(provenance: dict) -> None:
+    """The stage ``readouts``: ``readouts.readouts`` of the arms that ``load_arms`` vouches for, into
+    ``results/readouts.json``, every pair's readouts printed. A value that is not finite raises before the json is
+    written."""
+    started = time.perf_counter()
+    arms = load_arms()
+    vouching = json.loads((c.RESULTS / "arms.json").read_text())
+    record = {
+        "description": "the readouts of design.md's decision rule, fixed in advance, on the arms' predictions: the "
+        "verdicts of arm F against arm K per task, the exploratory pairs B against K and F against B, the descriptive "
+        "readouts, arm F's chosen (K0, K1), and the paper's tables with the reported values beside arms K, F and B",
+        **ro.readouts(arms),
+        "arms": {"sha256": vouching["npz"]["sha256"], "date": vouching.get("date")},
+        "seconds": round(time.perf_counter() - started, 1),
+        "date": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "provenance": provenance,
+    }
+    text = json.dumps(record, indent=1, allow_nan=False) + "\n"
+    (c.RESULTS / "readouts.json").write_text(text)
+    for pair in (record["primary"], *record["exploratory"].values()):
+        x, y = pair["pair"]
+        for task in ro.TASKS:
+            r = pair[task]
+            print(
+                f"{x} against {y}, {task}: mean Delta {r['mean']:+.6f}, 95% interval [{r['lo']:+.6f}, {r['hi']:+.6f}]"
+                f"{': ' + r['verdict'] if 'verdict' in r else ' (exploratory)'}",
+                flush=True,
+            )
+    print(f"wrote results/readouts.json in {record['seconds']} s", flush=True)
+
+
 def main(argv: Sequence[str] | None = None) -> None:
     c.check_topocyte()
     c.check_upstream()
-    provenance = c.provenance(*(c.HERE / name for name in _SCRIPTS))  # at the start: the code that runs
     parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
-    parser.add_argument("stage", choices=("arms",))
-    parser.parse_args(argv)
-    _arms(provenance)
+    parser.add_argument("stage", choices=("arms", "readouts"))
+    stage = parser.parse_args(argv).stage
+    scripts = _SCRIPTS if stage == "arms" else _READOUT_SCRIPTS
+    provenance = c.provenance(*(c.HERE / name for name in scripts))  # before the stage: the code that runs
+    (_arms if stage == "arms" else _readouts)(provenance)
 
 
 if __name__ == "__main__":
