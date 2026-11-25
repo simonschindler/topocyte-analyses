@@ -26,12 +26,13 @@ every matrix, and with the fluid ones gate G4: each fluid Gram matrix at ``FLUID
 ``FLUID_SHIFT + 10``, whose largest difference must be at most ``G4_TOL`` times the matrix's largest entry (ruling 7
 in ``progress.md``, as G3 is relative to the largest score). It writes ``results/matrices.json`` (the gates, the
 shapes, the npz's size and sha256, the runtimes and ``provenance``), and the npz only if both gates pass; otherwise it
-exits with status 1.
+exits with status 1. ``load_matrices`` gives the later stages the npz only if this json vouches for it.
 """
 
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import math
 import sys
@@ -275,8 +276,22 @@ def _shapes(M: dict[str, np.ndarray]) -> dict[str, dict[str, int]]:
 
 
 def load_matrices() -> dict[str, np.ndarray]:
-    """Every array of ``results/matrices.npz`` by its key, loaded with ``allow_pickle=False``."""
-    with np.load(c.RESULTS / "matrices.npz", allow_pickle=False) as npz:
+    """Every array of ``results/matrices.npz`` by its key, if ``results/matrices.json`` vouches for the file.
+
+    ``RuntimeError`` unless the json records gates G2 and G4 passed and the npz's sha256 equals the one it records,
+    so that an npz left by an earlier run, after a later run failed, is refused. The arrays are loaded, with
+    ``allow_pickle=False``, from the bytes that were hashed.
+    """
+    data = (c.RESULTS / "matrices.npz").read_bytes()
+    record = json.loads((c.RESULTS / "matrices.json").read_text())
+    gates = {gate: (record.get(gate) or {}).get("passed") is True for gate in ("g2", "g4")}
+    recorded, actual = (record.get("npz") or {}).get("sha256"), hashlib.sha256(data).hexdigest()
+    if not all(gates.values()) or actual != recorded:
+        raise RuntimeError(
+            f"results/matrices.json does not vouch for results/matrices.npz: gates passed {gates}, npz sha256 "
+            f"{actual[:12]}… against the recorded {str(recorded)[:12]}…; rerun matrices.py"
+        )
+    with np.load(io.BytesIO(data), allow_pickle=False) as npz:
         return {key: npz[key] for key in npz.files}
 
 

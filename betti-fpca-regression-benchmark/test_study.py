@@ -12,6 +12,7 @@ its pickles only through ``safe_pickle.load_pickle``, and are skipped until
 
 from __future__ import annotations
 
+import hashlib
 import itertools
 import json
 import math
@@ -21,6 +22,7 @@ import subprocess
 import warnings
 
 import numpy as np
+import pandas as pd
 import pytest
 import ripser
 import topocyte as tc
@@ -32,6 +34,7 @@ import fetch_upstream
 import inputs as inp
 import matrices as mat
 import oracles
+import run_study as rs
 import safe_pickle
 import wasserstein as ws
 
@@ -598,6 +601,338 @@ def test_matrices_stage_writes_the_npz_only_if_both_gates_pass(tmp_path, monkeyp
     record = json.loads((tmp_path / "matrices.json").read_text())
     assert record["passed"] is bool(g2_passed and g4_passed) and record["g2"]["passed"] is g2_passed
     assert record["g4"] == (None if g4_passed is None else {"passed": g4_passed})
+
+
+def test_load_matrices_refuses_an_npz_that_its_json_does_not_vouch_for(tmp_path, monkeypatch):
+    # Carried from Task 6's review: a stale npz, left by an earlier run when a later run failed, must not load.
+    monkeypatch.setattr(c, "RESULTS", tmp_path)
+    np.savez(tmp_path / "matrices.npz", curv_y=np.arange(3.0))
+    sha = hashlib.sha256((tmp_path / "matrices.npz").read_bytes()).hexdigest()
+
+    def record(g2: bool, g4: bool | None, sha256: str) -> None:
+        gates = {"g2": {"passed": g2}, "g4": None if g4 is None else {"passed": g4}}
+        (tmp_path / "matrices.json").write_text(
+            json.dumps({"passed": g2 and bool(g4), **gates, "npz": {"sha256": sha256}})
+        )
+
+    record(True, True, sha)
+    assert np.array_equal(mat.load_matrices()["curv_y"], np.arange(3.0))
+    for g2, g4, sha256 in ((False, None, sha), (True, False, sha), (True, True, "0" * 64)):
+        record(g2, g4, sha256)
+        with pytest.raises(RuntimeError, match="matrices.json"):
+            mat.load_matrices()
+    record(True, True, sha)
+    np.savez(tmp_path / "matrices.npz", curv_y=np.arange(4.0))  # rewritten after its json
+    with pytest.raises(RuntimeError, match="sha256"):
+        mat.load_matrices()
+
+
+def test_fluid_training_sets_are_nested_prefixes_of_the_pool():
+    cells = list(rs.fluid_cells())
+    assert [cell[:3] for cell in cells] == list(itertools.product(range(5), range(100), range(5)))
+    test, pool = inp.fluid_split(3)
+    split3 = [(train, cell_test) for _, s, _, train, cell_test in cells if s == 3]  # 5 times × 5 sizes
+    assert len(split3) == 25
+    for train, cell_test in split3:
+        assert np.array_equal(cell_test, test) and not np.intersect1d(train, test).size
+    trains = [train for train, _ in split3]
+    assert [len(train) for train in trains[:5]] == [25, 50, 100, 200, 300]
+    for small, large in itertools.pairwise(trains[:5]):
+        assert np.array_equal(large[: len(small)], small)
+    assert np.array_equal(trains[4], pool) and np.union1d(pool, test).size == 400  # the largest is the whole pool
+    assert all(np.array_equal(a, b) for a, b in zip(trains, trains[5:] + trains[:5], strict=True))  # every time alike
+
+
+def _tiny_world(monkeypatch) -> dict[str, np.ndarray]:
+    """The three tasks made tiny, in place, and their matrices and targets as ``results/matrices.npz`` holds them.
+
+    Interpolation: sizes 6 and 8, 2 runs each, 4 test clouds. Curvature: 8 training and 4 test clouds. Fluid: 14
+    simulations at 2 times, 3 splits of 4 test simulations, sizes 5 and 9. G3's cells shrink to match. The loaders
+    give 15-point clouds in the plane, and fluid diagrams with births in [-3, -2), one essential bar in H0 and two in
+    H1; at each time 3 of them have no finite bar (Review Focus 1). The matrices are ``matrices.dataset_matrices``' of
+    the same diagrams, the fluid curves shifted by ``FLUID_SHIFT``.
+    """
+    rng = np.random.default_rng(22)
+    shrunk = {"INTERP_SIZES": (6, 8), "INTERP_RUNS": 2, "INTERP_N_TEST": 4}
+    shrunk |= {"FLUID_TIMES": (1.0, 2.5), "FLUID_SIZES": (5, 9), "FLUID_SPLITS": 3, "FLUID_N_TEST": 4}
+    for name, value in shrunk.items():
+        monkeypatch.setattr(c, name, value)
+    monkeypatch.setattr(inp, "_N_FLUID", 14)
+    monkeypatch.setattr(rs, "CURV_TRAIN", np.arange(8))
+    monkeypatch.setattr(rs, "CURV_TEST", np.arange(8, 12))
+    monkeypatch.setattr(rs, "G3_INTERP", (0, 3))
+    monkeypatch.setattr(rs, "G3_FLUID", ((0, 0, 5), (1, 2, 9)))
+    datasets = [
+        {"n_train": n, "run": run, "clouds": list(rng.normal(size=(n + 4, 15, 2))), "y": rng.uniform(0, 1, n + 4)}
+        for n in (6, 8)
+        for run in range(2)
+    ]
+    curvature = {"clouds": list(rng.normal(size=(12, 15, 2))), "y": rng.uniform(-2, 2, 12)}
+    fluid = {}
+    for t in c.FLUID_TIMES:
+        sizes = rng.integers(1, 8, (14, 2))
+        sizes[[0, 5, 11]] = 0
+        fluid[t] = [(_random_diagram(rng, n0, 1) - 3, _random_diagram(rng, n1, 2) - 3) for n0, n1 in sizes]
+    monkeypatch.setattr(inp, "interpolation_datasets", lambda: datasets)
+    monkeypatch.setattr(inp, "curvature_data", lambda: curvature)
+    monkeypatch.setattr(inp, "fluid_diagrams", lambda t: fluid[t])
+    M = {}
+    for idx, ds in enumerate(datasets):
+        M |= mat._keyed("interp", mat.dataset_matrices([inp.rips_diagram(X) for X in ds["clouds"]]), idx)
+        M[f"interp_{idx:02d}_y"] = ds["y"]
+    M |= mat._keyed("curv", mat.dataset_matrices([inp.rips_diagram(X) for X in curvature["clouds"]]))
+    M["curv_y"] = curvature["y"]
+    for ti, t in enumerate(c.FLUID_TIMES):
+        M |= mat._keyed("fluid", mat.dataset_matrices(fluid[t], shift=c.FLUID_SHIFT), ti)
+    M["fluid_y"] = rng.uniform(1, 12, 14)
+    return M
+
+
+def test_run_arm_on_a_tiny_fluid_task(monkeypatch):
+    M = _tiny_world(monkeypatch)
+    out = {arm: rs.run_arm(arm, "fluid", M) for arm in ("K", "F", "B")}
+    for arm, choice in (("K", "h"), ("F", "k"), ("B", "h")):
+        shapes = {key: a.shape for key, a in out[arm].items()}
+        assert shapes == {
+            f"fluid_pred_{arm}": (2, 3, 2, 4),
+            f"fluid_r2_{arm}": (2, 3, 2),
+            f"fluid_{choice}_{arm}": (2, 3, 2, 2) if arm == "F" else (2, 3, 2),
+        }
+        assert all(np.isfinite(a).all() for a in out[arm].values())  # 3 of the 14 curves are empty in each dimension
+    # the cell (time 1, split 2, size 9), by hand: each arm's estimator on that time's own matrices
+    y, (test, pool) = M["fluid_y"], inp.fluid_split(2)
+    train = pool[:9]
+    for arm, kind in (("K", "w2"), ("B", "l2")):
+        D = M[f"fluid_1_{kind}_0"] + M[f"fluid_1_{kind}_1"]
+        pred, h = est.nw_fit_predict(D[np.ix_(train, train)], y[train], D[np.ix_(test, train)])
+        assert np.array_equal(out[arm][f"fluid_pred_{arm}"][1, 2, 1], pred) and out[arm][f"fluid_h_{arm}"][1, 2, 1] == h
+        assert out[arm][f"fluid_r2_{arm}"][1, 2, 1] == c.r2(y[test], pred)
+    pred, k0, k1 = est.fpcr_fit_predict(M["fluid_1_gram_0"], M["fluid_1_gram_1"], y[train], train, test)
+    assert np.array_equal(out["F"]["fluid_pred_F"][1, 2, 1], pred) and tuple(out["F"]["fluid_k_F"][1, 2, 1]) == (k0, k1)
+    assert out["F"]["fluid_r2_F"][1, 2, 1] == c.r2(y[test], pred)
+
+
+def test_run_arm_on_tiny_interpolation_and_curvature_tasks(monkeypatch):
+    M = _tiny_world(monkeypatch)
+    out = {arm: rs.run_arm(arm, "interp", M) | rs.run_arm(arm, "curv", M) for arm in ("K", "F", "B")}
+    for arm, choice in (("K", "h"), ("F", "k"), ("B", "h")):
+        assert {key: a.shape for key, a in out[arm].items()} == {
+            f"interp_pred_{arm}": (4, 4),
+            f"interp_r2_{arm}": (4,),
+            f"interp_{choice}_{arm}": (4, 2) if arm == "F" else (4,),
+            f"curv_pred_{arm}": (4,),
+            f"curv_mse_{arm}": (),
+            f"curv_{choice}_{arm}": (2,) if arm == "F" else (),
+        }
+        assert all(np.isfinite(a).all() for a in out[arm].values())
+    # interpolation dataset 3 trains on its first 8 clouds and tests on its last 4, by hand with arm B
+    y = M["interp_03_y"]
+    D = M["interp_03_l2_0"] + M["interp_03_l2_1"]
+    pred, h = est.nw_fit_predict(D[:8, :8], y[:8], D[8:, :8])
+    assert np.array_equal(out["B"]["interp_pred_B"][3], pred) and out["B"]["interp_h_B"][3] == h
+    assert out["B"]["interp_r2_B"][3] == c.r2(y[8:], pred)
+    # curvature trains on CURV_TRAIN and tests on CURV_TEST, by hand with arm F; its metric is the MSE
+    y = M["curv_y"]
+    pred, k0, k1 = est.fpcr_fit_predict(M["curv_gram_0"], M["curv_gram_1"], y[:8], np.arange(8), np.arange(8, 12))
+    assert np.array_equal(out["F"]["curv_pred_F"], pred) and tuple(out["F"]["curv_k_F"]) == (k0, k1)
+    assert out["F"]["curv_mse_F"] == np.mean((y[8:] - pred) ** 2)
+    with pytest.raises(ValueError, match="arm"):
+        rs.run_arm("X", "curv", M)
+
+
+def _write_upstream_results(root: pathlib.Path, k: dict, moved: str, by: float) -> None:
+    """Upstream's three result CSVs under ``root``, with upstream's columns, 5e-10 from arm K's results ``k``.
+
+    Each reported value is K's, up or down by 5e-10 in turn; the one named by ``moved`` is K's plus ``by``:
+    ``interp_mean`` (size 30), ``interp_std`` (size 80), ``curv``, or ``fluid`` (t 7.5, split 4, n 200).
+    """
+    r2 = k["interp_r2_K"].reshape(10, 10)
+    turn = 5e-10 * np.where(np.arange(10) % 2, -1.0, 1.0)
+    mean, std = r2.mean(axis=1) + turn, r2.std(axis=1, ddof=1) - turn
+    if moved == "interp_mean":
+        mean[2] = r2[2].mean() + by
+    if moved == "interp_std":
+        std[7] = r2[7].std(ddof=1) + by
+    interp = {"n_train": c.INTERP_SIZES, "PD_kernel_R2_mean": mean, "PD_kernel_R2_std": std}
+    interp |= {"PI_kernel_R2_mean": 0.7, "PI_kernel_R2_std": 0.1}
+    mse = float(k["curv_mse_K"]) + (by if moved == "curv" else -5e-10)
+    curv = {"method": ["ml_on_ph0", "PD_kernel", "nn_deep"], "MSE": [0.35, mse, 2.8]}
+    fluid = [
+        {"t": t, "split": s, "n_train": n, "n_test": 100, "R2": k["fluid_r2_K"][ti, s, si] + 5e-10 * (-1) ** (s + si)}
+        for ti, t in enumerate(c.FLUID_TIMES)
+        for s in range(5)
+        for si, n in enumerate(c.FLUID_SIZES)
+    ]
+    if moved == "fluid":
+        fluid[(3 * 5 + 4) * 5 + 3]["R2"] = k["fluid_r2_K"][3, 4, 3] + by
+    for folder, name, table in (
+        ("interpolation", "results_interpolation.csv", interp),
+        ("curvature", "results_curvature.csv", curv),
+        ("fluid", "results_fluid_splits.csv", fluid),
+    ):
+        (root / folder).mkdir(exist_ok=True)
+        pd.DataFrame(table).to_csv(root / folder / name, index=False)
+
+
+@pytest.mark.parametrize(
+    "moved, by, cell",
+    [
+        ("interp_mean", 2e-9, {"n_train": 30, "statistic": "mean"}),
+        ("interp_std", -2e-9, {"n_train": 80, "statistic": "std"}),
+        ("curv", -2e-9, {"method": "PD_kernel"}),
+        ("fluid", 2e-9, {"t": 7.5, "split": 4, "n_train": 200}),
+    ],
+)
+def test_g1_passes_within_tolerance_and_fails_beyond(tmp_path, monkeypatch, moved, by, cell):
+    # Moves of both signs: a signed difference would pass a reported value 2e-9 above the rerun.
+    rng = np.random.default_rng(23)
+    k = {"interp_r2_K": rng.uniform(0.6, 1, 100), "curv_mse_K": np.float64(rng.uniform(0.1, 0.5))}
+    k["fluid_r2_K"] = rng.uniform(0.3, 0.9, (5, 100, 5))  # splits 5-99 have no reported value
+    monkeypatch.setattr(c, "UPSTREAM", tmp_path)
+    _write_upstream_results(tmp_path, k, moved, by / 4)  # 5e-10 away
+    record = rs.g1(k)
+    assert record["passed"] and {task: record[task]["compared"] for task in rs.TASKS} == {
+        "interp": 20,
+        "curv": 1,
+        "fluid": 125,
+    }
+    _write_upstream_results(tmp_path, k, moved, by)  # 2e-9 away
+    record = rs.g1(k)
+    task = moved.split("_")[0]
+    assert not record["passed"] and [t for t in rs.TASKS if not record[t]["passed"]] == [task]
+    (failing,) = record[task]["failing"]
+    assert failing.items() >= cell.items() and failing["abs_diff"] == pytest.approx(2e-9, rel=1e-6)
+    assert record[task]["worst_abs_diff"] == failing["abs_diff"]
+
+
+def test_g3_gates_only_the_columns_arm_f_can_use():
+    # The ruling after Task 4: FPCA.transform misses in near-null components, which FPCR never uses (K_d <= K_MAX),
+    # so G3 compares the first min(K_MAX, rank) columns, at G3_TOL of their largest score; all columns are information.
+    rng = np.random.default_rng(24)
+    T = rng.normal(size=(10, 30)) * np.geomspace(100, 1e-6, 30)
+    largest = np.abs(T[:, :20]).max()
+    S = T.copy()
+    S[:, 25] += 1e-6 * largest  # beyond K_MAX
+    row = rs._g3_measures(S, T)
+    assert row["passed"] and (row["rank"], row["compared_columns"]) == (30, 20) and row["worst_relative"] < 1e-15
+    assert row["worst_relative_all_columns"] == pytest.approx(1e-6, rel=1e-9)
+    S[:, 19] += 2e-9 * largest  # the last column FPCR can use
+    assert not rs._g3_measures(S, T)["passed"]
+    small = T[:, :5]  # rank below K_MAX: every column is compared
+    assert rs._g3_measures(small + 5e-10 * largest, small)["compared_columns"] == 5
+    assert not rs._g3_measures(small + 2e-9 * np.abs(small).max(), small)["passed"]
+    assert not rs._g3_measures(T[:, :12], T[:, :13])["passed"]  # ranks that differ fail
+
+
+def test_g3_on_tiny_tasks_passes_and_sees_a_changed_gram(monkeypatch):
+    # The curves rebuilt from the loaders must be the matrices' own: the fluid ones lie below 0 unless shifted.
+    M = _tiny_world(monkeypatch)
+    record = rs.g3(M)
+    cells = [(row["task"], row.get("dataset", row.get("time")), row["h"]) for row in record["cells"]]
+    assert cells == [(task, at, h) for task, at in (("interp", 0), ("interp", 3), ("curv", None)) for h in (0, 1)] + [
+        ("fluid", t, h) for t in (1.0, 2.5) for h in (0, 1)
+    ]
+    assert record["passed"] and all(row["rank"] > 0 for row in record["cells"])
+    assert set(record["worst_relative"]) == set(record["worst_relative_all_columns"]) == set(rs.TASKS)
+    M["fluid_1_gram_1"] = M["fluid_1_gram_1"] * (1 + 1e-6)  # its scores move by about 5e-7 of themselves
+    record = rs.g3(M)
+    failing = [(row["task"], row.get("time"), row["h"]) for row in record["cells"] if not row["passed"]]
+    assert failing == [("fluid", 2.5, 1)]
+    assert not record["passed"]
+
+
+class _Reads(dict):
+    """A dict that records every key read through ``[]``: the matrices an arm reads."""
+
+    def __init__(self, *args) -> None:
+        super().__init__(*args)
+        self.read: set[str] = set()
+
+    def __getitem__(self, key: str):
+        self.read.add(key)
+        return super().__getitem__(key)
+
+    def kinds(self) -> set[str]:
+        """The kinds of matrix read: ``w2`` (arm K), ``gram`` (F, G3) or ``l2`` (B)."""
+        return {kind for key in self.read for kind in mat.KINDS if f"_{kind}_" in key}
+
+
+def _arms_stage(monkeypatch, tmp_path, M: dict, g1_passed: bool) -> tuple[object, list, list]:
+    """``run_study.py arms`` on ``M``, G1 monkeypatched: the exit code, ``run_arm``'s calls and what G1 was given.
+
+    ``run_arm`` is the real one, spied on; G3 is the real one unless the test monkeypatches it first.
+    """
+    calls, given, run_arm = [], [], rs.run_arm
+
+    def spy(arm: str, task: str, M: dict) -> dict:
+        calls.append((arm, task))
+        return run_arm(arm, task, M)
+
+    def g1(k: dict) -> dict:
+        given.append(sorted(k))
+        return {"passed": g1_passed}
+
+    monkeypatch.setattr(c, "check_topocyte", lambda: None)
+    monkeypatch.setattr(c, "check_upstream", lambda: None)
+    monkeypatch.setattr(c, "RESULTS", tmp_path)
+    monkeypatch.setattr(mat, "load_matrices", lambda: M)
+    monkeypatch.setattr(rs, "run_arm", spy)
+    monkeypatch.setattr(rs, "g1", g1)
+    try:
+        rs.main(["arms"])
+    except SystemExit as stop:
+        return stop.code, calls, given
+    return None, calls, given
+
+
+K_RESULTS = sorted(f"{task}_{name}_K" for task in rs.TASKS for name in ("pred", "mse" if task == "curv" else "r2", "h"))
+
+
+def test_arms_stage_stops_before_f_and_b_when_g1_fails(tmp_path, monkeypatch):
+    M = _Reads(_tiny_world(monkeypatch))
+    monkeypatch.setattr(rs, "g3", lambda M: pytest.fail("G3 ran after G1 failed"))
+    monkeypatch.setattr(est, "fpcr_fit_predict", lambda *args: pytest.fail("arm F ran after G1 failed"))
+    code, calls, given = _arms_stage(monkeypatch, tmp_path, M, g1_passed=False)
+    assert code == 1 and calls == [("K", "interp"), ("K", "curv"), ("K", "fluid")] and given == [K_RESULTS]
+    # F reads the Gram matrices and B the Betti L2 distances: neither was read, so neither arm ran by any route
+    assert M.kinds() == {"w2"}
+    record = json.loads((tmp_path / "arms.json").read_text())
+    assert record["passed"] is False and record["g1"] == {"passed": False} and record["g3"] is None
+    assert set(record["seconds"]) == {"load", "K", "g1", "total"} and not (tmp_path / "arms.npz").exists()
+
+
+def test_arms_stage_stops_before_f_and_b_when_g3_fails(tmp_path, monkeypatch):
+    M = _Reads(_tiny_world(monkeypatch))
+    monkeypatch.setattr(rs, "g3", lambda M: {"passed": False})
+    monkeypatch.setattr(est, "fpcr_fit_predict", lambda *args: pytest.fail("arm F ran after G3 failed"))
+    code, calls, _ = _arms_stage(monkeypatch, tmp_path, M, g1_passed=True)
+    assert code == 1 and calls == [("K", "interp"), ("K", "curv"), ("K", "fluid")] and M.kinds() == {"w2"}
+    record = json.loads((tmp_path / "arms.json").read_text())
+    assert record["passed"] is False and record["g1"] == {"passed": True} and record["g3"] == {"passed": False}
+    assert not (tmp_path / "arms.npz").exists()
+
+
+def test_arms_stage_writes_every_arm_after_both_gates_pass(tmp_path, monkeypatch):
+    M = _tiny_world(monkeypatch)
+    code, calls, _ = _arms_stage(monkeypatch, tmp_path, M, g1_passed=True)  # G3 runs, on the tiny tasks
+    assert code is None and calls == [(arm, task) for arm in ("K", "F", "B") for task in rs.TASKS]
+    with np.load(tmp_path / "arms.npz", allow_pickle=False) as npz:
+        arrays = {key: npz[key] for key in npz.files}
+    expected = {"interp_y_test": (4, 4), "curv_y_test": (4,), "fluid_y": (14,), "fluid_test": (3, 4)}
+    for arm in ("K", "F", "B"):
+        expected |= {f"interp_pred_{arm}": (4, 4), f"interp_r2_{arm}": (4,), f"curv_pred_{arm}": (4,)}
+        expected |= {f"curv_mse_{arm}": (), f"fluid_pred_{arm}": (2, 3, 2, 4), f"fluid_r2_{arm}": (2, 3, 2)}
+    expected |= {"interp_k_F": (4, 2), "curv_k_F": (2,), "fluid_k_F": (2, 3, 2, 2)}
+    expected |= {f"{task}_h_{arm}": shape for arm in "KB" for task, shape in (("interp", (4,)), ("curv", ()))}
+    expected |= {"fluid_h_K": (2, 3, 2), "fluid_h_B": (2, 3, 2)}
+    assert {key: a.shape for key, a in arrays.items()} == expected
+    assert np.array_equal(arrays["fluid_test"], [inp.fluid_split(s)[0] for s in range(3)])
+    assert np.array_equal(arrays["interp_y_test"][3], M["interp_03_y"][8:])
+    assert np.array_equal(arrays["curv_y_test"], M["curv_y"][8:]) and np.array_equal(arrays["fluid_y"], M["fluid_y"])
+    record = json.loads((tmp_path / "arms.json").read_text())
+    assert record["passed"] and record["g1"] == {"passed": True} and record["g3"]["passed"]
+    assert record["npz"]["sha256"] == hashlib.sha256((tmp_path / "arms.npz").read_bytes()).hexdigest()
+    assert {"K", "F", "B"} <= set(record["seconds"]) and set(record["provenance"]["md5"]) == set(rs._SCRIPTS)
 
 
 @needs_upstream
