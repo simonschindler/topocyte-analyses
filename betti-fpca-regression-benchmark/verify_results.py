@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 """Check the Betti FPCR benchmark's saved results by routes other than the code that made them.
 
-Run from this folder after every stage, in the background (about 20 s; a peak RSS of 2.4 to 2.7 GB, from the
-bar-overlap sums of the largest fluid diagrams and the fPCA of a fluid cell with 300 training curves)::
+Run from this folder after every stage, in the background (about 20 s; a peak memory footprint of about 2.6 GB, from
+the bar-overlap sums of the largest fluid diagrams and the fPCA of a fluid cell with 300 training curves; the peak RSS
+that ``/usr/bin/time -l`` reports, lower under memory pressure, has varied from run to run)::
 
     caffeinate -is /usr/bin/time -l $PY verify_results.py > logs/verify.log 2>&1
 
@@ -19,6 +20,10 @@ its tolerance and its details; a summary per family; ``provenance`` (the md5 of 
 it imports, and the versions); ``sha256``, the sha256 of every other data file it read, keyed by its path in this
 folder; ``fluid_diagrams_sha256``, for each fluid time, one sha256 of its 400 diagram pickles read one after the other
 in ``fluid_sim_ids()`` order; the seeds; the seconds; and the peak RSS. It exits with status 1 if a check fails.
+
+Every comparison fails closed. A value that is not finite, on either side, counts as an infinite difference
+(``relative``, ``score_gap``), and every worst is taken by ``worst_of``, which a NaN anywhere among its values makes
+inf: Python's ``max`` keeps a NaN only when it comes first.
 
 The checks, each by its own route:
 
@@ -167,7 +172,10 @@ def record(family: str, name: str, passed: bool, worst, tolerance, measured: dic
 
 
 def relative(a: float, b: float) -> float:
-    """|a − b| / |b|: 0 where a equals b, also where both are 0; inf where only b is 0."""
+    """|a − b| / |b|, failing closed: inf where a or b is not finite, for no check here compares a value that is not
+    finite, even with itself; otherwise 0 where a equals b, also where both are 0, and inf where only b is 0."""
+    if not (math.isfinite(a) and math.isfinite(b)):
+        return math.inf
     diff = abs(a - b)
     if diff == 0:
         return 0.0
@@ -216,8 +224,25 @@ def fsum_mean_sd(values) -> tuple[float, float]:
 
 
 def score_gap(mine: float, saved: float) -> float:
-    """|mine − saved| / max(1, |saved|): ``TOL_SCORE``'s measure."""
+    """|mine − saved| / max(1, |saved|): ``TOL_SCORE``'s measure; inf, failing closed, where either is not finite."""
+    if not (math.isfinite(mine) and math.isfinite(saved)):
+        return math.inf
     return abs(mine - saved) / max(1.0, abs(saved))
+
+
+def worst_of(values) -> float:
+    """The largest of ``values``, failing closed: inf if one of them is NaN; 0 if there are none.
+
+    Python's ``max`` keeps a NaN only when it comes first (``max([1e-16, nan, 2e-16])`` is 2e-16), and a test
+    ``worst <= tolerance`` passes whatever it dropped.
+    """
+    values = [float(v) for v in values]
+    return math.inf if any(math.isnan(v) for v in values) else max(values, default=0.0)
+
+
+def nan_as_inf(value: float) -> float:
+    """A key for ``max`` and ``min`` that ranks a NaN as inf, which they would otherwise compare as neither."""
+    return math.inf if math.isnan(value) else value
 
 
 # ---------------------------------------------------------------- the data and the cells
@@ -348,7 +373,7 @@ def check_w2(data: Data) -> None:
                 {"task": task, "dataset": idx, "h": h, "p": p, "q": q, "finite_bars": finite_bars, "status": status}
                 | {"lp": lp, "saved": saved, "relative": relative(saved, lp)}
             )
-    worst = max(row["relative"] for row in rows)
+    worst = worst_of(row["relative"] for row in rows)
     record(
         "w2",
         f"{N_W2} entries per task of the interpolation and curvature W2 matrices (default_rng({W2_SEED})) against the "
@@ -360,12 +385,13 @@ def check_w2(data: Data) -> None:
         {
             "entries": {task: sum(row["task"] == task for row in rows) for task in ("interp", "curv")},
             "worst_relative": {
-                task: max(r["relative"] for r in rows if r["task"] == task) for task in ("interp", "curv")
+                task: worst_of(r["relative"] for r in rows if r["task"] == task) for task in ("interp", "curv")
             },
             "lp_not_optimal": sum(row["status"] != 0 for row in rows),
+            "lp_not_finite": sum(not math.isfinite(row["lp"]) for row in rows),
             "entries_zero": sum(row["lp"] == 0 for row in rows),
             "largest_n_plus_m": max(sum(row["finite_bars"]) for row in rows),
-            "worst_entry": max(rows, key=lambda row: row["relative"]),
+            "worst_entry": max(rows, key=lambda row: nan_as_inf(row["relative"])),
         },
     )
 
@@ -391,7 +417,9 @@ def check_gram_l2(data: Data) -> None:
             cell = {"task": task, "dataset": idx, "h": h, "p": p, "q": q}
             gram_rows.append(cell | {"overlap": ab, "saved": saved, "relative": relative(saved, ab)})
             if p != q:
-                l2 = math.sqrt(max(0.0, math.fsum([oracles.overlap(a, a), oracles.overlap(b, b), -2.0 * ab])))
+                squared = math.fsum([oracles.overlap(a, a), oracles.overlap(b, b), -2.0 * ab])
+                # rounding can leave a square a hair below 0; a NaN stays NaN, where max(0.0, nan) would give 0
+                l2 = math.nan if math.isnan(squared) else math.sqrt(max(squared, 0.0))
                 saved = float(data.M[mat.mkey(task, "l2", h, idx)][p, q])
                 l2_rows.append(cell | {"from_sums": l2, "saved": saved, "relative": relative(saved, l2)})
     for family, rows, tolerance, what in (
@@ -411,7 +439,7 @@ def check_gram_l2(data: Data) -> None:
             "sqrt(<f, f> + <g, g> - 2 <f, g>) (|saved - from sums| / from sums)",
         ),
     ):
-        worst = max(row["relative"] for row in rows)
+        worst = worst_of(row["relative"] for row in rows)
         record(
             family,
             what,
@@ -420,9 +448,9 @@ def check_gram_l2(data: Data) -> None:
             tolerance,
             {
                 "entries": {task: sum(row["task"] == task for row in rows) for task in TASKS},
-                "worst_relative": {task: max(r["relative"] for r in rows if r["task"] == task) for task in TASKS},
+                "worst_relative": {task: worst_of(r["relative"] for r in rows if r["task"] == task) for task in TASKS},
                 "entries_zero": sum(row["saved"] == 0 for row in rows),
-                "worst_entry": max(rows, key=lambda row: row["relative"]),
+                "worst_entry": max(rows, key=lambda row: nan_as_inf(row["relative"])),
             },
         )
 
@@ -508,12 +536,12 @@ def check_arrays(data: Data) -> None:
             mine = fsum_r2(arms["fluid_y"][test], arms[f"fluid_pred_{arm}"][ti, s, si])
             fluid.append(score_gap(mine, float(arms[f"fluid_r2_{arm}"][ti, s, si])))
         gaps[arm] = {
-            "interp": max(interp),
-            "curv": max(curv),
-            "fluid": max(fluid),
+            "interp": worst_of(interp),
+            "curv": worst_of(curv),
+            "fluid": worst_of(fluid),
             "values": len(interp + curv + fluid),
         }
-    worst = max(gap[task] for gap in gaps.values() for task in TASKS)
+    worst = worst_of(gap[task] for gap in gaps.values() for task in TASKS)
     record(
         "scores",
         "every saved R2 (interpolation, fluid) and MSE (curvature) of arms K, F and B against its recomputation from "
@@ -566,7 +594,7 @@ def check_g1(data: Data) -> None:
     for row in rows:
         row["abs_diff"] = abs(row["rerun"] - row["reported"])
     cells_ok = sizes_ok and len(mse) == 1 and sorted(found) == sorted(keys)
-    worst = max(rows, key=lambda row: math.inf if math.isnan(row["abs_diff"]) else row["abs_diff"])
+    worst = max(rows, key=lambda row: nan_as_inf(row["abs_diff"]))
     record(
         "g1",
         "gate G1 again from arms.npz: arm K's R2 and MSE recomputed from its predictions by math.fsum, "
@@ -578,7 +606,7 @@ def check_g1(data: Data) -> None:
         {
             "csv_cells_as_expected": cells_ok,
             "compared": {task: sum(row["task"] == task for row in rows) for task in TASKS},
-            "worst_abs_diff": {task: max(r["abs_diff"] for r in rows if r["task"] == task) for task in TASKS},
+            "worst_abs_diff": {task: worst_of(r["abs_diff"] for r in rows if r["task"] == task) for task in TASKS},
             "worst": worst,
         },
     )
@@ -604,7 +632,7 @@ def check_nw(data: Data) -> None:
                     | {"h": h, "same_h": h == saved_h, "max_abs_diff": float(np.abs(pred - saved).max())}
                     | {"tolerance": TOL_NW * scale, "measure": float(np.abs(pred - saved).max()) / scale}
                 )
-    worst = max(row["measure"] for row in rows)
+    worst = worst_of(row["measure"] for row in rows)
     record(
         "nw",
         f"{N_CELLS} cells per task and arm (curvature has one; default_rng({NW_SEED})), arms K and B: "
@@ -646,15 +674,15 @@ def score_discrepancy(S, T, G: tuple[np.ndarray, np.ndarray], train, test, k) ->
     """For information: the largest difference between the fPCA route's scores and arm F's (``betti.fpca_scores`` on
     the saved Gram matrices) in the first k_d columns of each dimension, signs aligned per column, relative to the
     largest of arm F's scores there."""
-    worst = 0.0
+    discrepancies = []
     for h in (0, 1):
         if k[h] == 0:
             continue
         S_gram, T_gram = (scores[:, : k[h]] for scores in betti.fpca_scores(G[h], train, test))
         sign = np.where(np.sum(S[h][:, : k[h]] * S_gram, axis=0) < 0, -1.0, 1.0)
-        diff = max(np.abs(S[h][:, : k[h]] - sign * S_gram).max(), np.abs(T[h][:, : k[h]] - sign * T_gram).max())
-        worst = max(worst, float(diff / max(np.abs(S_gram).max(), np.abs(T_gram).max())))
-    return worst
+        diff = worst_of([np.abs(S[h][:, : k[h]] - sign * S_gram).max(), np.abs(T[h][:, : k[h]] - sign * T_gram).max()])
+        discrepancies.append(diff / max(np.abs(S_gram).max(), np.abs(T_gram).max()))
+    return worst_of(discrepancies)
 
 
 def check_fpcr(data: Data) -> tuple[list[np.ndarray], np.ndarray, tuple[int, int], dict]:
@@ -687,7 +715,7 @@ def check_fpcr(data: Data) -> tuple[list[np.ndarray], np.ndarray, tuple[int, int
         )
         if cell == (loo_idx,) and task == "interp":
             loo = (S, y[train], k, label)
-    worst = max(row["measure"] for row in rows)
+    worst = worst_of(row["measure"] for row in rows)
     record(
         "fpcr",
         f"{N_CELLS} cells per task (curvature has one) and one interpolation cell with {LOO_N_TRAIN} training samples "
@@ -729,21 +757,23 @@ def check_loo(loo: tuple) -> None:
                 guess = LinearRegression().fit(X[keep], y[keep]).predict(X[i : i + 1])[0]
             squared.append((y[i] - guess) ** 2)
         errors.append(math.fsum(squared) / n)
-    best = min(range(len(candidates)), key=lambda j: (errors[j], j))  # the first of least error
-    runner_up = min((j for j in range(len(candidates)) if j != best), key=lambda j: (errors[j], j))
+    unscored = sum(math.isnan(e) for e in errors)  # a refit that gave NaN; the check then fails closed
+    best = min(range(len(candidates)), key=lambda j: (nan_as_inf(errors[j]), j))  # the first of least error
+    runner_up = min((j for j in range(len(candidates)) if j != best), key=lambda j: (nan_as_inf(errors[j]), j))
     chosen = candidates[best]
     record(
         "loo",
         f"in the interpolation cell with {LOO_N_TRAIN} training samples, (K0, K1) chosen again on the fPCA route's "
         "scores: each candidate's LOO error by refitting LinearRegression without each sample in turn, its eligibility "
-        "(rank, leverage) computed anew; it must equal arm F's choice (pairs differing)",
-        chosen == saved,
-        int(chosen != saved),
+        "(rank, leverage) computed anew; it must equal arm F's choice, and no error may be NaN (pairs differing, plus "
+        "NaN errors)",
+        chosen == saved and unscored == 0,
+        int(chosen != saved) + unscored,
         0,
         label
         | {"chosen": list(chosen), "saved": list(saved), "loo_mse": errors[best]}
         | {"runner_up": list(candidates[runner_up]), "runner_up_loo_mse": errors[runner_up]}
-        | {"candidates": len(candidates), "ineligible": sum(math.isinf(e) for e in errors)},
+        | {"candidates": len(candidates), "ineligible": sum(math.isinf(e) for e in errors), "errors_nan": unscored},
     )
 
 
@@ -766,7 +796,10 @@ def bootstrap(values: np.ndarray) -> tuple[float, float, float]:
 
 
 def rule(lo: float, hi: float) -> str:
-    """design.md's verdict, fixed in advance: above 0 beats, below 0 is below, otherwise level."""
+    """design.md's verdict, fixed in advance: above 0 beats, below 0 is below, otherwise level. A bound that is not
+    finite gives ``"not finite"``, which matches no verdict, where the comparisons alone would call a NaN level."""
+    if not (math.isfinite(lo) and math.isfinite(hi)):
+        return "not finite"
     return "beats" if lo > 0 else "below" if hi < 0 else "level"
 
 
@@ -825,19 +858,19 @@ def check_readouts(arms: dict[str, np.ndarray], saved: dict) -> None:
         name: ((x, y), saved["exploratory"][f"{x}_vs_{y}"])
         for name, (x, y) in (("B_vs_K", ("B", "K")), ("F_vs_B", ("F", "B")))
     }
-    compared, unequal, worst, mine_all = 0, [], 0.0, {}
+    compared, unequal, gaps, mine_all = 0, [], [], {}
     for name, ((x, y), pair) in pairs.items():
         mine, theirs = my_readouts(arms, x, y), saved_readouts(pair)
         mine_all[name] = mine
         for key, values in mine.items():
             compared += 3
-            gaps = [abs(a - b) for a, b in zip(values, theirs[key], strict=True)]
-            worst = max(worst, *gaps)
+            gaps += [abs(a - b) for a, b in zip(values, theirs[key], strict=True)]
             if list(values) != list(theirs[key]):
                 unequal.append({"pair": f"{x} vs {y}", "readout": key, "mine": values, "saved": theirs[key]})
         if pair["pair"] != [x, y]:
             unequal.append({"pair": f"{x} vs {y}", "readout": "pair", "saved": pair["pair"]})
     settings = saved["bootstrap"] == {"n_boot": c.N_BOOT, "seed": c.BOOT_SEED, "percentiles": list(PERCENTILES)}
+    worst = worst_of(gaps)
     record(
         "readouts",
         "every interval in readouts.json, the primary pair F vs K, the exploratory pairs B vs K and F vs B, and the "
@@ -932,7 +965,7 @@ def check_tables(arms: dict[str, np.ndarray], saved: dict) -> None:
     }
     k_mine["fluid_by_time"] = [{"t": t, "counts": count_k(arms["fluid_k_F"][ti])} for ti, t in enumerate(c.FLUID_TIMES)]
     k_differing = [key for key in k_mine if k_mine[key] != k_saved.get(key)]
-    worst = max(gaps)
+    worst = worst_of(gaps)
     record(
         "tables",
         "readouts.json's tables: each arm's mean and SD (ddof 1) of R2 over each interpolation size's runs and over "

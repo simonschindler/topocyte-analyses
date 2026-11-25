@@ -186,11 +186,13 @@ Claude's calls while building (2026-11-24 and 2026-11-25), each with its reason,
     - The readout by size shows it: Δ(F, K) is −15.34 at n 25, and −0.24 to −0.32 at the other four sizes, each
       interval below 0.
     - Δ(F, K) lies above 0 in 1.4% of the fluid cells, and its median is −0.25.
-- 2026-11-25 13:02: `verify_results.py`, in the background, 18.4 s wall (17.1 s inside the script), peak RSS
-  2.69 GB, exit status 0. **All 14 checks passed:** the saved results agree with routes other than the code that
-  made them. `results/verify.json` records every check, the sha256 of the data files read (both npz files, the four
-  CSVs, the five interpolation and curvature pickles, and a digest of each fluid time's 400 diagrams) and the md5 of
-  the scripts. The worst value of each family, against its tolerance:
+- 2026-11-25 13:02, and again at 13:27 after the review's fix: `verify_results.py`, in the background, 18.4 s and
+  20.5 s wall (17.1 s and 18.8 s inside the script), peak RSS 2.69 GB and 2.55 GB (peak memory footprint 2.62 GB and
+  2.63 GB), exit status 0 both times. **All 14 checks passed** both times, with the same worst values: the saved
+  results agree with routes other than the code that made them. `results/verify.json` (the 13:27 run) records every
+  check, the sha256 of the data files read (both npz files, the four CSVs, the five interpolation and curvature
+  pickles, and a digest of each fluid time's 400 diagrams) and the md5 of the scripts. The worst value of each family,
+  against its tolerance:
   - **W2,** 30 entries each of interpolation and curvature (`default_rng(5)`), from `ripser.ripser`'s diagrams and
     a HiGHS transport LP (`scipy.optimize.linprog`), not `linear_sum_assignment`: 1.6e-16 relative (1e-9).
   - **Gram,** 30 entries per task (25 off the diagonal, 5 on it; `default_rng(7)`), by `oracles.overlap`, the fluid
@@ -224,5 +226,17 @@ Claude's calls while building (2026-11-24 and 2026-11-25), each with its reason,
     check. They include a W2, Gram, L2 or prediction scaled by 1e-11 to 1e-7; one ulp in a readout or a reported
     value; a bandwidth; a chosen (K0, K1); a misplaced verdict; reversed test sets; another pin; and another npz
     sha256.
-  - The peak RSS comes from the bar-overlap sums of the largest fluid diagrams (up to 5,528 bars in one dimension:
-    1.6 GB) and from the fPCA of the fluid cell with 300 training curves.
+  - **The review's fix:** every comparison now fails closed on a value that is not finite.
+    - `relative` and `score_gap` give inf where either side is not finite; they gave NaN.
+    - Every worst is taken by `worst_of`, which a NaN anywhere among its values makes inf. Python's `max` keeps a
+      NaN only when it comes first, so a NaN in any later place had passed: `max([1e-16, nan, 2e-16])` is 2e-16.
+    - The L2 from the sums keeps a NaN, where `max(0.0, nan)` gave 0. The LOO fails on a NaN refit error, and the
+      verdict rule gives no verdict for a bound that is not finite.
+    - Checked in memory, against the committed 368d68f (a scratch script, not kept): a NaN after the first value, or
+      an inf reference, passed before the fix and fails after it. That held in each of w2 (a saved entry; an LP that
+      returns inf), gram (a saved entry; the oracle), l2, scores (NaN, −inf), nw (a saved prediction; the oracle),
+      fpcr (a saved prediction; the OLS) and tables (a NaN SD, an inf mean), and for a NaN refit error in the LOO.
+    - No value in the runs was ever non-finite, so the checks' values are unchanged.
+  - The memory comes from the bar-overlap sums of the largest fluid diagrams (up to 5,528 bars in one dimension:
+    1.6 GB) and from the fPCA of the fluid cell with 300 training curves. The peak memory footprint was 2.62 to
+    2.63 GB in every run. The peak RSS varied from 1.87 to 2.69 GB, lower under memory pressure.
