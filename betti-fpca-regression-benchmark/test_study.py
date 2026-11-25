@@ -819,9 +819,36 @@ def test_g3_gates_only_the_columns_arm_f_can_use():
     S[:, 19] += 2e-9 * largest  # the last column FPCR can use
     assert not rs._g3_measures(S, T)["passed"]
     small = T[:, :5]  # rank below K_MAX: every column is compared
-    assert rs._g3_measures(small + 5e-10 * largest, small)["compared_columns"] == 5
+    row = rs._g3_measures(small + 5e-10 * largest, small)
+    assert row["passed"] and row["compared_columns"] == 5
     assert not rs._g3_measures(small + 2e-9 * np.abs(small).max(), small)["passed"]
     assert not rs._g3_measures(T[:, :12], T[:, :13])["passed"]  # ranks that differ fail
+
+
+def test_g3_fails_closed_on_a_score_that_is_not_finite():
+    # A NaN must not pass as a difference of 0, in a compared column or beyond K_MAX, in either score matrix.
+    T = np.random.default_rng(25).normal(size=(6, 25))
+    for where in ((0, 3), (5, 22)):
+        for bad in (np.nan, np.inf):
+            broken = T.copy()
+            broken[where] = bad
+            for row in (rs._g3_measures(T, broken), rs._g3_measures(broken, T)):
+                assert not row["passed"] and row["worst_relative"] == row["worst_relative_all_columns"] == math.inf
+    assert rs._relative_worst(T, np.full_like(T, np.nan)) == math.inf
+
+
+def test_g1_fails_on_a_nan_and_names_it_the_worst(tmp_path, monkeypatch):
+    rng = np.random.default_rng(23)
+    k = {"interp_r2_K": rng.uniform(0.6, 1, 100), "curv_mse_K": np.float64(rng.uniform(0.1, 0.5))}
+    k["fluid_r2_K"] = rng.uniform(0.3, 0.9, (5, 100, 5))
+    monkeypatch.setattr(c, "UPSTREAM", tmp_path)
+    _write_upstream_results(tmp_path, k, "none", 0.0)  # every value 5e-10 away
+    k["fluid_r2_K"][0, 1, 2] = np.nan  # the 8th fluid value compared: max() over NaN comparisons would skip it
+    record = rs.g1(k)
+    assert not record["passed"] and [task for task in rs.TASKS if not record[task]["passed"]] == ["fluid"]
+    (failing,) = record["fluid"]["failing"]
+    assert (failing["t"], failing["split"], failing["n_train"]) == (1.0, 1, 100)
+    assert record["fluid"]["worst"] is failing and math.isnan(record["fluid"]["worst_abs_diff"])
 
 
 def test_g3_on_tiny_tasks_passes_and_sees_a_changed_gram(monkeypatch):
@@ -892,6 +919,7 @@ def test_arms_stage_stops_before_f_and_b_when_g1_fails(tmp_path, monkeypatch):
     M = _Reads(_tiny_world(monkeypatch))
     monkeypatch.setattr(rs, "g3", lambda M: pytest.fail("G3 ran after G1 failed"))
     monkeypatch.setattr(est, "fpcr_fit_predict", lambda *args: pytest.fail("arm F ran after G1 failed"))
+    np.savez(tmp_path / "arms.npz", stale=np.zeros(1))  # an earlier run's, which a failed rerun must not leave
     code, calls, given = _arms_stage(monkeypatch, tmp_path, M, g1_passed=False)
     assert code == 1 and calls == [("K", "interp"), ("K", "curv"), ("K", "fluid")] and given == [K_RESULTS]
     # F reads the Gram matrices and B the Betti L2 distances: neither was read, so neither arm ran by any route
@@ -905,6 +933,7 @@ def test_arms_stage_stops_before_f_and_b_when_g3_fails(tmp_path, monkeypatch):
     M = _Reads(_tiny_world(monkeypatch))
     monkeypatch.setattr(rs, "g3", lambda M: {"passed": False})
     monkeypatch.setattr(est, "fpcr_fit_predict", lambda *args: pytest.fail("arm F ran after G3 failed"))
+    np.savez(tmp_path / "arms.npz", stale=np.zeros(1))  # an earlier run's, which a failed rerun must not leave
     code, calls, _ = _arms_stage(monkeypatch, tmp_path, M, g1_passed=True)
     assert code == 1 and calls == [("K", "interp"), ("K", "curv"), ("K", "fluid")] and M.kinds() == {"w2"}
     record = json.loads((tmp_path / "arms.json").read_text())

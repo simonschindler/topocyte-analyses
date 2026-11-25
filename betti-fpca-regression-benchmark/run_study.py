@@ -11,7 +11,8 @@ It reads ``results/matrices.npz`` through ``matrices.load_matrices``, which refu
 1. arm K on every task, then gate G1: K must reproduce upstream's published results to ``G1_TOL``. If G1 fails,
    the stage writes ``results/arms.json`` and exits with status 1; arms F and B never run;
 2. gate G3: the test scores that arm F projects from the Gram matrices (``betti.fpca_scores``) against topocyte's
-   ``FPCA.fit(...).transform(...)`` of curves rebuilt from ``inputs``. On failure, the same;
+   ``FPCA.fit(...).transform(...)`` of curves rebuilt from ``inputs``, on the first min(``K_MAX``, rank) columns
+   (ruling 8 in ``progress.md``). On failure, the same;
 3. arm F, then arm B, on every task; then ``results/arms.npz`` and ``results/arms.json``.
 
 The arms (``design.md``, "Pipeline"):
@@ -180,12 +181,13 @@ def _same_cells(name: str, found: list, expected: list) -> None:
 def _g1_task(rows: list[dict], cells: dict) -> dict:
     """One task's part of G1, from its compared values, each a dict with ``rerun`` and ``reported``.
 
-    A value fails if its |difference| is not at most ``G1_TOL``, a NaN included.
+    A value fails if its |difference| is not at most ``G1_TOL``, a NaN included, and a NaN difference counts as the
+    worst.
     """
     for row in rows:
         row["abs_diff"] = abs(row["rerun"] - row["reported"])
     failing = [row for row in rows if not row["abs_diff"] <= c.G1_TOL]
-    worst = max(rows, key=lambda row: row["abs_diff"])
+    worst = max(rows, key=lambda row: math.inf if math.isnan(row["abs_diff"]) else row["abs_diff"])
     return {
         "passed": not failing,
         "cells": cells,
@@ -254,7 +256,10 @@ def g1(k: dict[str, np.ndarray]) -> dict:
 
 
 def _relative_worst(S: np.ndarray, T: np.ndarray) -> float:
-    """max |S − T| / max |T|: 0 if both are 0 or empty, inf if only the difference is not 0."""
+    """max |S − T| / max |T|, failing closed: inf if a value of S or T is not finite, or if only the difference is
+    not 0; 0 if both are 0 or empty."""
+    if not (np.isfinite(S).all() and np.isfinite(T).all()):
+        return math.inf
     largest, diff = float(np.abs(T).max(initial=0.0)), float(np.abs(S - T).max(initial=0.0))
     return diff / largest if largest > 0 else (math.inf if diff > 0 else 0.0)
 
@@ -262,14 +267,16 @@ def _relative_worst(S: np.ndarray, T: np.ndarray) -> float:
 def _g3_measures(S: np.ndarray, T: np.ndarray) -> dict:
     """G3 in one cell and dimension: the projected test scores ``S`` against ``FPCA.transform``'s ``T``.
 
-    The ruling after Task 4 (put to Simon): only the first min(``K_MAX``, rank) columns, the only ones arm F can use,
-    are compared, and they pass if their worst |difference| is at most ``G3_TOL`` times their largest |score| in
-    ``T``. ``transform`` misses in the near-null components, where it does not give the training curves their own
-    fitted scores back either; the worst over all columns is kept for information. Ranks that differ fail.
+    Ruling 8 in ``progress.md`` (the controller's, confirmed by Simon on 2026-11-25): only the first
+    min(``K_MAX``, rank) columns, the only ones arm F can use, are compared, and they pass if their worst |difference|
+    is at most ``G3_TOL`` times their largest |score| in ``T``. ``transform`` misses in the near-null components, where
+    it does not give the training curves their own fitted scores back either; the worst over all columns is kept for
+    information. Ruling 11, an implementation check: the cell fails, its worsts inf, if the ranks differ or a score in
+    ``S`` or ``T`` is not finite.
     """
     rank, k = S.shape[1], min(c.K_MAX, S.shape[1])
     row = {"rank": rank, "rank_transform": T.shape[1], "compared_columns": k}
-    if T.shape != S.shape:
+    if T.shape != S.shape or not (np.isfinite(S).all() and np.isfinite(T).all()):
         return row | {"passed": False, "worst_relative": math.inf, "worst_relative_all_columns": math.inf}
     worst = _relative_worst(S[:, :k], T[:, :k])
     return row | {
@@ -319,8 +326,10 @@ def g3(M: dict[str, np.ndarray]) -> dict:
     return {
         "passed": all(row["passed"] for row in rows),
         "rule": "per cell and dimension, the test scores' first min(K_MAX, rank) columns, the only ones arm F can "
-        "use: max |fpca_scores - FPCA.transform| <= tolerance * max |FPCA.transform| over those columns, and equal "
-        "ranks (the controller's ruling after Task 4, put to Simon); worst_relative_all_columns is information only",
+        "use: max |fpca_scores - FPCA.transform| <= tolerance * max |FPCA.transform| over those columns (ruling 8 in "
+        "progress.md: the controller's, confirmed by Simon on 2026-11-25); as an implementation check (ruling 11), a "
+        "cell whose ranks differ or whose scores are not all finite fails; worst_relative_all_columns is information "
+        "only",
         "tolerance": c.G3_TOL,
         "k_max": c.K_MAX,
         "worst_relative": {task: max(row["worst_relative"] for row in rows if row["task"] == task) for task in TASKS},
@@ -351,7 +360,11 @@ def _write(record: dict, started: float) -> None:
 
 
 def _arms(provenance: dict) -> None:
-    """The stage ``arms``: K, G1, G3, F, B, in that order (module docstring); exits with status 1 if a gate fails."""
+    """The stage ``arms``: K, G1, G3, F, B, in that order (module docstring); exits with status 1 if a gate fails.
+
+    It first removes an earlier run's ``results/arms.npz``, so that a failed run leaves none beside its failed json.
+    """
+    (c.RESULTS / "arms.npz").unlink(missing_ok=True)
     started = time.perf_counter()
     M = mat.load_matrices()
     seconds = {"load": round(time.perf_counter() - started, 1)}

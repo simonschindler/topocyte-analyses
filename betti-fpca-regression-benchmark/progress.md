@@ -40,6 +40,18 @@ Claude's calls while building (2026-11-24), each with its reason. None changes a
    below 0, which is what G4 is for. Measured: at most 4.97e-15 of the largest entry, in the failed run and the
    passing one alike; entry by entry up to 2.98e-8, on entries of 3e-7 to 6e-5, where both Grams lie within
    3.4e-14 of the exact full-line values (rationals). `matrices.json` keeps the entry-wise worst for information.
+8. **G3 compares the first min(K_MAX, rank) score columns per dimension,** the only ones arm F can use, relative to
+   the largest score over them. Reason: topocyte's `FPCA.transform` is inaccurate in near-null components, by up to
+   8.5e-6 of the largest score, and misses its own fitted scores by the same amounts, while the Gram projection
+   returns the fitted scores to 5e-13. Over the compared columns the 7 G3 cells agreed to 4.5e-11 in Task 4's probe.
+   `arms.json` keeps the worst over all columns for information. Ruled by the controller, confirmed by Simon on
+   2026-11-25 ("Keep both").
+9. **Ruling 7 (G4) confirmed by Simon** on 2026-11-25, with ruling 8 ("Keep both").
+10. **The arms stage refuses `matrices.npz`** unless `matrices.json` records G2 and G4 passed and the npz's sha256
+    equals the one it records (`matrices.load_matrices`), so that an npz left by an earlier run is never used.
+11. **G3 also requires equal ranks and finite scores:** a cell whose ranks differ, or whose scores are not all
+    finite, fails, its worsts inf. These are implementation checks, not rulings of Simon's. Unequal ranks cannot
+    happen with bit-equal Gram matrices.
 
 ## Results
 
