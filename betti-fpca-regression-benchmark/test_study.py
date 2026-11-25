@@ -12,6 +12,7 @@ its pickles only through ``safe_pickle.load_pickle``, and are skipped until
 
 from __future__ import annotations
 
+import csv
 import hashlib
 import itertools
 import json
@@ -1010,6 +1011,13 @@ def test_interval_units_is_reproducible():
     assert ro.interval_units(np.full(8, 0.25)) == (0.25, 0.25, 0.25)  # units alike: every resample is alike
 
 
+@pytest.mark.parametrize("values", [np.zeros((100, 5)), np.zeros((5, 100, 5)), np.float64(0.5)])
+def test_interval_units_takes_one_value_per_unit(values):
+    # More dimensions would resample the first axis and pool the percentiles of the other axes' means, silently.
+    with pytest.raises(ValueError, match="1-D"):
+        ro.interval_units(values)
+
+
 def _synthetic_arms(rng: np.random.Generator) -> dict[str, np.ndarray]:
     """The arrays of ``arms.npz`` that the readouts read, at their real shapes, with random values."""
     target = rng.uniform(-2, 2, 50)
@@ -1041,7 +1049,8 @@ _TURKES = (
 def reported_tables(tmp_path, monkeypatch) -> dict[str, pd.DataFrame]:
     """Upstream's three reported tables, with upstream's columns and random values, in place of upstream's.
 
-    ``c.UPSTREAM`` is ``tmp_path``; the tables are returned by their paths under it.
+    ``c.UPSTREAM`` is ``tmp_path``; the tables are returned by their paths under it. PD_kernel's MSE is upstream's,
+    0.22575596585327898, which pandas' default float parser reads as 0.2257559658532789.
     """
     rng = np.random.default_rng(42)
     interp = {"n_train": c.INTERP_SIZES}
@@ -1058,7 +1067,7 @@ def reported_tables(tmp_path, monkeypatch) -> dict[str, pd.DataFrame]:
     tables = {
         "interpolation/results_interpolation.csv": pd.DataFrame(interp),
         "curvature/results_curvature.csv": pd.DataFrame(
-            {"method": [*_TURKES, "PD_kernel"], "MSE": rng.uniform(0.2, 3, 11)}
+            {"method": [*_TURKES, "PD_kernel"], "MSE": [*rng.uniform(0.2, 3, 10), 0.22575596585327898]}
         ),
         "fluid/results_fluid.csv": pd.DataFrame(fluid),
     }
@@ -1102,8 +1111,8 @@ def test_every_pair_is_signed_so_positive_favours_its_first_arm(reported_tables)
     assert [exploratory["F_vs_B"][task]["mean"] for task in rs.TASKS] == pytest.approx([0.075, 4 * se - se, 0.075])
     for pair in exploratory.values():  # exploratory: the same readouts, no verdict
         assert all(pair[task]["lo"] > 0 and "verdict" not in pair[task] for task in rs.TASKS)
-    descriptive = primary["interp"]["by_size"] + primary["fluid"]["by_time"] + [primary["fluid"]["paper_splits"]]
-    assert all("verdict" not in readout for readout in descriptive)
+    descriptive = primary["interp"]["by_size"] + primary["fluid"]["by_time"] + primary["fluid"]["by_size"]
+    assert all("verdict" not in readout for readout in [*descriptive, primary["fluid"]["paper_splits"]])
 
 
 def test_readouts_resample_the_units_of_the_rule(reported_tables):
@@ -1133,6 +1142,54 @@ def test_readouts_resample_the_units_of_the_rule(reported_tables):
     arms["fluid_r2_F"] = arms["fluid_r2_K"] + b[:, None]
     fluid = ro.readouts(arms)["primary"]["fluid"]
     assert [fluid["mean"], fluid["lo"], fluid["hi"]] == pytest.approx(ro.interval_units(b), abs=1e-12)
+
+
+def test_fluid_by_size_resamples_the_splits_by_their_mean_over_the_times(reported_tables):
+    # Δ = s[size] + t[time], with t summing to 0: at each size, every split's mean over the times is s[size], so a
+    # resample of the splits is the point s[size]; one of the times or of the cells would not be a point, and one that
+    # mixed sizes would not sit at s[size]. Dyadic values keep every sum exact.
+    arms = _synthetic_arms(np.random.default_rng(53))
+    size_effect, time_effect = np.array([0.5, 0.25, -0.125, 1.0, 0.0]), np.array([0.5, -0.5, 0.25, -0.25, 0.0])
+    arms["fluid_r2_K"] = np.zeros((5, 100, 5))
+    arms["fluid_r2_F"] = np.broadcast_to(time_effect[:, None, None] + size_effect, (5, 100, 5)).copy()
+    assert ro.readouts(arms)["primary"]["fluid"]["by_size"] == [
+        {"n_train": 25, "mean": 0.5, "lo": 0.5, "hi": 0.5},
+        {"n_train": 50, "mean": 0.25, "lo": 0.25, "hi": 0.25},
+        {"n_train": 100, "mean": -0.125, "lo": -0.125, "hi": -0.125},
+        {"n_train": 200, "mean": 1.0, "lo": 1.0, "hi": 1.0},
+        {"n_train": 300, "mean": 0.0, "lo": 0.0, "hi": 0.0},
+    ]
+    # random Δ: every pair has the readout, each size's mean Δ inside a proper interval, and no verdict
+    arms = _synthetic_arms(np.random.default_rng(54))
+    out = ro.readouts(arms)
+    for x, y in (("F", "K"), ("B", "K"), ("F", "B")):
+        pair = out["primary"] if (x, y) == ("F", "K") else out["exploratory"][f"{x}_vs_{y}"]
+        delta = arms[f"fluid_r2_{x}"] - arms[f"fluid_r2_{y}"]
+        assert [readout["n_train"] for readout in pair["fluid"]["by_size"]] == list(c.FLUID_SIZES)
+        for si, readout in enumerate(pair["fluid"]["by_size"]):
+            assert readout["mean"] == pytest.approx(delta[:, :, si].mean()) and "verdict" not in readout
+            assert readout["lo"] < readout["mean"] < readout["hi"]
+
+
+def test_readouts_read_the_reported_values_exactly(tmp_path, reported_tables):
+    # pandas' default float parser misreads some 17-digit values in their last bits (52 of upstream's 101 reported
+    # values): every reported value must be the float of its CSV text, as Python's float() reads it.
+    tables = ro.readouts(_synthetic_arms(np.random.default_rng(55)))["tables"]
+    rows = {}
+    for name in reported_tables:
+        with open(tmp_path / name, newline="") as file:
+            rows[name] = list(csv.DictReader(file))
+    methods, stats = ("PD_kernel", "PI_kernel"), ("mean", "std")
+    assert [row["reported"] for row in tables["interp"]] == [
+        {method: {stat: float(text[f"{method}_R2_{stat}"]) for stat in stats} for method in methods}
+        for text in rows["interpolation/results_interpolation.csv"]
+    ]
+    assert tables["curv"]["reported"] == {
+        text["method"]: float(text["MSE"]) for text in rows["curvature/results_curvature.csv"]
+    }
+    assert [row["reported"] for row in tables["fluid"]] == [
+        {"mean": float(text["R2_mean"]), "std": float(text["R2_std"])} for text in rows["fluid/results_fluid.csv"]
+    ]
 
 
 def test_readouts_set_the_arms_beside_the_reported_tables(reported_tables):
@@ -1214,7 +1271,8 @@ def test_load_arms_refuses_an_npz_that_arms_json_does_not_vouch_for(tmp_path, mo
         (tmp_path / "arms.json").write_text(json.dumps({"passed": g1 and bool(g3), **gates, "npz": npz}))
 
     record(True, True, sha)
-    assert np.array_equal(rs.load_arms()["curv_y_test"], np.arange(3.0))
+    arrays, loaded = rs.load_arms()
+    assert np.array_equal(arrays["curv_y_test"], np.arange(3.0)) and loaded == sha  # the sha256 of the loaded bytes
     for g1, g3, sha256 in ((False, None, None), (False, None, sha), (True, False, sha), (True, True, "0" * 64)):
         record(g1, g3, sha256)
         with pytest.raises(RuntimeError, match="arms.json"):
@@ -1230,13 +1288,16 @@ def _readouts_stage_on(tmp_path, monkeypatch, arms: dict, g3_passed: bool = True
     that fills as it runs, and the npz's sha256.
 
     ``results/`` is ``tmp_path``, with ``arms.npz`` holding ``arms`` and an ``arms.json`` that records G1 passed, G3
-    as ``g3_passed``, and the npz's sha256.
+    as ``g3_passed``, and the npz's sha256. Once ``load_arms`` has loaded, the spy overwrites ``arms.json`` as a later
+    run would, so that only the sha256 of the bytes loaded can reach ``readouts.json``.
     """
     calls, load_arms = [], rs.load_arms
 
-    def spy() -> dict[str, np.ndarray]:
+    def spy() -> tuple[dict[str, np.ndarray], str]:
         calls.append("load_arms")
-        return load_arms()
+        loaded = load_arms()
+        (tmp_path / "arms.json").write_text(json.dumps({"npz": {"sha256": "f" * 64}, "date": "later"}))
+        return loaded
 
     monkeypatch.setattr(c, "check_topocyte", lambda: calls.append("check_topocyte"))
     monkeypatch.setattr(c, "check_upstream", lambda: calls.append("check_upstream"))
@@ -1261,7 +1322,7 @@ def test_readouts_stage_checks_first_then_writes_readouts_json(tmp_path, monkeyp
     record = json.loads((tmp_path / "readouts.json").read_text())
     expected = ro.readouts(arms)  # the stage writes readouts.readouts of the arms it loaded
     assert {key: record[key] for key in expected} == expected
-    assert record["arms"] == {"sha256": sha, "date": "2026-11-25 11:41:06"}
+    assert record["arms_npz_sha256"] == sha and "arms" not in record
     assert set(record["provenance"]["md5"]) == {"run_study.py", "common.py", "readouts.py"}
 
 

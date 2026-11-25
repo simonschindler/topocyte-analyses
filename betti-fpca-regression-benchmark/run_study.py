@@ -42,8 +42,8 @@ Stage ``readouts``, from this folder, in seconds::
 
 It reads ``results/arms.npz`` through ``load_arms``, which refuses an npz that ``results/arms.json`` does not vouch
 for, and writes ``results/readouts.json``: ``readouts.readouts`` of the arms (the verdicts of ``design.md``'s
-decision rule, the exploratory and descriptive readouts, arm F's chosen (K0, K1) and the paper's tables), the npz's
-sha256, the seconds and ``provenance``. It prints every pair's readouts.
+decision rule, the exploratory and descriptive readouts, arm F's chosen (K0, K1) and the paper's tables), the sha256
+of the npz it loaded, the seconds and ``provenance``. It prints every pair's readouts.
 """
 
 from __future__ import annotations
@@ -416,12 +416,12 @@ def _arms(provenance: dict) -> None:
     print(f"wrote results/arms.json and results/arms.npz in {record['seconds']['total']} s: passed", flush=True)
 
 
-def load_arms() -> dict[str, np.ndarray]:
-    """Every array of ``results/arms.npz`` by its key, if ``results/arms.json`` vouches for the file.
+def load_arms() -> tuple[dict[str, np.ndarray], str]:
+    """Every array of ``results/arms.npz`` by its key, if ``results/arms.json`` vouches for the file, and its sha256.
 
     As ``matrices.load_matrices``: ``RuntimeError`` unless the json records gates G1 and G3 passed and the npz's
     sha256 equals the one it records, so that an npz that a failed or interrupted run left is refused. The arrays are
-    loaded, with ``allow_pickle=False``, from the bytes that were hashed.
+    loaded, with ``allow_pickle=False``, from the bytes that were hashed, and the sha256 returned is theirs.
     """
     data = (c.RESULTS / "arms.npz").read_bytes()
     record = json.loads((c.RESULTS / "arms.json").read_text())
@@ -433,7 +433,7 @@ def load_arms() -> dict[str, np.ndarray]:
             f"{actual[:12]}… against the recorded {str(recorded)[:12]}…; rerun run_study.py arms"
         )
     with np.load(io.BytesIO(data), allow_pickle=False) as npz:
-        return {key: npz[key] for key in npz.files}
+        return {key: npz[key] for key in npz.files}, actual
 
 
 def _readouts(provenance: dict) -> None:
@@ -441,14 +441,13 @@ def _readouts(provenance: dict) -> None:
     ``results/readouts.json``, every pair's readouts printed. A value that is not finite raises before the json is
     written."""
     started = time.perf_counter()
-    arms = load_arms()
-    vouching = json.loads((c.RESULTS / "arms.json").read_text())
+    arms, sha256 = load_arms()
     record = {
         "description": "the readouts of design.md's decision rule, fixed in advance, on the arms' predictions: the "
         "verdicts of arm F against arm K per task, the exploratory pairs B against K and F against B, the descriptive "
         "readouts, arm F's chosen (K0, K1), and the paper's tables with the reported values beside arms K, F and B",
         **ro.readouts(arms),
-        "arms": {"sha256": vouching["npz"]["sha256"], "date": vouching.get("date")},
+        "arms_npz_sha256": sha256,  # of the bytes loaded
         "seconds": round(time.perf_counter() - started, 1),
         "date": time.strftime("%Y-%m-%d %H:%M:%S"),
         "provenance": provenance,

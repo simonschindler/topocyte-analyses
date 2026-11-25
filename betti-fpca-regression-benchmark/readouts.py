@@ -57,6 +57,8 @@ DELTA = {
     "interp_by_size": "a size's mean Delta over its 10 runs; the interval resamples those runs",
     "fluid_by_time": "a time's mean Delta over its 100 splits x 5 sizes; the interval resamples the 100 splits, each "
     "by its mean Delta over the 5 sizes",
+    "fluid_by_size": "a training size's mean Delta over its 5 times x 100 splits; the interval resamples the 100 "
+    "splits, each by its mean Delta over the 5 times",
     "fluid_paper_splits": "the fluid readout on the paper's splits 0-4 alone; the interval resamples those 5 splits",
 }
 
@@ -80,9 +82,13 @@ def interval_units(values: np.ndarray) -> tuple[float, float, float]:
 
     Every one of ``N_BOOT`` draws takes ``len(values)`` units with replacement and averages them; the interval holds
     the draws' 2.5 and 97.5 percentiles. The units: a test cloud's se(Y) − se(X) (curvature) and a split's mean Δ
-    over its times and sizes (fluid); for the descriptive readouts, one size's runs (interpolation), one time's
-    splits, each by its mean Δ over the sizes, and the paper's splits 0-4 (fluid).
+    over its times and sizes (fluid); for the descriptive readouts, one size's runs (interpolation), and for fluid one
+    time's splits, each by its mean Δ over the sizes, one size's splits, each by its mean Δ over the times, and the
+    paper's splits 0-4. ``ValueError`` unless ``values`` is 1-D: more axes would be resampled along the first and
+    pooled, silently.
     """
+    if np.ndim(values) != 1:
+        raise ValueError(f"interval_units takes one value per unit, a 1-D array, not one of shape {np.shape(values)}")
     n = len(values)
     idx = np.random.default_rng(c.BOOT_SEED).integers(0, n, size=(c.N_BOOT, n))
     draws = values[idx].mean(1)
@@ -139,18 +145,24 @@ def pair_readout(arms: dict[str, np.ndarray], x: str, y: str, judged: bool = Fal
     - interpolation, ``by_size``: each size's mean Δ, its interval resampling that size's 10 runs;
     - fluid, ``by_time``: each time's mean Δ, its interval resampling the 100 splits, each by its mean Δ over the 5
       sizes;
+    - fluid, ``by_size``: each training size's mean Δ, its interval resampling the 100 splits, each by its mean Δ over
+      the 5 times;
     - fluid, ``paper_splits``: the readout on the paper's splits 0-4 alone, its interval resampling those 5 splits.
     """
     interp, curv, fluid = (delta(arms, task, x, y) for task in TASKS)
     splits = fluid.mean(axis=(0, 2))  # each split's mean Δ over the times and sizes
     by_size = [{"n_train": n} | _readout(interval_units(interp[si])) for si, n in enumerate(c.INTERP_SIZES)]
     by_time = [{"t": t} | _readout(interval_units(fluid[ti].mean(axis=1))) for ti, t in enumerate(c.FLUID_TIMES)]
+    fluid_by_size = [
+        {"n_train": n} | _readout(interval_units(fluid[:, :, si].mean(axis=0))) for si, n in enumerate(c.FLUID_SIZES)
+    ]
     paper = {"splits": list(range(c.PAPER_SPLITS))} | _readout(interval_units(splits[: c.PAPER_SPLITS]))
     return {
         "pair": [x, y],
         "interp": _readout(interval_interp(interp), judged) | {"by_size": by_size},
         "curv": _readout(interval_units(curv), judged),
-        "fluid": _readout(interval_units(splits), judged) | {"by_time": by_time, "paper_splits": paper},
+        "fluid": _readout(interval_units(splits), judged)
+        | {"by_time": by_time, "by_size": fluid_by_size, "paper_splits": paper},
     }
 
 
@@ -181,6 +193,15 @@ def _same_cells(name: str, found: list, expected: list) -> None:
         raise ValueError(f"upstream's {name} holds {len(found)} cells, not exactly the {len(expected)} of the table")
 
 
+def _reported(folder: str, name: str) -> pd.DataFrame:
+    """Upstream's reported table ``folder/name``, read as a CSV with pandas and nothing else.
+
+    ``float_precision="round_trip"`` reads every value as Python's ``float`` reads its text: pandas' default parser
+    misreads some 17-digit values in their last bits, 52 of upstream's 101 reported values.
+    """
+    return pd.read_csv(c.UPSTREAM / folder / name, float_precision="round_trip")
+
+
 def tables(arms: dict[str, np.ndarray]) -> dict:
     """The paper's three tables in its format: upstream's reported values beside arms K, F and B.
 
@@ -193,10 +214,10 @@ def tables(arms: dict[str, np.ndarray]) -> dict:
       splits.
 
     Every SD has ddof 1, as upstream's: its fluid ``R2_std`` is the ddof-1 SD of its splits' R². The CSVs are read
-    with pandas, nothing else. ``ValueError`` if a CSV does not hold exactly the table's cells, or if the curvature
+    by ``_reported``, exactly. ``ValueError`` if a CSV does not hold exactly the table's cells, or if the curvature
     table names a method twice or lacks ``PD_kernel``.
     """
-    table = pd.read_csv(c.UPSTREAM / "interpolation" / "results_interpolation.csv")
+    table = _reported("interpolation", "results_interpolation.csv")
     _same_cells("results_interpolation.csv", table["n_train"].tolist(), list(c.INTERP_SIZES))
     reported = table.set_index("n_train")
     r2 = {arm: arms[f"interp_r2_{arm}"].reshape(len(c.INTERP_SIZES), c.INTERP_RUNS) for arm in ARMS}
@@ -211,7 +232,7 @@ def tables(arms: dict[str, np.ndarray]) -> dict:
         | {arm: _mean_sd(r2[arm][si]) for arm in ARMS}
         for si, n in enumerate(c.INTERP_SIZES)
     ]
-    table = pd.read_csv(c.UPSTREAM / "curvature" / "results_curvature.csv")
+    table = _reported("curvature", "results_curvature.csv")
     methods = [str(method) for method in table["method"]]
     if len(set(methods)) != len(methods) or "PD_kernel" not in methods:
         raise ValueError(
@@ -219,7 +240,7 @@ def tables(arms: dict[str, np.ndarray]) -> dict:
         )
     curv = {"reported": dict(zip(methods, table["MSE"].astype(float).tolist(), strict=True))}
     curv |= {arm: float(arms[f"curv_mse_{arm}"]) for arm in ARMS}
-    table = pd.read_csv(c.UPSTREAM / "fluid" / "results_fluid.csv")
+    table = _reported("fluid", "results_fluid.csv")
     found = [(float(t), int(n)) for t, n in table[["t", "n_train"]].itertuples(index=False)]
     _same_cells("results_fluid.csv", found, [(t, n) for t in c.FLUID_TIMES for n in c.FLUID_SIZES])
     means, stds = table["R2_mean"].astype(float).tolist(), table["R2_std"].astype(float).tolist()

@@ -53,6 +53,17 @@ Claude's calls while building (2026-11-24 and 2026-11-25), each with its reason,
 11. **G3 also requires equal ranks and finite scores:** a cell whose ranks differ, or whose scores are not all
     finite, fails, its worsts inf. These are implementation checks, not rulings of Simon's. Unequal ranks cannot
     happen with bit-equal Gram matrices.
+12. **The readouts stage refuses `arms.npz`** unless `arms.json` records G1 and G3 passed and the npz's sha256
+    equals the one it records (`run_study.load_arms`), as item 10 does for `matrices.npz`. `readouts.json` records
+    the sha256 of the bytes it loaded.
+13. **The descriptive readouts' units and the tables' SDs** are interpretive choices that `design.md` does not state:
+    it asks for "Δ by size and time, with the same interval recipes", so each keeps the unit of its task's recipe.
+    - Interpolation by size resamples that size's 10 runs.
+    - Fluid by time and by size resample the 100 splits, each by its mean Δ over that time's 5 sizes or that size's
+      5 times.
+    - Fluid on splits 0–4 resamples those 5 splits, each by its mean Δ over the 5 times × 5 sizes.
+    - Every SD in the tables has ddof 1, as upstream's tables use: its fluid `R2_std` is the ddof-1 SD of its
+      splits' R².
 
 ## Results
 
@@ -115,7 +126,8 @@ Claude's calls while building (2026-11-24 and 2026-11-25), each with its reason,
   1.58 GB, exit status 0. **Gates G1 and G3 passed;** arms F and B then ran.
   - **G1** compares arm K with upstream's published results, against the tolerance 1e-9 absolute:
     - interpolation's 20 values, each size's mean and SD: worst |difference| 1.25e-16;
-    - curvature's MSE: 8.33e-17;
+    - curvature's MSE: 8.33e-17, which is pandas' default parse of the reported value, not a difference (see the
+      readouts line);
     - fluid's 125 values (splits 0–4): 3.61e-16.
   - **G3** (ruling 8) compares the projected test scores with `FPCA.transform` in 14 cells × dimensions, ranks
     equal in all of them:
@@ -126,9 +138,12 @@ Claude's calls while building (2026-11-24 and 2026-11-25), each with its reason,
     take nearly all of each arm's time.
   - Outputs: `results/arms.json`, and `results/arms.npz` with its 31 arrays (6.4 MB, sha256 `510348c6…`, recorded in
     the json). The md5s in `arms.json` equal the scripts committed in f94fea5.
-- 2026-11-25 12:06: `run_study.py readouts`, in the foreground, 1.4 s wall (0.1 s inside the stage), peak RSS
-  0.30 GB, exit status 0. It read `results/arms.npz` through `run_study.load_arms`, which refuses an npz unless
-  `arms.json` records G1 and G3 passed and the npz's sha256 (`510348c6…`, equal), and wrote `results/readouts.json`.
+- 2026-11-25 12:06, and again at 12:28 after the review's fixes: `run_study.py readouts`, in the foreground, 1.4 s
+  and 1.5 s wall (0.1 s inside the stage), peak RSS 0.30 GB, exit status 0 both times. It read `results/arms.npz`
+  through `run_study.load_arms` (ruling 12; sha256 `510348c6…`, the bytes loaded) and wrote `results/readouts.json`.
+  - The rerun reads upstream's reported values exactly (below), adds the fluid readout by size, and records the
+    sha256 that `load_arms` computed. Every other number of the 12:06 run is unchanged, bit for bit, the verdicts
+    included.
   - **The verdicts,** by `design.md`'s rule fixed in advance: Δ > 0 favours F, and every interval is a 95%
     percentile bootstrap of 10,000 resamples from its own `default_rng(0)`. **Arm F is below `PD_kernel` on all
     three tasks** (copied from `readouts.json`, rounded to 4 significant digits):
@@ -140,18 +155,34 @@ Claude's calls while building (2026-11-24 and 2026-11-25), each with its reason,
       −0.1388 [−0.1441, −0.1334];
     - F against B: interpolation +0.00111 [−0.01391, +0.01470], curvature −0.2182 [−0.4146, −0.04948], fluid
       −3.144 [−5.675, −1.367].
-  - Descriptive, no verdict (`readouts.json` holds the rest):
+  - Descriptive, no verdict (`readouts.json` holds the rest; the units and SDs are ruling 13's):
+    - fluid by training size, Δ(F, K): n 25 −15.34 [−28.01, −6.457]; n 50 −0.3164 [−0.3391, −0.2946]; n 100
+      −0.2654 [−0.2746, −0.2562]; n 200 −0.2487 [−0.2574, −0.2397]; n 300 −0.2434 [−0.2521, −0.2349];
     - fluid on the paper's splits 0–4 alone: Δ(F, K) −4.142 [−8.839, −0.7448];
     - curvature's MSE: K 0.2258 (the reported `PD_kernel`), F 0.4736, B 0.2554;
     - F's chosen (K0, K1): (1, 2) for curvature; 45 distinct pairs over the 100 interpolation datasets and 239 over
-      the 2,500 fluid cells, (1, 1) the most frequent in both, (0, 0) in 120 fluid cells;
-    - the descriptive intervals resample an interpolation size's 10 runs, a fluid time's 100 splits (each by its
-      mean Δ over the 5 sizes), and the paper's 5 splits. The tables' SDs have ddof 1, as upstream's: its fluid
-      `R2_std` is the ddof-1 SD of its splits' R², which arm K matches to 1.7e-16.
-  - Checked after the run (a scratch script, not kept): all nine intervals (three pairs × three tasks) equal the
-    brief's recipe written out literally on `arms.npz`, bit for bit. Arm K's columns of the tables equal upstream's
-    reported values to 2.2e-16 (interpolation 1.2e-16, curvature 8.3e-17, fluid splits 0–4 2.2e-16).
+      the 2,500 fluid cells, (1, 1) the most frequent in both, (0, 0) in 120 fluid cells.
+  - **Reported values, read exactly.** pandas' default float parser misreads 52 of upstream's 101 reported values in
+    their last bits (by at most 1.1e-16), so `readouts.py` reads them with `float_precision="round_trip"`, as
+    Python's `float` reads their text.
+    - G1's curvature gap of 8.33e-17 was this parse, not a difference: arm K's MSE equals the CSV's
+      0.22575596585327898 bit for bit.
+    - With the exact parse, G1's worsts would be 5.55e-17 (interpolation), 0 (curvature) and 4.44e-16 (fluid).
+    - G1 keeps the default parser: at 1e-9 the parse cannot matter, and `arms.json`'s provenance stays that of the
+      code that ran.
+  - Checked after the runs (scratch scripts, not kept):
+    - All nine primary and exploratory intervals (three pairs × three tasks) equal the brief's recipe, written out
+      literally on `arms.npz`, bit for bit.
+    - Every reported value in `readouts.json` equals the float of its CSV text.
+    - Arm K's columns of the tables equal upstream's reported values to 2.2e-16: interpolation 1.1e-16, curvature
+      0, fluid splits 0–4 2.2e-16. Arm K's ddof-1 SD over splits 0–4 matches the reported fluid `R2_std` to
+      1.7e-16, where ddof 0 misses by 1.0e-2.
   - For information, not a readout: arm F fails badly in a few fluid cells, which make the size of fluid's mean Δ
-    but not its sign. F's fluid R² has median 0.085 (K 0.365, B 0.178); 755 of the 2,500 cells lie below 0, 96
-    below −1 and 51 below −10. The worst, −2,518 (t 2.5, split 92, n 25), chose (K0, K1) = (6, 17): 23 scores for
-    25 training curves. Δ(F, K) lies above 0 in 1.4% of the fluid cells, and its median is −0.25.
+    but not its sign.
+    - F's fluid R² has median 0.085 (K 0.365, B 0.178); 755 of the 2,500 cells lie below 0, 96 below −1 and 51
+      below −10.
+    - All 51 below −10 have n 25, and 32 of them chose K0 + K1 = 23 = n − 2, the most the rule allows. The worst,
+      −2,518 (t 2.5, split 92), chose (6, 17).
+    - The readout by size shows it: Δ(F, K) is −15.34 at n 25, and −0.24 to −0.32 at the other four sizes, each
+      interval below 0.
+    - Δ(F, K) lies above 0 in 1.4% of the fluid cells, and its median is −0.25.
