@@ -73,7 +73,7 @@ INK, INK2, MUTED, RULE, SURFACE, CONTEXT = "#0b0b0b", "#52514e", "#898781", "#e1
 # every figure has a table beside it.
 ARM_COLOR = {"K": "#2a78d6", "F": "#eb6834", "B": "#1baf7a"}
 ARM_MARKER = {"K": "o", "F": "s", "B": "^"}
-ARM_NAME = {"K": "K: PD_kernel rerun", "F": "F: Betti FPCR", "B": "B: Betti NW"}
+ARM_NAME = {"K": "K: PD_kernel reimplemented", "F": "F: Betti FPCR", "B": "B: Betti NW"}
 SEQUENTIAL = ("#cde2fb", "#9ec5f4", "#6da7ec", "#3987e5", "#2a78d6", "#1c5cab", "#104281", "#0d366b")  # its blue ramp
 TASKS, ARMS = ro.TASKS, ro.ARMS
 TASK_NAME = {"interp": "interpolation", "curv": "curvature", "fluid": "fluid"}
@@ -484,7 +484,7 @@ def fig_curvature(arms: dict[str, np.ndarray], mse: dict[str, float]) -> bytes:
             linewidths=0.6,
             zorder=3,
         )
-        ax.set_title(f"{ARM_NAME[arm]}: MSE {num(mse[arm])}", loc="left", color=INK, fontsize=9)
+        ax.set_title(f"{ARM_NAME[arm]}, MSE {num(mse[arm])}", loc="left", color=INK, fontsize=9)
         ax.set_xlabel("true curvature K of the test cloud")
         ax.set_xlim(-reach, reach)
         ax.set_ylim(-reach, reach)
@@ -927,13 +927,14 @@ def main() -> None:
     readout_list = "; ".join(f"{task_claims[task]}" for task in TASKS)
     summary = f"""
 <p><strong>Verdict, by the rule fixed before any result: Betti-curve fPCA regression (arm F)
-{markdown(verdict_phrase)}.</strong> Δ is the paired difference between F and arm K, <code>PD_kernel</code> rerun,
-signed so that Δ > 0 favours F; its 95% interval is a percentile bootstrap of {boot["n_boot"]:,} resamples. Mean Δ
-and 95% interval: {html.escape(readout_list)}. Each interval lies below 0, which the rule reads as below
-<code>PD_kernel</code>.</p>
-<p><strong>The comparison stands on the paper's own footing.</strong> Arm K reproduces upstream's published results,
-the {g1_values} values behind the paper's Tables 1–3, {html.escape(g1_phrase)}, against gate G1's tolerance of
-{scientific(g1["tolerance"], 0)}. All five gates passed.</p>
+{markdown(verdict_phrase)}.</strong> Δ is the paired difference between F and arm K, <code>PD_kernel</code>
+reimplemented from upstream's code (read, never run), signed so that Δ > 0 favours F; its 95% interval is a
+percentile bootstrap of {boot["n_boot"]:,} resamples. Mean Δ and 95% interval: {html.escape(readout_list)}. Each
+interval lies below 0, which the rule reads as below <code>PD_kernel</code>.</p>
+<p><strong>The comparison stands on the paper's own footing.</strong> The reimplementation reproduces upstream's
+published results, the {g1_values} values behind the paper's Tables 1–3, {html.escape(g1_phrase)}, against gate G1's
+tolerance of {scientific(g1["tolerance"], 0)}, so the verdict does not rest on a weaker reimplementation. All five
+gates passed.</p>
 <p><strong>Exploratory, no verdict: where F's gap comes from.</strong> Arm B runs K's estimator on the Betti curves'
 L² distances, so Δ(B, K) is the representation's part of the gap and Δ(F, B) the estimator's; their means add up to
 Δ(F, K). {html.escape(explore["interp"])} {html.escape(explore["curv"])} {html.escape(explore["fluid"])}</p>
@@ -959,9 +960,9 @@ at <code>{c.UPSTREAM_SHA}</code> ({upstream_date}) and read as data only: no ups
 through a whitelist unpickler.</p>
 <p><strong>Three arms see the same diagrams, training sets and test sets:</strong></p>
 <ul>
-<li><strong>K, <code>PD_kernel</code> rerun:</strong> Nadaraya–Watson on W2(H0) + W2(H1), reimplemented from upstream's
-code, which was read and never run. Each W2 is exact (an optimal assignment, scipy); fluid uses upstream's cached
-distances, which gate G2 checked. The bandwidth is the first LOO minimizer over {c.N_BANDWIDTHS} values in
+<li><strong>K, <code>PD_kernel</code> reimplemented:</strong> Nadaraya–Watson on W2(H0) + W2(H1), transcribed from
+upstream's code, which was read and never run. Each W2 is exact (an optimal assignment, scipy); fluid uses upstream's
+cached distances, which gate G2 checked. The bandwidth is the first LOO minimizer over {c.N_BANDWIDTHS} values in
 [0.1, 2] × the median positive training distance.</li>
 <li><strong>F, Betti FPCR (primary):</strong> the reduced Betti curves of H0 and H1 (topocyte's
 <code>BettiCurve</code>, finite bars only), topocyte's exact fPCA per dimension fitted on the training curves
@@ -1363,8 +1364,8 @@ redo.</p>
     body = f"""
 <h1>Betti-curve fPCA regression against the persistence-diagram kernel</h1>
 <p class="subtitle">Functional principal component regression on topocyte's exact Betti-curve fPCA (arm F) against
-<code>PD_kernel</code> of Aggarwal, Nichols and Turner (arm K, rerun), with an exploratory Nadaraya–Watson arm on Betti
-L² distances (arm B), on the paper's three tasks</p>
+<code>PD_kernel</code> of Aggarwal, Nichols and Turner (arm K, reimplemented from their code), with an exploratory
+Nadaraya–Watson arm on Betti L² distances (arm B), on the paper's three tasks</p>
 <p class="meta">Built {built} from the study folder at {html.escape(head)}{dirty}; {verify["checks_passed"]} checks of
 <code>verify_results.py</code> pass.</p>
 <div class="summary">{summary}</div>

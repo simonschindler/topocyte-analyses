@@ -490,8 +490,8 @@ on the paper's own three tasks? The rule was fixed before any result.
 
 **Done.**
 
-- **Data:** the paper's public code and data, cloned at a pinned commit and
-  read as data only (none of its code ran):
+- **Data:** the paper's public code and data (*upstream*), cloned at a pinned
+  commit and read as data only (none of its code ran):
   - interpolation: clouds of 20 points between a line and a circle, the
     target the mixing parameter; 100 datasets of 10 to 100 training clouds;
   - curvature: clouds of 50 points on surfaces of constant curvature, the
@@ -500,14 +500,16 @@ on the paper's own three tasks? The rule was fixed before any result.
     from the vorticity's persistence diagrams at five times; 100 random
     splits, where the paper used 5.
 - **Arms**, all seeing the same diagrams, training sets and test sets:
-  - K: `PD_kernel`, rerun;
+  - K: `PD_kernel`, reimplemented from upstream's code, which was read and
+    never run;
   - F: FPCR on topocyte's exact Betti-curve fPCA scores, the number of
     components chosen by leave-one-out;
   - B (exploratory): `PD_kernel`'s estimator on the Betti curves' exact L²
     distances. Against K it isolates the representation, against F the
     estimator.
-- **Gates:** K had to reproduce the paper's published tables before F and B
-  ran; four more gates checked the distances, the projection and the inputs.
+- **Gates:** K had to match upstream's published values behind the paper's
+  Tables 1–3 before F and B ran; four more gates checked the distances, the
+  projection and the inputs.
 - **Checks:** a verifier passed 14 checks by other routes, from W2 as a
   linear program to F refitted with topocyte's own fPCA.
 
@@ -521,8 +523,9 @@ with its 95% interval:
 | fluid (R²) | −3.283 (−5.812 to −1.507) | −0.1388 (−0.1441 to −0.1334) | −3.144 (−5.675 to −1.367) |
 
 - **Verdict: below `PD_kernel` on all three tasks,** each interval below 0.
-- **K reproduces the paper's 146 published values** to 3.6e-16, so the
-  comparison stands on the paper's own footing.
+- **K matches upstream's 146 published values behind the paper's Tables
+  1–3** to 3.6e-16, so the comparison stands on the paper's own footing: the
+  verdict does not rest on a weaker reimplementation.
 - **Where the gap comes from:** the representation in interpolation (B falls
   about as far below K as F does), the estimator in curvature (B is level with
   K), and both in fluid.
@@ -631,11 +634,11 @@ shown added value here, not that it cannot.
   run: studies 4, 5, 7 and 8 for their verdicts, study 1 for the death/birth
   ratio, and studies 2 and 3 for the PC2 check. This kept the conclusions from
   drifting with the data.
-- **Reproduce a published baseline before comparing with it.** Study 8 reran
-  the kernel paper's method from its public code and data, and matched all
-  146 published values to 3.6e-16 before any result of topocyte's arms, so its
-  verdict stands on the paper's own footing rather than on a reimplementation
-  that might be weaker.
+- **Reproduce a published baseline before comparing with it.** Study 8
+  reimplemented the kernel paper's method from its public code (read, never
+  run) and matched all 146 values published with that code behind the
+  paper's Tables 1–3, to 3.6e-16, before any result of topocyte's arms, so its
+  verdict does not rest on a weaker reimplementation.
 - **Cluster-number rules can be fooled.**
   - A gap statistic against a matched Gaussian calls any bounded or skewed
     cloud clustered.

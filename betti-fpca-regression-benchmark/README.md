@@ -4,8 +4,9 @@
 below `PD_kernel` (arm K) on all three tasks:** each 95% interval of the paired difference Δ, signed so that Δ > 0
 favours F, lies below 0. Mean Δ and 95% interval: interpolation −0.02401 [−0.03837, −0.01141] (Δ = R²(F) − R²(K));
 curvature −0.2478 [−0.4340, −0.09194] (Δ = MSE(K) − MSE(F)); fluid −3.283 [−5.812, −1.507] (Δ = R²(F) − R²(K)).
-`PD_kernel` rerun reproduces the paper's published results to 3.6e-16 at worst (4.4e-16 with the CSVs read exactly),
-so the comparison stands on the paper's own footing.
+Arm K, `PD_kernel` reimplemented from the paper's public code (read, never run), matches the values published with
+that code behind the paper's Tables 1–3 to 3.6e-16 at worst (4.4e-16 with the CSVs read exactly), so the comparison
+stands on the paper's own footing.
 
 Simon's request (2026-11-24), with the paper's PDF: "Benchmark fPCA regression using inner product space of betti
 curves against their reported performances". Then: "whether Betti fPCA regression beats their kernel; download the
@@ -24,8 +25,8 @@ code is imported or run, and its pickles are read by an unpickler that resolves 
 globals (`safe_pickle.py`).
 
 - **Arms** (`estimators.py`, `run_study.py arms`):
-  - **K, `PD_kernel` rerun:** Nadaraya–Watson on W2(H0) + W2(H1), reimplemented from upstream's code, which was read
-    and never run. W2 is exact (`wasserstein.py`, an optimal assignment by scipy, since POT is not installed); fluid
+  - **K, `PD_kernel` reimplemented:** Nadaraya–Watson on W2(H0) + W2(H1), transcribed from upstream's code, which was
+    read and never run. W2 is exact (`wasserstein.py`, an optimal assignment by scipy, since POT is not installed); fluid
     uses upstream's cached distances, which gate G2 checks. The bandwidth is the first LOO minimizer over 50 values in
     [0.1, 2] × the median positive training distance.
   - **F, Betti FPCR (primary):** the reduced Betti curves of H0 and H1 (topocyte's `BettiCurve`, finite bars only);
@@ -45,7 +46,7 @@ globals (`safe_pickle.py`).
     vorticity's sublevel persistence (upstream's), at five times; split s tests on 100 simulations and trains on
     n = 25, 50, 100, 200 or 300 of the others. The paper runs splits 0–4; this study runs 0–99, all of which feed the
     readout. R².
-- **Gates, before any readout** (`inputs.py`, `matrices.py`, `run_study.py arms`): G1, arm K reproduces upstream's
+- **Gates, before any readout** (`inputs.py`, `matrices.py`, `run_study.py arms`): G1, arm K matches upstream's
   published results; G2, the scipy W2 equals upstream's cached fluid distances; G3, the test scores projected from the
   Gram matrices equal `FPCA.transform`'s; G4, the fluid Gram matrices do not change with the shift; G5, the inputs
   (the interpolation datasets regenerate from seed 0, the Rips diagrams equal `ripser`'s, every fluid diagram is
@@ -77,9 +78,10 @@ Reading:
 
 - **Below `PD_kernel` on all three tasks, by the rule.** F's R² trails K's in interpolation and fluid, and its
   curvature MSE, 0.4736, is 2.1 times K's, 0.2258.
-- **The comparison stands on the paper's own footing.** Arm K equals upstream's published results, the 146 values
-  behind the paper's Tables 1–3, to the last bits (the status line gives the worst differences), where gate G1 allowed
-  1e-9: the paper's `PD_kernel` is reproduced, not approximated.
+- **The comparison stands on the paper's own footing.** Arm K, a reimplementation that never ran upstream's code,
+  equals upstream's published results, the 146 values behind the paper's Tables 1–3, to the last bits (the status line
+  gives the worst differences), where gate G1 allowed 1e-9: the reimplementation reproduces the paper's `PD_kernel`
+  rather than approximating it, so the verdict does not rest on a weaker version of it.
 - **Exploratory, no verdict: the representation or the estimator?** Δ(B, K) compares the representations under one
   estimator, Δ(F, B) the estimators on one representation, and their means add up to Δ(F, K).
   - In interpolation the gap is the representation's: Δ(B, K) lies below 0, and F cannot be told apart from B.
