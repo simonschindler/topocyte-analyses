@@ -60,7 +60,7 @@ on its own.
   the page shows there.
 - **Tests.** `../gtex-liver-chromatic-domains/.venv/bin/python -m pytest -q -W error`
   runs `test_viewer.py`, `test_tissues.py` and `test_local_colocalization.py`:
-  79 tests on synthetic inputs, about 4 s.
+  82 tests on synthetic inputs, about 4 s.
 - **Colocalization scale.** The colocalization excess needs
   `results/colocalization_scale.json`, which `fit_colocalization.py` writes from
   every cohort cell (reading the cohort read only). With the same venv, from this
@@ -410,7 +410,7 @@ files above):
 
 | file | what the viewer takes from it |
 |---|---|
-| `<slug>/gtex_<slug>_cells.h5ad` (h5py mode "r") | each cell's slide, cell type and position (`obsm/spatial`, level-0 pixels), as from the liver object |
+| `<slug>/gtex_<slug>_cells.h5ad` (h5py mode "r") | each cell's slide, cell type and position (`obsm/spatial`, level-0 pixels), as from the liver object; the categorical codes at whatever integer width the object has (int8 for a tissue of up to 126 slides) |
 | `<slug>/slides.csv` | each slide's rows (`n_cells`, `row_start`, `row_end`), its donor (`Subject ID`, `Sex`, `Age Bracket`, `Hardy Scale`), its `Pathology Categories` and `Pathology Notes`, its `Hidden` flag, and the `Tissue` |
 | the slide files in `--wsi-dir` | the H&E tiles, as for liver |
 
@@ -449,4 +449,6 @@ files above):
 - `test_viewer.py`, the server's tests, and `test_tissues.py`, those of the
   tissue folders: finding them, `slides.csv`, the class map's "other", the slide's
   own Voronoi deciles, a tissue's layers and the server's routing by tissue, on
-  tissue objects that it writes with h5py in anndata's encoding.
+  tissue objects that it writes with h5py in anndata's encoding, their codes as
+  wide as pandas makes them: int8 `obs/slide_id/codes` for a tissue of up to 126
+  slides, int16 above (liver's 594).

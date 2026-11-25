@@ -50,12 +50,15 @@ def strings(group: h5py.Group, name: str, values) -> None:
 
 
 def categorical(group: h5py.Group, name: str, values: list[str], categories: list[str] | None = None) -> None:
-    """A column as anndata writes a categorical: a group of integer ``codes`` and string ``categories``."""
+    """A column as anndata writes a categorical: a group of integer ``codes`` and string ``categories``. The codes
+    are as wide as pandas makes them: int8 below 127 categories, int16 below 32,767, else int32 (so a tissue with
+    up to 126 slides has int8 ``obs/slide_id/codes``, liver's 594 int16)."""
     categories = sorted(set(values)) if categories is None else categories
     lookup = {v: j for j, v in enumerate(categories)}
     column = group.create_group(name)
     column.attrs.update({"encoding-type": "categorical", "encoding-version": "0.2.0", "ordered": False})
-    codes = np.array([lookup[v] for v in values], dtype=np.int8 if len(categories) < 128 else np.int16)
+    width = np.int8 if len(categories) < 127 else np.int16 if len(categories) < 32767 else np.int32
+    codes = np.array([lookup[v] for v in values], dtype=width)
     column.create_dataset("codes", data=codes, compression="gzip").attrs.update(ARRAY)
     strings(column, "categories", categories)
 
@@ -134,7 +137,7 @@ def test_the_slug_rule_of_the_layout():
 def test_find_tissues_takes_one_tissue_folder_or_a_root_of_them(tmp_path):
     skin = write_tissue(tmp_path, "Skin - Sun Exposed (Lower leg)")["folder"]
     liver = write_tissue(tmp_path, "Liver")["folder"]
-    (tmp_path / "tissues.csv").write_text("slug,tissue,n_slides\nliver,Liver,3\n")
+    (tmp_path / "tissues.csv").write_text("index,slug,tissue,n_slides,n_with_source\n0,liver,Liver,3,3\n")
     (tmp_path / "lung").mkdir()
     (tmp_path / "lung" / "slides.csv").write_text("")  # still being copied: no object yet
     (tmp_path / "notes").mkdir()  # not a tissue folder at all
@@ -407,3 +410,29 @@ def test_only_the_two_tissues_used_last_keep_their_slides_in_memory(tmp_path):
     assert not liver._cells and not liver._voronoi  # a third: the one used longest ago lets go of its slides
     assert library.get("lung")._cells and library.get("spleen")._cells
     np.testing.assert_array_equal(liver.cells("GTEX-LIVER-0126")["xy"].shape, (30, 2))  # and reads them again
+
+
+def test_the_fixtures_codes_take_the_width_pandas_gives_them(tmp_path):
+    """anndata writes a categorical's codes as pandas holds them: int8 below 127 categories, int16 from there."""
+    import pandas as pd
+
+    with h5py.File(tmp_path / "codes.h5", "w") as f:
+        for n in (126, 127):
+            names = [f"S{j:03d}" for j in range(n)]
+            categorical(f, f"c{n}", names, names)
+            assert f[f"c{n}/codes"].dtype == pd.Categorical(names).codes.dtype
+        assert f["c126/codes"].dtype == np.int8 and f["c127/codes"].dtype == np.int16
+
+
+@pytest.mark.parametrize(("n_slides", "width"), [(3, np.int8), (130, np.int16)])
+def test_a_tissue_reads_its_slides_whatever_the_width_of_their_codes(tmp_path, n_slides, width):
+    slides = [(f"GTEX-S{j:03d}-0126", 3 + j % 4, SLIDES[0][2]) for j in range(n_slides)]
+    written = write_tissue(tmp_path, "Lung", slides=slides)
+    with h5py.File(serve.tissue_h5ad(written["folder"]), "r") as f:
+        assert f["obs/slide_id/codes"].dtype == width and f["obs/cell_type/codes"].dtype == np.int8
+    cohort = serve.Cohort(None, written["folder"])
+    assert [s["slide_id"] for s in cohort.meta()["slides"]] == [s for s, _, _ in slides]
+    for slide_id in (slides[0][0], slides[n_slides // 2][0], slides[-1][0]):
+        cells = cohort.cells(slide_id)
+        np.testing.assert_array_equal(cells["xy"], written["cells"][slide_id]["xy"])
+        assert cells["types"].tolist() == type_codes(written["cells"][slide_id]["types"])
