@@ -1366,6 +1366,7 @@ function renderTissue() {
     const option = $("method").querySelector(`option[value=${method}]`);
     option.textContent += " (liver only)";
     option.title = `Liver only: ${why}.`;
+    option.disabled = true; // as updateMethod keeps it once a slide is shown
   }
   // A browser may restore a radio checked on this address before: none of the liver's.
   if ($("layer-density").checked || $("layer-coloc").checked) $("layer-types").checked = true;
@@ -1493,4 +1494,12 @@ async function init() {
   $("slides").focus();
 }
 
-init().catch((err) => setStatus(`Could not start: ${err.message}`));
+init().catch((err) => {
+  setStatus(`Could not start: ${err.message}`);
+  if (TISSUE) { // a tissue this server does not show (or cannot open): its first page shows what it does
+    const link = document.createElement("a");
+    link.href = "/";
+    link.textContent = "Open the server's first page.";
+    $("status").append(" ", link);
+  }
+});

@@ -546,8 +546,9 @@ def read_cells(
     """One slide's cells, read only from the cohort (or the object at ``path``): level-0 px coordinates (n, 2) as
     float64 and HistoPLUS type codes as uint8.
 
-    The file must name the slide at the first and the last of its rows, and every cell must have a finite position
-    and a type.
+    The file must name the slide at the first and the last of its rows and not at the rows just before and after
+    them (so that they are all of its cells, as a slide's cells are one block of rows), and every cell must have a
+    finite position and a type.
     """
     import h5py
 
@@ -555,10 +556,13 @@ def read_cells(
         names = c._strings(f["obs/slide_id/categories"][:])
         owners = f["obs/slide_id/codes"]
         first, last = names[int(owners[start])], names[int(owners[end - 1])]
+        beside = [int(owners[row]) for row in (start - 1, end) if 0 <= row < owners.shape[0]]
         xy = np.asarray(f["obsm/spatial"][start:end], dtype=np.float64)
         codes = np.asarray(f["obs/cell_type/codes"][start:end])
     if first != slide_id or last != slide_id:
         raise RuntimeError(f"cohort rows {start}:{end} run from {first} to {last}, not {slide_id}")
+    if any(code >= 0 and names[code] == slide_id for code in beside):
+        raise RuntimeError(f"cohort rows {start}:{end} are only part of {slide_id}'s cells, which run on beside them")
     if xy.shape != (end - start, 2) or not np.all(np.isfinite(xy)):
         raise RuntimeError(f"{slide_id}: obsm/spatial has shape {xy.shape} or non-finite values")
     if codes.min() < 0 or codes.max() >= n_types:
@@ -1336,19 +1340,24 @@ class Library:
             raise ValueError(f"none of the tissue folders in {tissues} can be opened: {self.failed}")
         self.default = min(self.cohorts)
 
-    def get(self, slug: str | None) -> Cohort:
-        """The cohort of a tissue slug, or the default one for None; ``KeyError`` for a slug not served."""
+    def get(self, slug: str | None, warm: bool = True) -> Cohort:
+        """The cohort of a tissue slug, or the default one for None; ``KeyError`` for a slug not served. ``warm``:
+        the request uses the tissue's slides (not only a tile of a slide file), so they stay in memory, and the
+        slides of the tissue used longest ago beyond ``WARM_TISSUES`` are let go (requests for it still running
+        may put theirs back)."""
         if slug in self.failed:
             raise RuntimeError(f"tissue {slug} could not be opened: {self.failed[slug]}")
         if slug is not None and slug not in self.cohorts:
-            raise KeyError(f"tissue {slug}")
+            if self.default is None:
+                raise KeyError(f"tissue {slug}: this server shows the liver cohort (no --tissues)")
+            raise KeyError(f"tissue {slug}: the tissue folders here are {', '.join(row['slug'] for row in self.listing())}")
         key = self.default if slug is None else slug
-        with self._lock:
-            self._warm[key] = None
-            self._warm.move_to_end(key)
-            cold = [self._warm.popitem(last=False)[0] for _ in range(len(self._warm) - WARM_TISSUES)]
-        for name in cold:
-            self.cohorts[name].forget()
+        if warm:
+            with self._lock:  # one tissue at a time, so that none is let go while it is used again
+                self._warm[key] = None
+                self._warm.move_to_end(key)
+                while len(self._warm) > WARM_TISSUES:
+                    self.cohorts[self._warm.popitem(last=False)[0]].forget()
         return self.cohorts[key]
 
     def listing(self) -> list[dict]:
@@ -1402,7 +1411,8 @@ def make_handler(library: Library) -> type[BaseHTTPRequestHandler]:
                     raise KeyError(parts[1])
                 self.send(HTTPStatus.OK, path.read_bytes(), STATIC_TYPES[path.suffix])
                 return
-            cohort = library.get(query.get("tissue", [None])[0])  # the liver cohort, or a tissue folder by slug
+            # The liver cohort, or a tissue folder by slug; a tile of a slide file uses none of its slides' values.
+            cohort = library.get(query.get("tissue", [None])[0], warm=parts[:2] != ["api", "tile"])
             if parts == ["api", "meta"]:
                 meta = {**cohort.meta(), "tissues": library.listing()}
                 self.send(HTTPStatus.OK, json.dumps(meta).encode(), "application/json")
@@ -1488,7 +1498,7 @@ def print_tissues(library: Library, wsi_dir: Path | None) -> None:
         if row["error"] is not None:
             print(f"{row['slug']}: cannot be opened: {row['error']}", flush=True)
             continue
-        cohort = library.get(row["slug"])
+        cohort = library.get(row["slug"], warm=False)
         line = f"{row['slug']}: {cohort.name}, {len(cohort.slides)} slides, {len(cohort.types)} cell types"
         if cohort.unmapped:
             line += f" ({', '.join(cohort.unmapped)} outside the four classes: counted as other)"

@@ -393,6 +393,7 @@ def test_the_server_refuses_the_liver_only_layers_other_tissues_and_unknown_ones
     ):
         status, body = get(server, path)
         assert status == 404, path
+    assert "skin_sun_exposed_lower_leg" in json.loads(body)["error"]  # an unknown tissue: those served, by name
     status, body = get(server, "/api/meta?tissue=broken")
     assert status == 500 and "could not be opened" in json.loads(body)["error"]
 
@@ -458,3 +459,29 @@ def test_one_listing_of_the_slide_folder_serves_every_tissue(tmp_path, monkeypat
     assert {s["slide_id"]: s["wsi"] for s in library.get("lung").meta()["slides"]} == {
         "GTEX-LUNG-0126": True, "GTEX-LUNG-0226": False,
     }
+
+
+def test_a_slides_rows_must_be_all_of_its_cells_not_part_of_them(tmp_path):
+    written = write_tissue(tmp_path, "Lung")  # in the object, A is rows 0-60, B 60-105, C 105-185
+    path = written["folder"] / "slides.csv"
+    lines = path.read_text().splitlines()
+    rows = [line.rsplit(",", 3) for line in lines[1:]]
+    rows[0][1:] = ["30", "0", "30"]  # A: only its first 30 cells
+    rows[1][1:] = ["75", "30", "105"]  # B: from A's 31st cell on
+    path.write_text("\n".join([lines[0], *(",".join(row) for row in rows)]) + "\n")
+    cohort = serve.Cohort(None, written["folder"])  # the rows still run from 0 to the last cell without gaps
+    with pytest.raises(RuntimeError, match="GTEX-AAAA-0126"):
+        cohort.cells("GTEX-AAAA-0126")
+    with pytest.raises(RuntimeError, match="GTEX-BBBB-0226"):
+        cohort.cells("GTEX-BBBB-0226")
+    np.testing.assert_array_equal(cohort.cells("GTEX-CCCC-0326")["xy"], written["cells"]["GTEX-CCCC-0326"]["xy"])
+
+
+def test_a_tissues_slide_file_tiles_do_not_count_as_using_it(tmp_path):
+    for j, tissue in enumerate(("Liver", "Lung", "Spleen")):
+        write_tissue(tmp_path, tissue, slides=[(f"GTEX-{tissue.upper()}-0126", 30 + j, SLIDES[0][2])], seed=j)
+    library = serve.Library(None, tmp_path)
+    library.get("liver").cells("GTEX-LIVER-0126")
+    library.get("lung").cells("GTEX-LUNG-0126")
+    library.get("spleen", warm=False)  # a tile of a spleen slide: the H&E only, none of the slides' values
+    assert library.get("liver", warm=False)._cells and library.get("lung", warm=False)._cells

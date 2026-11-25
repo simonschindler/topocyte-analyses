@@ -56,7 +56,9 @@ on its own.
   folder by name). The terminal lists each folder found with its slides and
   cell types, any that cannot be opened (also greyed out in the menu, with the
   reason) and any that hold only one of the two files a tissue folder needs (a
-  copy still running, say). [Other GTEx tissues](#other-gtex-tissues) says what
+  copy still running, say). An address naming a tissue the server does not show
+  (one from a run with other folders, or with none) says which it shows, with a
+  link to its first page. [Other GTEx tissues](#other-gtex-tissues) says what
   the page shows there.
 - **Every tissue on its H&E.** Every GTEx slide file (25,713, in one folder,
   named `<Tissue Sample ID>.svs`) is on the cluster, in
@@ -84,7 +86,7 @@ on its own.
   when done.
 - **Tests.** `../gtex-liver-chromatic-domains/.venv/bin/python -m pytest -q -W error`
   runs `test_viewer.py`, `test_tissues.py` and `test_local_colocalization.py`:
-  83 tests on synthetic inputs, about 4 s.
+  85 tests on synthetic inputs, about 4 s.
 - **Colocalization scale.** The colocalization excess needs
   `results/colocalization_scale.json`, which `fit_colocalization.py` writes from
   every cohort cell (reading the cohort read only). With the same venv, from this
@@ -358,8 +360,9 @@ are there, no slide is listed twice or without cells, `n_cells` is
 `row_end − row_start`, the rows run without gaps from 0 to the object's last
 cell, the object names every slide, and the file names one tissue. As for
 liver, a slide's cells are read only if the object names the slide at the first
-and the last of its rows. A folder that fails a check is listed but cannot be
-opened.
+and the last of its rows, and not at the rows just before and after them, so
+that the rows are all of its cells and not part of them. A folder that fails a
+check at the start is listed but cannot be opened.
 
 In a tissue folder the page shows, as for liver:
 
