@@ -58,9 +58,33 @@ on its own.
   reason) and any that hold only one of the two files a tissue folder needs (a
   copy still running, say). [Other GTEx tissues](#other-gtex-tissues) says what
   the page shows there.
+- **Every tissue on its H&E.** Every GTEx slide file (25,713, in one folder,
+  named `<Tissue Sample ID>.svs`) is on the cluster, in
+  `/nobackup/lab_rendeiro/projects/histopath/data/gtex/svs`, beside the tissue
+  folders in `/nobackup/lab_rendeiro/projects/topocyte/topocyte_data/gtex_tissues`;
+  the laptop has a few in `~/data/GTEX/wsi`. To see any slide on its H&E, run
+  the viewer on the cluster, in a venv made from the chromatic-domains study's
+  `requirements.txt`, and forward its port to the laptop:
+
+  ```bash
+  python serve.py --tissues /nobackup/lab_rendeiro/projects/topocyte/topocyte_data/gtex_tissues \
+      --wsi-dir /nobackup/lab_rendeiro/projects/histopath/data/gtex/svs
+  ```
+
+  ```bash
+  ssh -N -L 8765:127.0.0.1:8765 <the machine the server runs on>
+  ```
+
+  then open `http://127.0.0.1:8765/` on the laptop. The server lists the slide
+  folder once, at the start, for every tissue. Where the machine it runs on
+  cannot be reached by `ssh` from the laptop (a compute node behind the login
+  node, say), start it with `--host` set to that machine's name and forward
+  through the login node instead (`ssh -N -L 8765:<machine>:8765 <login node>`);
+  it then answers anyone on the cluster's network, without a login, so stop it
+  when done.
 - **Tests.** `../gtex-liver-chromatic-domains/.venv/bin/python -m pytest -q -W error`
   runs `test_viewer.py`, `test_tissues.py` and `test_local_colocalization.py`:
-  82 tests on synthetic inputs, about 4 s.
+  83 tests on synthetic inputs, about 4 s.
 - **Colocalization scale.** The colocalization excess needs
   `results/colocalization_scale.json`, which `fit_colocalization.py` writes from
   every cohort cell (reading the cohort read only). With the same venv, from this

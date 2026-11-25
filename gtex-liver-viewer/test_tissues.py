@@ -436,3 +436,25 @@ def test_a_tissue_reads_its_slides_whatever_the_width_of_their_codes(tmp_path, n
         cells = cohort.cells(slide_id)
         np.testing.assert_array_equal(cells["xy"], written["cells"][slide_id]["xy"])
         assert cells["types"].tolist() == type_codes(written["cells"][slide_id]["types"])
+
+
+def test_one_listing_of_the_slide_folder_serves_every_tissue(tmp_path, monkeypatch):
+    for j, tissue in enumerate(("Liver", "Lung")):
+        name = tissue.upper()
+        slides = [(f"GTEX-{name}-0126", 30, SLIDES[0][2]), (f"GTEX-{name}-0226", 20, SLIDES[1][2])]
+        write_tissue(tmp_path / "tissues", tissue, slides=slides, seed=j)
+    wsi = tmp_path / "svs"  # one folder of every GTEx slide file, as on the cluster
+    wsi.mkdir()
+    for name in ("GTEX-LIVER-0226.svs", "GTEX-LUNG-0126.svs", "GTEX-OTHER-0126.svs", "GTEX-LUNG-0226.txt"):
+        (wsi / name).write_bytes(b"")
+    listings = []
+    listed = serve.list_wsis
+    monkeypatch.setattr(serve, "list_wsis", lambda folder: listings.append(folder) or listed(folder))
+    library = serve.Library(wsi, tmp_path / "tissues")
+    assert listings == [wsi]  # listed once for both tissues, not once each
+    assert {s["slide_id"]: s["wsi"] for s in library.get("liver").meta()["slides"]} == {
+        "GTEX-LIVER-0126": False, "GTEX-LIVER-0226": True,
+    }
+    assert {s["slide_id"]: s["wsi"] for s in library.get("lung").meta()["slides"]} == {
+        "GTEX-LUNG-0126": True, "GTEX-LUNG-0226": False,
+    }

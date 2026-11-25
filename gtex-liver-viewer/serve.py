@@ -587,15 +587,29 @@ def cloud_extent(xy: np.ndarray) -> tuple[int, int]:
     return width, height
 
 
-def find_wsis(folder: Path, slide_ids: set[str]) -> dict[str, Path]:
-    """The cohort slides with a file ``<slide_id><suffix>`` directly in ``folder``; ``ValueError`` on two files."""
+def list_wsis(folder: Path) -> dict[str, list[Path]]:
+    """The files directly in ``folder`` with a suffix OpenSlide reads, by name without it (the slide ID): one
+    listing, which may be of every GTEx slide (25,713 on the cluster), checking whether an entry is a file only
+    when its name has such a suffix."""
+    listing: dict[str, list[Path]] = {}
+    with os.scandir(folder) as entries:
+        for entry in entries:
+            path = Path(entry.path)
+            if path.suffix.lower() in WSI_SUFFIXES and entry.is_file():
+                listing.setdefault(path.stem, []).append(path)
+    return listing
+
+
+def find_wsis(folder: Path, slide_ids: set[str], listing: dict[str, list[Path]] | None = None) -> dict[str, Path]:
+    """The cohort slides with a file ``<slide_id><suffix>`` directly in ``folder``; ``ValueError`` on two files.
+    ``listing`` is the folder's ``list_wsis`` when already made, so that one listing serves every tissue."""
+    listing = list_wsis(folder) if listing is None else listing
     found: dict[str, Path] = {}
-    for path in sorted(folder.iterdir()):
-        if not path.is_file() or path.suffix.lower() not in WSI_SUFFIXES or path.stem not in slide_ids:
-            continue
-        if path.stem in found:
-            raise ValueError(f"two slide files for {path.stem}: {found[path.stem].name} and {path.name}")
-        found[path.stem] = path
+    for slide_id in sorted(slide_ids & listing.keys()):
+        paths = sorted(listing[slide_id])
+        if len(paths) > 1:
+            raise ValueError(f"two slide files for {slide_id}: {paths[0].name} and {paths[1].name}")
+        found[slide_id] = paths[0]
     return found
 
 
@@ -808,7 +822,9 @@ class Cohort:
     the four classes count as "other".
     """
 
-    def __init__(self, wsi_dir: Path | None, tissue: Path | None = None) -> None:
+    def __init__(
+        self, wsi_dir: Path | None, tissue: Path | None = None, wsi_listing: dict[str, list[Path]] | None = None
+    ) -> None:
         self.liver = tissue is None
         self.h5ad = c.H5AD if tissue is None else tissue_h5ad(tissue)
         self.slug = None if tissue is None else tissue.name
@@ -826,10 +842,10 @@ class Cohort:
         if tissue is None:
             self._load_liver(wsi_dir)
         else:
-            self._load_tissue(tissue, wsi_dir)
+            self._load_tissue(tissue, wsi_dir, wsi_listing)
         self.n_labels = {"types": len(self.types), "classes": len(c.CLASSES)}
 
-    def _load_tissue(self, folder: Path, wsi_dir: Path | None) -> None:
+    def _load_tissue(self, folder: Path, wsi_dir: Path | None, wsi_listing: dict[str, list[Path]] | None) -> None:
         """The slides, their rows and Portal fields from the folder's slides.csv, checked against its object."""
         names, n_rows = h5ad_slides(self.h5ad)
         table = load_tissue_slides(folder / "slides.csv", names, n_rows).sort_values("slide_id", ignore_index=True)
@@ -844,7 +860,7 @@ class Cohort:
             raise ValueError(f"{self.h5ad.name} has {len(self.types)} cell types; the page colours {MAX_TYPES} at most")
         classes, self.unmapped = class_codes_or_other(self.types)
         self.type_class = classes.astype(np.int64)
-        self.wsis = find_wsis(wsi_dir, set(self.by_id)) if wsi_dir else {}
+        self.wsis = find_wsis(wsi_dir, set(self.by_id), wsi_listing) if wsi_dir else {}
         rows = list(table.itertuples(index=False))
         # As the liver cohort's pathology notes and donors, with the Portal's Hidden flag and the donor's ID; the
         # quality flag is the pathology study's, so empty.
@@ -1310,9 +1326,10 @@ class Library:
             self.default = None
             return
         found, self.skipped = find_tissues(tissues)
+        listing = list_wsis(wsi_dir) if wsi_dir else None  # once for every tissue: the folder may hold every slide
         for folder in found:
             try:
-                self.cohorts[folder.name] = Cohort(wsi_dir, folder)
+                self.cohorts[folder.name] = Cohort(wsi_dir, folder, listing)
             except Exception as err:  # an unreadable object or a slides.csv that does not fit it, among others
                 self.failed[folder.name] = f"{type(err).__name__}: {err}"
         if not self.cohorts:
