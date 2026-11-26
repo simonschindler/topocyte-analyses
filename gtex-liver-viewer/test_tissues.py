@@ -615,3 +615,28 @@ def test_the_colocalization_folder_goes_with_tissues_and_a_tissue_fit_with_its_f
     with pytest.raises(SystemExit):
         fit_colocalization.parse_args(["--tissue", str(tmp_path / "root"), "--out-dir", str(tmp_path / "fits")])
     assert "one tissue folder" in capsys.readouterr().err
+
+
+def test_k_d_tree_queries_use_a_bounded_number_of_threads():
+    """Not one thread per core of the node (workers=-1): on a 48-core node their malloc arenas exhausted the
+    viewer's capped address space, and colocalization requests failed."""
+    import local_colocalization as lc
+
+    assert 1 <= lc.WORKERS <= 8
+    assert serve.WORKERS == lc.WORKERS
+    for module in (serve, lc):
+        assert "workers=-1" not in Path(module.__file__).read_text()
+
+
+def test_blas_threads_default_to_a_few():
+    import os
+
+    assert os.environ["OPENBLAS_NUM_THREADS"].isdigit()
+
+
+def test_malloc_arenas_are_limited_on_glibc():
+    import platform
+
+    if platform.libc_ver()[0] != "glibc":
+        pytest.skip("mallopt(M_ARENA_MAX) is glibc's")
+    assert serve.limit_malloc_arenas(2) is True

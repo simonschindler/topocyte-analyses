@@ -22,6 +22,7 @@ neighbourhood by index, never by distance. Only numpy and scipy, no loop over ce
 from __future__ import annotations
 
 import math
+import os
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, Self
@@ -39,6 +40,10 @@ WEIGHT_FLOOR = 1e-8  # the smallest s^2 a weight 1 / s^2 is taken at
 MIN_PAIR_CELLS = 5  # tau^2 of a (focal type, neighbour type) group needs this many valid cells
 MIN_ROOM = 1.0  # a cloud's pooled prior needs this much room, else it is 0
 CHUNK = 100_000  # cells per k-d tree query, to bound the memory of the neighbour table
+# Threads per k-d tree query: the CPUs this process may use, at most 8, not one per core of the node: on a 48-core
+# node each thread's malloc arena reserves up to 64 MB, which a capped address space (ulimit -v) runs out of while
+# the viewer serves several queries at once.
+WORKERS = max(1, min(8, len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count() or 1))
 
 
 @dataclass
@@ -64,7 +69,7 @@ def neighbour_indices(xy: np.ndarray, k: int) -> np.ndarray:
     out = np.empty((n, k), dtype=np.int64)
     for start in range(0, n, CHUNK):  # chunks of cells, not single cells: each query is vectorised
         stop = min(start + CHUNK, n)
-        idx = np.asarray(tree.query(xy[start:stop], k=k + 1, workers=-1)[1]).reshape(stop - start, k + 1)
+        idx = np.asarray(tree.query(xy[start:stop], k=k + 1, workers=WORKERS)[1]).reshape(stop - start, k + 1)
         others = idx != np.arange(start, stop)[:, None]
         others[others.all(axis=1), -1] = False  # k + 1 others at one distance: the cell itself fell out
         out[start:stop] = idx[others].reshape(stop - start, k)

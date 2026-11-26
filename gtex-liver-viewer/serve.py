@@ -44,6 +44,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import ctypes
 import json
 import math
 import os
@@ -58,10 +59,15 @@ from io import BytesIO
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-import numpy as np
-import pandas as pd
+# BLAS's thread pools, set before numpy loads them: one thread per core of the node, each with its own buffers,
+# does not fit a capped address space, and the viewer's linear algebra is small. A value already set is kept.
+for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ.setdefault(_var, "4")
 
-from local_colocalization import LocalColocalizationExtractor
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+
+from local_colocalization import WORKERS, LocalColocalizationExtractor  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 # The chromatic-domains study's common module: the cohort's paths, the four classes and the pilot's constants.
@@ -271,7 +277,7 @@ def nearest_others(xy: np.ndarray, k: int) -> np.ndarray:
     n = len(xy)
     if n <= k:
         raise ValueError(f"{n} cells, too few for {k} neighbours each")
-    idx = cKDTree(xy).query(xy, k=k + 1, workers=-1)[1]
+    idx = cKDTree(xy).query(xy, k=k + 1, workers=WORKERS)[1]
     others = idx != np.arange(n)[:, None]
     others[others.all(axis=1), -1] = False  # k + 1 others at one distance: the cell itself fell out, drop the last
     return idx[others].reshape(n, k)
@@ -669,7 +675,7 @@ def ball_class_counts(xy: np.ndarray, classes: np.ndarray, radius_px: float) -> 
     for k in range(len(c.CLASSES)):
         members = xy[classes == k]
         if len(members):
-            counts[:, k] = cKDTree(members).query_ball_point(xy, r=radius_px, return_length=True, workers=-1)
+            counts[:, k] = cKDTree(members).query_ball_point(xy, r=radius_px, return_length=True, workers=WORKERS)
     return counts
 
 
@@ -1574,8 +1580,21 @@ def print_tissues(library: Library, wsi_dir: Path | None, colocalization_dir: Pa
         print(f"{name}: skipped, {reason}", flush=True)
 
 
+def limit_malloc_arenas(n: int = 2) -> bool:
+    """Let glibc's malloc keep at most ``n`` arenas (``mallopt(M_ARENA_MAX)``), as MALLOC_ARENA_MAX does. By default
+    each of the server's threads may get its own, reserving up to 64 MB of address space each, which exhausts a
+    capped address space (ulimit -v; 8 GiB on CeMM's login nodes) long before the memory is used: requests then fail
+    with MemoryError or "can't start new thread". False where there is no glibc."""
+    try:
+        return bool(ctypes.CDLL("libc.so.6").mallopt(-8, int(n)))  # -8: M_ARENA_MAX
+    except (OSError, AttributeError):
+        return False
+
+
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
+    if "MALLOC_ARENA_MAX" not in os.environ:  # a value set by hand wins
+        limit_malloc_arenas()
     try:
         library = Library(args.wsi_dir, args.tissues, args.colocalization_dir)
     except ValueError as err:
