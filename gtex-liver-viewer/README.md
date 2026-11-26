@@ -86,7 +86,7 @@ on its own.
   when done.
 - **Tests.** `../gtex-liver-chromatic-domains/.venv/bin/python -m pytest -q -W error`
   runs `test_viewer.py`, `test_tissues.py` and `test_local_colocalization.py`:
-  97 tests on synthetic inputs, about 7 s.
+  106 tests on synthetic inputs, about 8 s.
 - **Colocalization scale.** The colocalization excess needs
   `results/colocalization_scale.json`, which `fit_colocalization.py` writes from
   every cohort cell (reading the cohort read only). With the same venv, from this

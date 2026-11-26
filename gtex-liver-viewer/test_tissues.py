@@ -640,3 +640,90 @@ def test_malloc_arenas_are_limited_on_glibc():
     if platform.libc_ver()[0] != "glibc":
         pytest.skip("mallopt(M_ARENA_MAX) is glibc's")
     assert serve.limit_malloc_arenas(2) is True
+
+
+class Concurrency:
+    """Wraps a function to count its calls and the most of them running at once."""
+
+    def __init__(self, fn):
+        self.fn, self.calls, self.running, self.most = fn, 0, 0, 0
+        self.lock = threading.Lock()
+
+    def __call__(self, *args, **kwargs):
+        import time
+
+        with self.lock:
+            self.calls += 1
+            self.running += 1
+            self.most = max(self.most, self.running)
+        try:
+            time.sleep(0.2)  # long enough for the other requests to arrive meanwhile
+            return self.fn(*args, **kwargs)
+        finally:
+            with self.lock:
+                self.running -= 1
+
+    def __get__(self, instance, owner=None):  # patched onto a class, it wraps a method
+        import functools
+
+        return self if instance is None else functools.partial(self, instance)
+
+
+def all_at_once(*calls) -> list:
+    results, errors = [None] * len(calls), []
+
+    def run(i, call):
+        try:
+            results[i] = call()
+        except Exception as err:  # noqa: BLE001
+            errors.append(err)
+
+    threads = [threading.Thread(target=run, args=(i, call)) for i, call in enumerate(calls)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not errors, errors
+    return results
+
+
+def test_the_pages_two_requests_for_one_slides_excess_compute_it_once(tmp_path, monkeypatch):
+    """The page asks for a slide's excess and its summary at once: computing it twice at once held two of the
+    largest slide's neighbour tables (4.4 GB each at k = 100) and failed in an 8 GiB address space."""
+    from local_colocalization import LocalColocalizationExtractor
+
+    written = write_tissue(tmp_path / "root", "Lung")
+    fit_tissue(written["folder"], tmp_path / "fits")
+    cohort = serve.Cohort(None, written["folder"], colocalization_dir=tmp_path / "fits")
+    transform = Concurrency(LocalColocalizationExtractor.transform)
+    monkeypatch.setattr(LocalColocalizationExtractor, "transform", transform)
+    values, summary, again = all_at_once(
+        lambda: cohort.colocalization_values("GTEX-CCCC-0326", 50, "types", None, "shrunk"),
+        lambda: cohort.colocalization_summary("GTEX-CCCC-0326", 50, "types"),
+        lambda: cohort.colocalization_summary("GTEX-CCCC-0326", 50, "types"),
+    )
+    assert transform.calls == 1 and summary == again and values
+
+
+def test_neighbour_tables_are_built_one_at_a_time_across_slides_layers_and_tissues(tmp_path, monkeypatch):
+    from local_colocalization import LocalColocalizationExtractor
+
+    lung = write_tissue(tmp_path / "root", "Lung")
+    spleen = write_tissue(tmp_path / "root", "Spleen")
+    for written in (lung, spleen):
+        fit_tissue(written["folder"], tmp_path / "fits")
+    lungs, spleens = (serve.Cohort(None, w["folder"], colocalization_dir=tmp_path / "fits") for w in (lung, spleen))
+    transform = Concurrency(LocalColocalizationExtractor.transform)
+    monkeypatch.setattr(LocalColocalizationExtractor, "transform", transform)
+    nearest = Concurrency(serve.nearest_others)
+    monkeypatch.setattr(serve, "nearest_others", nearest)
+    all_at_once(
+        lambda: lungs.colocalization("GTEX-CCCC-0326", 15, "types"),
+        lambda: lungs.colocalization("GTEX-CCCC-0326", 20, "types"),
+        lambda: lungs.colocalization("GTEX-AAAA-0126", 15, "classes"),
+        lambda: spleens.colocalization("GTEX-CCCC-0326", 15, "types"),
+        lambda: lungs.neighbourhood("GTEX-CCCC-0326", 15, "types"),
+        lambda: spleens.neighbourhood("GTEX-AAAA-0126", 30, "classes"),
+    )
+    assert (transform.calls, nearest.calls) == (4, 2)
+    assert transform.most == nearest.most == 1

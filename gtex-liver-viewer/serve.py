@@ -67,7 +67,7 @@ for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
 
-from local_colocalization import WORKERS, LocalColocalizationExtractor  # noqa: E402
+from local_colocalization import WORKERS, LocalColocalizationExtractor, neighbour_indices  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 # The chromatic-domains study's common module: the cohort's paths, the four classes and the pilot's constants.
@@ -112,7 +112,11 @@ API = 4  # what /api/meta and the endpoints give; app.js refuses a server with a
 # Colocalization excess: fit_colocalization.py's cohort sums, which fix each pair's gain or loss scale per k.
 COLOCALIZATION = HERE / "results" / "colocalization_scale.json"
 COLOCALIZATION_NONE = len(EXCESS_EDGES) + 1  # the code of a cell without an estimate, after the 11 excess bins
-COLOCALIZATION_CACHE = 2  # (slide, k, label set) whose cell-by-type excess (up to 80 MB each) stays in memory
+COLOCALIZATION_CACHE = 2  # (slide, k, label set) whose cell-by-type excess (up to 300 MB each) stays in memory
+# One neighbour table at a time, of any slide, layer or tissue: GTEx's largest slide (spleen, 2.7M cells) needs
+# 2.2 GB for its 100 nearest neighbours, and the page asks for a slide's excess and its summary at once. A request
+# that waited finds what the one before it computed in the cache.
+NEIGHBOUR_TABLES = threading.Lock()
 COLOCALIZATION_SCORES = ("shrunk", "raw")
 STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css"}
 # GTEx tissue folders (--tissues): slides.csv's GTEx Portal columns, as the viewer names them, and its row columns.
@@ -272,15 +276,10 @@ def voronoi_codes(rho: np.ndarray, deciles: np.ndarray) -> np.ndarray:
 def nearest_others(xy: np.ndarray, k: int) -> np.ndarray:
     """(n, k): each cell's k nearest other cells, nearest first (``cKDTree``); the cell itself is left out, even
     where another cell shares its position. ``ValueError`` unless there are more than k cells."""
-    from scipy.spatial import cKDTree
-
     n = len(xy)
     if n <= k:
         raise ValueError(f"{n} cells, too few for {k} neighbours each")
-    idx = cKDTree(xy).query(xy, k=k + 1, workers=WORKERS)[1]
-    others = idx != np.arange(n)[:, None]
-    others[others.all(axis=1), -1] = False  # k + 1 others at one distance: the cell itself fell out, drop the last
-    return idx[others].reshape(n, k)
+    return neighbour_indices(xy, k)  # by chunks of cells, without the distances: 8 B a neighbour, not 16 and more
 
 
 def homotypic_counts(labels: np.ndarray, nbrs: np.ndarray) -> np.ndarray:
@@ -1228,6 +1227,14 @@ class Cohort:
             if key in self._colocalization:
                 self._colocalization.move_to_end(key)
                 return self._colocalization[key]
+        with NEIGHBOUR_TABLES:
+            with self._lock:
+                if key in self._colocalization:  # computed while this request waited
+                    return self._colocalization[key]
+            return self._compute_colocalization(key, fit)
+
+    def _compute_colocalization(self, key: tuple, fit: dict) -> dict:
+        slide_id, k, by = key
         cells = self.cells(slide_id)
         codes = cells["types"].astype(np.int64)
         if by == "classes":
@@ -1284,6 +1291,14 @@ class Cohort:
             if key in self._neighbourhood:
                 self._neighbourhood.move_to_end(key)
                 return self._neighbourhood[key]
+        with NEIGHBOUR_TABLES:
+            with self._lock:
+                if key in self._neighbourhood:  # computed while this request waited
+                    return self._neighbourhood[key]
+            return self._compute_neighbourhood(key)
+
+    def _compute_neighbourhood(self, key: tuple) -> bytes:
+        slide_id, k, by = key
         cells = self.cells(slide_id)
         labels = cells["types"].astype(np.int64)
         n_labels = len(self.types)
