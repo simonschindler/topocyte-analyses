@@ -375,7 +375,11 @@ def load_colocalization(path: Path) -> dict | None:
     if not path.is_file():
         return None
     data = json.loads(path.read_text())
-    out: dict = {"k": [int(k) for k in data["k"]], "n_slides": int(data["n_slides"])}
+    out: dict = {
+        "k": [int(k) for k in data["k"]],
+        "n_slides": int(data["n_slides"]),
+        "n_cells": None if data.get("n_cells") is None else int(data["n_cells"]),  # None in a fit that does not say
+    }
     for by, fit in data["label_sets"].items():
         pair = np.asarray(fit["pair_excess"], dtype=np.float64)
         target = np.asarray(fit["target_excess"], dtype=np.float64)
@@ -384,6 +388,29 @@ def load_colocalization(path: Path) -> dict | None:
             raise ValueError(f"{path.name}: {by}'s sums are {pair.shape} and {target.shape} for {n} labels")
         out[by] = {"labels": list(fit["labels"]), "pair": pair, "target": target}
     return out
+
+
+def tissue_colocalization(
+    path: Path, types: list[str], n_slides: int, n_cells: int
+) -> tuple[dict | None, str | None]:
+    """A tissue's fit (``load_colocalization``) at ``path``, ``fit_colocalization.py --tissue``'s, if it is of this
+    tissue's object: its cell types and the four classes as labels, in order, and its number of slides and of
+    cells. Else None, with why (None too when there is no file: that tissue's excess is then off, as without a fit).
+    A fit of another object would put another tissue's pair scale, or an older build's, on these cells."""
+    try:
+        fit = load_colocalization(path)
+    except (OSError, ValueError, KeyError, TypeError) as err:  # a truncated or foreign JSON among others
+        return None, f"{path.name} cannot be read ({type(err).__name__}: {err})"
+    if fit is None:
+        return None, None
+    labels = {by: fit[by]["labels"] if by in fit else None for by in LABEL_SETS}
+    if labels != {"types": list(types), "classes": list(c.CLASSES)}:
+        return None, f"{path.name} is of other cell types than the object's"
+    if (fit["n_slides"], fit["n_cells"]) != (n_slides, n_cells):
+        cells = "an unstated number of" if fit["n_cells"] is None else f"{fit['n_cells']:,}"
+        return None, (f"{path.name} sums {fit['n_slides']} slides and {cells} cells, the object has "
+                      f"{n_slides} and {n_cells:,}: fit it again")
+    return fit, None
 
 
 def colocalization_request(query: dict[str, list[str]], n_labels: dict[str, int]) -> tuple[int, str, int | None, str]:
@@ -821,13 +848,19 @@ class Cohort:
     """The slide table, the cell types and small caches: cells, slide files, ball features and clusterings.
 
     Of the liver cohort, or with ``tissue`` of one GTEx tissue folder (``find_tissues``), which has none of the
-    liver cohort's precomputed layers: no 10-NN density, pathology groups, chromatic TDA, e-means clusters or
-    colocalization scale. Its Voronoi densities are binned at the slide's own deciles, and its cell types outside
-    the four classes count as "other".
+    liver cohort's precomputed layers: no 10-NN density, pathology groups, chromatic TDA or e-means clusters. Its
+    colocalization scale is its own fit, ``<colocalization_dir>/<slug>.json`` (``fit_colocalization.py --tissue``),
+    if there is one of this object (``tissue_colocalization``); else that layer is off, and
+    ``colocalization_note`` says why when a file is there. Its Voronoi densities are binned at the slide's own
+    deciles, and its cell types outside the four classes count as "other".
     """
 
     def __init__(
-        self, wsi_dir: Path | None, tissue: Path | None = None, wsi_listing: dict[str, list[Path]] | None = None
+        self,
+        wsi_dir: Path | None,
+        tissue: Path | None = None,
+        wsi_listing: dict[str, list[Path]] | None = None,
+        colocalization_dir: Path | None = None,
     ) -> None:
         self.liver = tissue is None
         self.h5ad = c.H5AD if tissue is None else tissue_h5ad(tissue)
@@ -843,10 +876,15 @@ class Cohort:
         self._voronoi: OrderedDict[str, bytes] = OrderedDict()  # slide ID -> its cells' Voronoi densities and codes
         self._neighbourhood: OrderedDict[tuple, bytes] = OrderedDict()  # (slide ID, k, label set) -> both values
         self._colocalization: OrderedDict[tuple, dict] = OrderedDict()  # (slide ID, k, label set) -> excess
+        self.colocalization_note: str | None = None  # why a tissue's fit file is not used
         if tissue is None:
             self._load_liver(wsi_dir)
         else:
             self._load_tissue(tissue, wsi_dir, wsi_listing)
+            if colocalization_dir is not None:
+                self.colocalization_fit, self.colocalization_note = tissue_colocalization(
+                    colocalization_dir / f"{self.slug}.json", self.types, len(self.slides), int(self.slides["end"].max())
+                )
         self.n_labels = {"types": len(self.types), "classes": len(c.CLASSES)}
 
     def _load_tissue(self, folder: Path, wsi_dir: Path | None, wsi_listing: dict[str, list[Path]] | None) -> None:
@@ -877,7 +915,7 @@ class Cohort:
             for r in rows
         }
         self.emeans_sets = None  # the liver cohort's
-        self.colocalization_fit = None  # fitted over the liver cohort
+        self.colocalization_fit = None  # the tissue's own, if any, set after loading (the liver cohort's says nothing of it)
         self.rho = self.deciles = self.curve = self.k_nn = None  # the pathology study's 10-NN density is the liver's
         self.density_um_per_px = c.PX_UM  # the Voronoi density's scale: GTEx's assumed µm per px, as for liver
 
@@ -1164,14 +1202,19 @@ class Cohort:
 
     def colocalization(self, slide_id: str, k: int, by: str) -> dict:
         """The slide's colocalization excess among every cell's k nearest other cells, by HistoPLUS type or by
-        class: ``LocalColocalizationExtractor`` on the cohort's pair scale for this k (fit_colocalization.py),
-        shrunk toward the slide's pooled excess. Keys: ``codes`` (each cell's label), ``shrunk`` and ``raw`` ((N, K)
-        float32), ``summary`` (``summarize_cloud``) and ``gain`` ((K, K) bool, the pair scale)."""
+        class: ``LocalColocalizationExtractor`` on the cohort's pair scale for this k (fit_colocalization.py; a
+        tissue's own fit over its slides), shrunk toward the slide's pooled excess. Keys: ``codes`` (each cell's
+        label), ``shrunk`` and ``raw`` ((N, K) float32), ``summary`` (``summarize_cloud``) and ``gain`` ((K, K) bool,
+        the pair scale)."""
         fit = self.colocalization_fit
-        if not self.liver:
-            raise KeyError("no colocalization excess outside the liver cohort: its pair scale was fitted over liver")
-        if fit is None:
+        if fit is None and self.liver:
             raise KeyError("colocalization: results/colocalization_scale.json is missing (fit_colocalization.py)")
+        if fit is None:
+            raise KeyError(
+                f"no colocalization excess for {self.slug}: "
+                + (self.colocalization_note or "no fit of its own (fit_colocalization.py --tissue, served with "
+                   "--colocalization-dir); the liver cohort's pair scale says nothing of another tissue")
+            )
         if k not in fit["k"]:
             raise ValueError(f"the cohort fit has k from {min(fit['k'])} to {max(fit['k'])}")
         key = (slide_id, k, by)
@@ -1317,9 +1360,12 @@ class Library:
     """What the server shows: the liver cohort alone, or with ``tissues`` every GTEx tissue folder ``find_tissues``
     finds there, by slug, each opened at the start. A folder that cannot be opened is listed with its error, so
     that the others still open; the first by slug that opens is the default. Only the ``WARM_TISSUES`` tissues
-    used last keep their slides in memory, so that the server needs no more for many tissues than for a few."""
+    used last keep their slides in memory, so that the server needs no more for many tissues than for a few.
+    ``colocalization_dir``: where each tissue's own colocalization fit is, ``<slug>.json`` (``Cohort``)."""
 
-    def __init__(self, wsi_dir: Path | None, tissues: Path | None = None) -> None:
+    def __init__(
+        self, wsi_dir: Path | None, tissues: Path | None = None, colocalization_dir: Path | None = None
+    ) -> None:
         self.cohorts: dict[str | None, Cohort] = {}
         self.failed: dict[str, str] = {}  # slug -> why its folder cannot be opened
         self.skipped: dict[str, str] = {}  # folder name -> the file it lacks
@@ -1333,7 +1379,7 @@ class Library:
         listing = list_wsis(wsi_dir) if wsi_dir else None  # once for every tissue: the folder may hold every slide
         for folder in found:
             try:
-                self.cohorts[folder.name] = Cohort(wsi_dir, folder, listing)
+                self.cohorts[folder.name] = Cohort(wsi_dir, folder, listing, colocalization_dir)
             except Exception as err:  # an unreadable object or a slides.csv that does not fit it, among others
                 self.failed[folder.name] = f"{type(err).__name__}: {err}"
         if not self.cohorts:
@@ -1470,6 +1516,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         help="a GTEx tissue folder (<slug>/ holding gtex_<slug>_cells.h5ad and slides.csv), or a folder of them, the\n"
         "page choosing among them: shown instead of the liver cohort, without its precomputed layers",
     )
+    parser.add_argument(
+        "--colocalization-dir",
+        type=Path,
+        help="with --tissues: a folder of each tissue's own colocalization fit, <slug>.json (fit_colocalization.py\n"
+        "--tissue); a tissue without one, or with one of another object, has that colouring off",
+    )
     parser.add_argument("--host", default="127.0.0.1", help="address to listen on (default: %(default)s)")
     parser.add_argument("--port", type=int, default=8765, help="port (default: %(default)s)")
     args = parser.parse_args(argv)
@@ -1480,6 +1532,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         if not find_tissues(args.tissues)[0]:
             parser.error(f"--tissues {args.tissues} is not a tissue folder (<slug>/ holding gtex_<slug>_cells.h5ad and "
                          "slides.csv) and holds none")
+    if args.colocalization_dir is not None:
+        if args.tissues is None:
+            parser.error("--colocalization-dir goes with --tissues (the liver cohort's fit is results/colocalization_scale.json)")
+        args.colocalization_dir = args.colocalization_dir.expanduser()
+        if not args.colocalization_dir.is_dir():
+            parser.error(f"--colocalization-dir {args.colocalization_dir} is not a folder")
     if args.wsi_dir is not None:
         args.wsi_dir = args.wsi_dir.expanduser()
         if not args.wsi_dir.is_dir():
@@ -1491,9 +1549,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return args
 
 
-def print_tissues(library: Library, wsi_dir: Path | None) -> None:
-    """One line per tissue folder: its slides and cell types, those outside the four classes, its slide files; or
-    why it cannot be opened. Then the folders that lack one of the two files."""
+def print_tissues(library: Library, wsi_dir: Path | None, colocalization_dir: Path | None = None) -> None:
+    """One line per tissue folder: its slides and cell types, those outside the four classes, its slide files, with
+    ``colocalization_dir`` whether it has its colocalization fit; or why it cannot be opened. Then the folders that
+    lack one of the two files."""
     for row in library.listing():
         if row["error"] is not None:
             print(f"{row['slug']}: cannot be opened: {row['error']}", flush=True)
@@ -1504,6 +1563,12 @@ def print_tissues(library: Library, wsi_dir: Path | None) -> None:
             line += f" ({', '.join(cohort.unmapped)} outside the four classes: counted as other)"
         if wsi_dir is not None:
             line += f", {len(cohort.wsis)} with a slide file"
+        if colocalization_dir is not None:
+            if cohort.colocalization_fit is not None:
+                line += ", colocalization fitted over its slides"
+            else:
+                why = cohort.colocalization_note or f"no {row['slug']}.json"
+                line += f", no colocalization ({why})"
         print(line, flush=True)
     for name, reason in library.skipped.items():
         print(f"{name}: skipped, {reason}", flush=True)
@@ -1512,7 +1577,7 @@ def print_tissues(library: Library, wsi_dir: Path | None) -> None:
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
     try:
-        library = Library(args.wsi_dir, args.tissues)
+        library = Library(args.wsi_dir, args.tissues, args.colocalization_dir)
     except ValueError as err:
         if args.tissues is None:
             raise
@@ -1527,7 +1592,7 @@ def main(argv: list[str] | None = None) -> None:
         if args.wsi_dir is not None:
             print(f"{len(cohort.wsis)} of them with a slide file in {args.wsi_dir}", flush=True)
     else:
-        print_tissues(library, args.wsi_dir)
+        print_tissues(library, args.wsi_dir, args.colocalization_dir)
         print(f"opens {library.default} first; /?tissue=<slug> opens another, as the page's tissue menu does", flush=True)
     server = ThreadingHTTPServer((args.host, args.port), make_handler(library))
     print(f"open http://{args.host}:{args.port}/  (Ctrl-C stops)", flush=True)

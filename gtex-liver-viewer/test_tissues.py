@@ -485,3 +485,133 @@ def test_a_tissues_slide_file_tiles_do_not_count_as_using_it(tmp_path):
     library.get("lung").cells("GTEX-LUNG-0126")
     library.get("spleen", warm=False)  # a tile of a spleen slide: the H&E only, none of the slides' values
     assert library.get("liver", warm=False)._cells and library.get("lung", warm=False)._cells
+
+
+# -- a tissue's own colocalization fit (fit_colocalization.py --tissue, served with --colocalization-dir) ----------
+
+
+def fit_tissue(folder: Path, out_dir: Path) -> dict:
+    import fit_colocalization
+
+    fit_colocalization.main(["--tissue", str(folder), "--out-dir", str(out_dir)])
+    return json.loads((out_dir / f"{folder.name}.json").read_text())
+
+
+def test_a_tissues_fit_sums_its_own_slides_by_its_own_types_and_class_map(tmp_path):
+    from local_colocalization import excess_sums
+
+    written = write_tissue(tmp_path / "root", "Lung")
+    fit = fit_tissue(written["folder"], tmp_path / "fits")
+    assert fit["tissue"]["slug"] == "lung" and fit["tissue"]["unmapped"] == ["Adipocyte"]
+    assert (fit["n_slides"], fit["n_cells"]) == (3, 185) and fit["k"] == list(range(2, 101))
+    assert fit["label_sets"]["types"]["labels"] == CLASS_NAMES
+    assert fit["label_sets"]["classes"]["labels"] == list(c.CLASSES)
+    classes, _ = serve.class_codes_or_other(CLASS_NAMES)  # Adipocyte, outside the four classes, counts as other
+    for by, n_labels in (("types", len(CLASS_NAMES)), ("classes", len(c.CLASSES))):
+        pair = np.zeros((len(fit["k"]), n_labels, n_labels))
+        target = np.zeros((len(fit["k"]), n_labels))
+        for slide_id, _, _ in SLIDES:  # each slide alone, as the fit's training clouds
+            codes = np.array(type_codes(written["cells"][slide_id]["types"]), dtype=np.int64)
+            labels = codes if by == "types" else classes[codes].astype(np.int64)
+            xy = written["cells"][slide_id]["xy"].astype(np.float64)
+            p, t = excess_sums(xy, labels, n_labels, fit["k"])
+            pair += p
+            target += t
+        np.testing.assert_allclose(fit["label_sets"][by]["pair_excess"], np.round(pair, 3), atol=1e-9)
+        np.testing.assert_allclose(fit["label_sets"][by]["target_excess"], np.round(target, 3), atol=1e-9)
+
+
+def test_a_tissue_with_its_fit_colours_its_cells_by_their_colocalization_excess(tmp_path):
+    written = write_tissue(tmp_path / "root", "Lung")
+    fit_tissue(written["folder"], tmp_path / "fits")
+    cohort = serve.Cohort(None, written["folder"], colocalization_dir=tmp_path / "fits")
+    meta = cohort.meta()["colocalization"]
+    assert meta["n_slides"] == 3 and (meta["k_min"], meta["k_max"]) == (2, 100)
+    assert meta["labels"] == {"types": CLASS_NAMES, "classes": list(c.CLASSES)}
+    for by, n_labels in (("types", len(CLASS_NAMES)), ("classes", len(c.CLASSES))):
+        entry = cohort.colocalization("GTEX-CCCC-0326", 15, by)
+        assert entry["raw"].shape == entry["shrunk"].shape == (80, n_labels)
+        assert entry["gain"].shape == (n_labels, n_labels) and np.isfinite(entry["shrunk"]).any()
+    assert cohort.colocalization_note is None
+
+
+def test_a_tissue_without_its_fit_has_no_colocalization_excess(tmp_path):
+    written = write_tissue(tmp_path / "root", "Lung")
+    (tmp_path / "fits").mkdir()
+    cohort = serve.Cohort(None, written["folder"], colocalization_dir=tmp_path / "fits")
+    assert cohort.meta()["colocalization"] is None and cohort.colocalization_note is None
+    with pytest.raises(KeyError, match="no fit of its own"):
+        cohort.colocalization("GTEX-AAAA-0126", 15, "types")
+
+
+@pytest.mark.parametrize(
+    "spoil, reason",
+    [
+        (lambda fit: fit.update(n_cells=fit["n_cells"] + 1), "fit it again"),  # an older build's object
+        (lambda fit: fit.update(n_slides=2), "fit it again"),
+        (lambda fit: fit.pop("n_cells"), "unstated number"),
+        (lambda fit: fit["label_sets"]["types"].update(labels=["A", "B", "C", "D"]), "other cell types"),
+        (lambda fit: fit["label_sets"].pop("classes"), "other cell types"),
+        (lambda fit: fit.update(k="not a list"), "cannot be read"),
+    ],
+)
+def test_a_tissue_ignores_a_fit_of_another_object_and_says_why(tmp_path, spoil, reason):
+    written = write_tissue(tmp_path / "root", "Lung")
+    fit = fit_tissue(written["folder"], tmp_path / "fits")
+    spoil(fit)
+    (tmp_path / "fits" / "lung.json").write_text(json.dumps(fit))
+    cohort = serve.Cohort(None, written["folder"], colocalization_dir=tmp_path / "fits")
+    assert cohort.colocalization_fit is None and reason in cohort.colocalization_note
+    assert cohort.meta()["colocalization"] is None
+    with pytest.raises(KeyError, match=reason):
+        cohort.colocalization("GTEX-AAAA-0126", 15, "types")
+
+
+def test_a_truncated_fit_is_ignored_not_fatal(tmp_path):
+    written = write_tissue(tmp_path / "root", "Lung")
+    (tmp_path / "fits").mkdir()
+    (tmp_path / "fits" / "lung.json").write_text('{"k": [2, 3')
+    cohort = serve.Cohort(None, written["folder"], colocalization_dir=tmp_path / "fits")
+    assert cohort.colocalization_fit is None and "cannot be read" in cohort.colocalization_note
+
+
+def test_the_server_serves_the_excess_of_the_tissues_with_a_fit_only(tmp_path):
+    lung = write_tissue(tmp_path / "root", "Lung", seed=1)
+    write_tissue(tmp_path / "root", "Spleen", slides=[("GTEX-DDDD-0426", 30, SLIDES[0][2])], seed=2)
+    fit_tissue(lung["folder"], tmp_path / "fits")
+    library = serve.Library(None, tmp_path / "root", tmp_path / "fits")
+    server = ThreadingHTTPServer(("127.0.0.1", 0), serve.make_handler(library))
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        status, body = get(server, "/api/meta?tissue=lung")
+        assert status == 200 and json.loads(body)["colocalization"]["n_slides"] == 3
+        status, body = get(server, "/api/meta?tissue=spleen")
+        assert status == 200 and json.loads(body)["colocalization"] is None
+        status, blob = get(server, "/api/colocalization/GTEX-CCCC-0326?tissue=lung&k=15&by=types")
+        assert status == 200 and struct.unpack_from("<I", blob)[0] == 80
+        assert get(server, "/api/colocalization/GTEX-CCCC-0326/summary?tissue=lung&k=15&by=classes")[0] == 200
+        status, body = get(server, "/api/colocalization/GTEX-DDDD-0426?tissue=spleen&k=15")
+        assert status == 404 and "no fit of its own" in json.loads(body)["error"]
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+def test_the_colocalization_folder_goes_with_tissues_and_a_tissue_fit_with_its_folder(tmp_path, capsys):
+    import fit_colocalization
+
+    written = write_tissue(tmp_path / "root", "Lung")
+    (tmp_path / "fits").mkdir()
+    with pytest.raises(SystemExit):
+        serve.parse_args(["--colocalization-dir", str(tmp_path / "fits")])  # the liver cohort: no tissues
+    with pytest.raises(SystemExit):
+        serve.parse_args(["--tissues", str(tmp_path / "root"), "--colocalization-dir", str(tmp_path / "none")])
+    args = serve.parse_args(["--tissues", str(tmp_path / "root"), "--colocalization-dir", str(tmp_path / "fits")])
+    assert args.colocalization_dir == tmp_path / "fits"
+    with pytest.raises(SystemExit):
+        fit_colocalization.parse_args(["--tissue", str(written["folder"])])  # without --out-dir
+    with pytest.raises(SystemExit):
+        fit_colocalization.parse_args(["--tissue", str(tmp_path / "root"), "--out-dir", str(tmp_path / "fits")])
+    assert "one tissue folder" in capsys.readouterr().err

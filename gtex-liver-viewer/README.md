@@ -86,7 +86,7 @@ on its own.
   when done.
 - **Tests.** `../gtex-liver-chromatic-domains/.venv/bin/python -m pytest -q -W error`
   runs `test_viewer.py`, `test_tissues.py` and `test_local_colocalization.py`:
-  85 tests on synthetic inputs, about 4 s.
+  97 tests on synthetic inputs, about 7 s.
 - **Colocalization scale.** The colocalization excess needs
   `results/colocalization_scale.json`, which `fit_colocalization.py` writes from
   every cohort cell (reading the cohort read only). With the same venv, from this
@@ -408,7 +408,7 @@ server answers 404):
 | pathology groups | the pathology study's `pathology.csv`, of liver slides |
 | chromatic TDA of the pilot's centres | the chromatic pilot's sampled centres, on 30 liver slides |
 | cohort e-means clusters | fitted to every liver cohort cell's ball |
-| colocalization excess | each pair's gain or loss scale, fitted over the liver cohort (`fit_colocalization.py`) |
+| colocalization excess | each pair's gain or loss scale, fitted over the liver cohort (`fit_colocalization.py`); on unless the tissue has a fit of its own (below) |
 
 Checked on 2026-11-25 on a temporary root whose `liver/` linked the liver
 object, with a `slides.csv` from `liver_cohort.csv` and the row ranges of the
@@ -439,6 +439,7 @@ files above):
 |---|---|
 | `<slug>/gtex_<slug>_cells.h5ad` (h5py mode "r") | each cell's slide, cell type and position (`obsm/spatial`, level-0 pixels), as from the liver object; the categorical codes at whatever integer width the object has (int8 for a tissue of up to 126 slides) |
 | `<slug>/slides.csv` | each slide's rows (`n_cells`, `row_start`, `row_end`), its donor (`Subject ID`, `Sex`, `Age Bracket`, `Hardy Scale`), its `Pathology Categories` and `Pathology Notes`, its `Hidden` flag, and the `Tissue` |
+| `<colocalization-dir>/<slug>.json` (with `--colocalization-dir`) | the tissue's own colocalization scale, as `results/colocalization_scale.json` is the liver cohort's; used only if its cell types, classes, slides and cells are the object's, else that colouring stays off and the startup line says why |
 | the slide files in `--wsi-dir` | the H&E tiles, as for liver |
 
 ## Code
@@ -479,3 +480,32 @@ files above):
   tissue objects that it writes with h5py in anndata's encoding, their codes as
   wide as pandas makes them: int8 `obs/slide_id/codes` for a tissue of up to 126
   slides, int16 above (liver's 594).
+
+## A tissue's own colocalization scale
+
+The liver cohort's pair scale says nothing of another tissue's cell-type mix, so a
+tissue folder gets the colocalization excess only from a fit over its own slides:
+
+```bash
+python fit_colocalization.py --tissue <root>/<slug> --out-dir <fits>   # writes <fits>/<slug>.json
+python serve.py --tissues <root> --colocalization-dir <fits>
+```
+
+The fit reads the tissue as the viewer does (`serve.Cohort`), with its own cell
+types and the class map that counts types outside the four classes as "other",
+and records the object's slides and cells. The viewer refuses a fit whose labels,
+slides or cells differ from the object's (another tissue's, or an older build's):
+that tissue's colouring stays off and the startup line says why. The fits are
+outputs: keep them beside the build, not in git (about 400 kB each).
+
+On a Slurm cluster, one array task per row of the build's `tissues.csv`, from
+this folder:
+
+```bash
+sbatch --array=0-39%10 fit_colocalization_tissues.sbatch <root> <fits> [<python>]
+```
+
+Checked on 2026-11-26 on CeMM's GTEx build (40 tissues, 25,168 slides): Cervix -
+Ectocervix's 38 slides and 5.4M cells took 32 s on 4 cores; the fit holds each
+slide's 100 nearest neighbours (800 B a cell), about 4 GB for the largest slide
+(spleen, 2.7M cells).
