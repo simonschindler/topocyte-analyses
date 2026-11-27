@@ -1,9 +1,10 @@
 // The viewer's page: the slide list filtered by pathology group, an OpenSeadragon canvas (the slide's H&E
-// tiles, or a blank canvas of the cloud's size) and the WebGL layer of the slide's cells.
+// tiles, or a blank canvas of the cloud's size) and the WebGL layer of the slide's cells. When the server shows GTEx
+// tissue folders (serve.py --tissues), the page shows one tissue (?tissue=<slug>) without the liver cohort's layers.
 import { CurvesPanel, binOf, classCounts, valueClassCounts } from "/static/curves.js";
 import { MatrixPanel } from "/static/matrix.js";
 import { PointsOverlay } from "/static/overlay.js";
-import { CLUSTERS, DENSITY, PALETTE, colourScale, rgb } from "/static/palette.js";
+import { CLUSTERS, DENSITY, EXTRA_TYPES, PALETTE, colourScale, rgb } from "/static/palette.js";
 
 const BLANK = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 const CELL_UM = 10; // a cell's drawn diameter once zoomed in far enough
@@ -11,7 +12,7 @@ const SCALE_MAX_CSS = 150; // the scale bar's longest length on screen
 const BACKGROUND = 15; // the code of the cells that are not centres, in a TDA clustering
 const GREY = { light: "#c3c2b7", dark: "#52514e" }; // those cells, drawn behind the centres
 const CENTRE_SIZE = 2.5; // TDA centres are drawn this much larger than the cells
-const API = 3; // the /api/meta "api" this page is written for (serve.py's API)
+const API = 4; // the /api/meta "api" this page is written for (serve.py's API)
 // The layers of each cell's k nearest other cells, all four from one request (/api/neighbourhood/<id>).
 const NEIGHBOURHOOD = ["homotypic", "entropy", "excess", "kl"];
 const USES_NEIGHBOURS = [...NEIGHBOURHOOD, "coloc"]; // the layers the k and label controls apply to
@@ -19,6 +20,8 @@ const NONE = 15; // the code of a cell without a value (no Voronoi cell) when th
 const LOWEST = -3.4e38; // below every value: where a cell has none, and the threshold that hides nothing
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => n.toLocaleString("en-US");
+// The tissue asked for in the address when the server shows tissue folders; without one, the server's first.
+const TISSUE = new URLSearchParams(window.location.search).get("tissue");
 
 const state = {
   meta: null, // /api/meta
@@ -50,6 +53,16 @@ let curves = null; // the class curves panel
 let matrix = null; // the colocalization matrix panel
 
 function setStatus(text) { $("status").textContent = text; }
+
+// Whether the page shows a GTEx tissue folder (serve.py --tissues) rather than the liver cohort: then there is no
+// 10-NN density, pathology group, chromatic TDA, e-means cluster or colocalization scale, which are the liver's.
+function isTissue() { return Boolean(state.meta?.tissue); }
+
+// An API address, for the tissue folder shown when there is one.
+function withTissue(url) {
+  if (!isTissue()) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}tissue=${encodeURIComponent(state.meta.tissue.slug)}`;
+}
 
 async function fetchOk(url) {
   const response = await fetch(url);
@@ -93,8 +106,8 @@ function paletteMode() {
 }
 
 // A density bin's range in cells per mm²: below the second decile, between two deciles, or from the top one on.
-function densityRange(j, joiner = "–") {
-  const d = state.meta.density.deciles;
+// The deciles are the cohort's 10-NN deciles unless given.
+function densityRange(j, joiner = "–", d = state.meta.density.deciles) {
   const per = (v) => fmt(Math.round(v));
   if (j === 0) return `< ${per(d[1])}`;
   if (j === d.length - 1) return `≥ ${per(d[j])}`;
@@ -133,7 +146,20 @@ function densityTitle(j) {
   return `Cohort decile ${j + 1} of the 10-NN density: ${densityRange(j, " to ")} cells per mm²; ${kept}.`;
 }
 
+// The Voronoi density's fixed bins: the liver cohort's 10-NN deciles, or in a tissue folder, which has no cohort
+// deciles, the shown slide's own (the server's codes; their edges are computed here for the legend, once the
+// densities are here).
+function voronoiDeciles() {
+  return isTissue() ? (state.voronoi?.deciles ?? null) : state.meta.density.deciles;
+}
+
+function voronoiRange(j, joiner = "–") {
+  const d = voronoiDeciles();
+  return d ? densityRange(j, joiner, d) : "–";
+}
+
 function voronoiTitle(j) {
+  if (isTissue()) return `Voronoi density in decile ${j + 1} of this slide's: ${voronoiRange(j, " to ")} cells per mm².`;
   return `Voronoi density in cohort decile ${j + 1} of the 10-NN density: ${densityRange(j, " to ")} cells per mm².`;
 }
 
@@ -162,7 +188,7 @@ const VALUES = {
   },
   voronoi: {
     what: "Voronoi density", name: "Voronoi density", unit: "cells per mm²", digits: 0, bins: 10,
-    label: densityRange, title: voronoiTitle, noneLabel: "no Voronoi cell",
+    label: voronoiRange, title: voronoiTitle, noneLabel: "no Voronoi cell",
     noneTitle: "On the convex hull of the slide's cells, where the Voronoi cell is unbounded, or at the position "
       + "of another cell, which shares it.",
     noneCode: () => state.meta.density.voronoi_none,
@@ -320,11 +346,15 @@ function valueNote(layer) {
       + `${um} µm per pixel).`;
     fixed = "In the cohort's ten deciles: the thresholds of the density slices.";
   } else if (layer === "voronoi") {
+    const scale = isTissue() ? "GTEx's assumed scale, as for liver" : "as the 10-NN density";
     text = "Each cell's Voronoi density, 1 / the area of its Voronoi cell among the slide's cells, in cells per mm² "
-      + `(at ${um} µm per pixel, as the 10-NN density). ${fmt(bins ? bins.counts[bins.none] : 0)} cells have no `
+      + `(at ${um} µm per pixel, ${scale}). ${fmt(bins ? bins.counts[bins.none] : 0)} cells have no `
       + "Voronoi cell of their own (grey): on the convex hull it is unbounded, and cells at one position share "
       + "theirs. Cells at the edge of the tissue have large Voronoi cells, so low densities.";
-    fixed = "In the 10-NN density's bins, the cohort's ten deciles.";
+    fixed = isTissue()
+      ? "In this slide's own ten deciles, each with a tenth of its cells: a tissue folder has no cohort deciles (the "
+        + "liver cohort's bins are its 10-NN density's)."
+      : "In the 10-NN density's bins, the cohort's ten deciles.";
   } else if (layer === "coloc") {
     const { k, by, of, score } = state.coloc;
     const kind = by === "types" ? "HistoPLUS type" : "class";
@@ -341,7 +371,8 @@ function valueNote(layer) {
     fixed = "In bins of 0.2 about 0, −0.1 to +0.1.";
   } else {
     const { k, by, nLabels } = state.neighbourhood;
-    const [kind, kinds] = by === "types" ? ["HistoPLUS type", "HistoPLUS types"] : ["class", "classes"];
+    const typed = isTissue() ? ["cell type", "cell types"] : ["HistoPLUS type", "HistoPLUS types"];
+    const [kind, kinds] = by === "types" ? typed : ["class", "classes"];
     const step = state.meta.neighbourhood.kl_step;
     text = {
       homotypic: `Each cell's homotypic fraction: the share of its ${k} nearest other cells that are of its own `
@@ -394,18 +425,59 @@ function legendEntries() {
     return entries;
   }
   if (state.layer === "types") {
-    return Object.keys(PALETTE.types[mode]).map((name) => {
-      const t = types.indexOf(name);
-      if (t < 0) throw new Error(`the cohort has no cell type ${name}`);
-      return { key: t, label: name, hex: PALETTE.types[mode][name], n: count(t) };
-    });
+    const outside = "Not one of the four classes' types: counted as other.";
+    return typeOrder(mode).map((t) => ({
+      key: t,
+      label: types[t],
+      hex: typeColour(t, mode),
+      n: count(t),
+      ...(PALETTE.types[mode][types[t]] ? {} : { title: outside }),
+    }));
   }
+  const unmapped = state.meta.tissue?.unmapped ?? [];
   return classes.map((name, k) => ({
     key: k,
     label: name,
     hex: PALETTE.classes[mode][name],
     n: types.reduce((sum, _, t) => sum + (typeClass[t] === k ? count(t) : 0), 0),
+    ...(name === "other" && unmapped.length
+      ? { title: `Also counts ${unmapped.join(", ")}, not among the four classes' types.` } : {}),
   }));
+}
+
+// The type codes in the legend's order: the palette's 14 (each of which the liver cohort must have), or in a tissue
+// folder those of them it has and then its types outside them.
+function typeOrder(mode) {
+  const { types } = state.meta;
+  const named = Object.keys(PALETTE.types[mode]);
+  if (!isTissue()) {
+    return named.map((name) => {
+      const t = types.indexOf(name);
+      if (t < 0) throw new Error(`the cohort has no cell type ${name}`);
+      return t;
+    });
+  }
+  const others = types.map((_, t) => t).filter((t) => !named.includes(types[t]));
+  return [...named.filter((name) => types.includes(name)).map((name) => types.indexOf(name)), ...others];
+}
+
+// A type's colour: the palette's, or for a tissue folder's type outside the 14 one of EXTRA_TYPES in turn.
+function typeColour(t, mode) {
+  const name = state.meta.types[t];
+  const hex = PALETTE.types[mode][name];
+  if (hex || !isTissue()) return hex;
+  const others = state.meta.types.filter((other) => !(other in PALETTE.types[mode]));
+  return EXTRA_TYPES[mode][others.indexOf(name) % EXTRA_TYPES[mode].length];
+}
+
+// In a tissue folder, under the type and class colourings: the cell types outside the four classes' types, which
+// count as other.
+function unmappedNote() {
+  const unmapped = state.meta.tissue?.unmapped ?? [];
+  if (!unmapped.length || !["types", "classes"].includes(state.layer)) return "";
+  return `${unmapped.join(", ")} ${unmapped.length === 1 ? "is" : "are"} not among the four classes' types (the `
+    + "cell-type study's map of the liver cohort's 14), so counted as other: in the classes, the class curves and "
+    + "the clusters' class fractions.";
 }
 
 // A saved e-means cluster's profile over every cohort cell, which is what defines it.
@@ -445,7 +517,7 @@ function applyColors() {
   }
   types.forEach((name, t) => {
     const k = typeClass[t];
-    const hex = state.layer === "types" ? PALETTE.types[mode][name] : PALETTE.classes[mode][classes[k]];
+    const hex = state.layer === "types" ? typeColour(t, mode) : PALETTE.classes[mode][classes[k]];
     if (!hex) throw new Error(`no colour for ${name}`);
     const shown = state.layer === "types" ? !state.hidden.types.has(t) : !state.hidden.classes.has(k);
     table.set([...rgb(hex), shown ? 1 : 0], t * 4);
@@ -507,8 +579,9 @@ function renderLegend() {
     return row;
   }));
   const note = $("legend-note");
-  note.hidden = !VALUE_LAYERS.includes(state.layer);
-  if (!note.hidden) note.textContent = valueNote(state.layer);
+  const unmapped = unmappedNote();
+  note.hidden = !VALUE_LAYERS.includes(state.layer) && !unmapped;
+  if (!note.hidden) note.textContent = VALUE_LAYERS.includes(state.layer) ? valueNote(state.layer) : unmapped;
 }
 
 // --- slide list -------------------------------------------------------------------------------------------
@@ -517,6 +590,7 @@ function renderGroups() {
   const select = $("group");
   const all = new Option(`All groups (${state.meta.slides.length})`, "");
   select.replaceChildren(all, ...state.meta.groups.map((g) => new Option(`${g.name} (${g.n_slides})`, g.name)));
+  $("group-field").hidden = !state.meta.groups.length; // a tissue folder has no pathology groups
   const withSlide = state.meta.slides.filter((s) => s.wsi).length;
   $("hne-only").disabled = withSlide === 0;
   $("hne-only-label").textContent = `Only slides with H&E (${withSlide})`;
@@ -537,10 +611,10 @@ function renderPathology(id) {
   const s = state.meta.slides.find((x) => x.slide_id === id);
   $("pathology").hidden = !s;
   if (!s) return;
-  $("pathology-group").textContent = `Pathology group: ${s.group}`;
-  $("pathology-flag").textContent = s.quality_flag ? `flag: ${s.quality_flag}` : "";
-  $("pathology-donor").textContent = `Donor: ${s.sex || "sex unknown"}, age ${s.age_bracket || "unknown"}; `
-    + `Hardy scale: ${s.hardy_scale || "unknown"}`;
+  $("pathology-group").textContent = isTissue() ? state.meta.tissue.name : `Pathology group: ${s.group}`;
+  $("pathology-flag").textContent = s.quality_flag ? `flag: ${s.quality_flag}` : s.hidden ? "hidden on the GTEx Portal" : "";
+  $("pathology-donor").textContent = `Donor${s.subject_id ? ` ${s.subject_id}` : ""}: ${s.sex || "sex unknown"}, `
+    + `age ${s.age_bracket || "unknown"}; Hardy scale: ${s.hardy_scale || "unknown"}`;
   $("pathology-categories").textContent = `GTEx categories: ${s.categories || "none"}`;
   $("pathology-notes").textContent = s.notes ? `Notes: ${s.notes}` : "No pathology notes.";
 }
@@ -550,7 +624,7 @@ function renderSlides() {
   const onlyHne = $("hne-only").checked;
   const slides = state.meta.slides.filter((s) => (!group || s.group === group) && (!onlyHne || s.wsi));
   const list = $("slides");
-  if (group) {
+  if (group || !state.meta.groups.length) {
     list.replaceChildren(...slides.map(slideOption));
   } else {
     const blocks = state.meta.groups.map((g) => {
@@ -650,8 +724,8 @@ async function showColoc() {
     try {
       const slide = `/api/colocalization/${encodeURIComponent(id)}`;
       const [buffer, summary] = await Promise.all([
-        fetchOk(`${slide}?k=${k}&by=${by}&of=${of}&score=${score}`).then((r) => r.arrayBuffer()),
-        fetchOk(`${slide}/summary?k=${k}&by=${by}`).then((r) => r.json()),
+        fetchOk(withTissue(`${slide}?k=${k}&by=${by}&of=${of}&score=${score}`)).then((r) => r.arrayBuffer()),
+        fetchOk(withTissue(`${slide}/summary?k=${k}&by=${by}`)).then((r) => r.json()),
       ]);
       const same = Number($("nb-k").value) === k && $("nb-by").value === by && $("coloc-of").value === of
         && $("coloc-score").value === score;
@@ -717,7 +791,7 @@ async function showNeighbourhood(layer) {
     note.hidden = false;
     note.textContent = `Finding the ${k} nearest cells of each of ${fmt(state.info.n_cells)} cells …`;
     try {
-      const url = `/api/neighbourhood/${encodeURIComponent(id)}?k=${k}&by=${by}`;
+      const url = withTissue(`/api/neighbourhood/${encodeURIComponent(id)}?k=${k}&by=${by}`);
       const buffer = await fetchOk(url).then((r) => r.arrayBuffer());
       if (state.slide !== id || Number($("nb-k").value) !== k || $("nb-by").value !== by) return;
       state.neighbourhood = parseNeighbourhood(buffer, state.types.length, k, by);
@@ -729,13 +803,18 @@ async function showNeighbourhood(layer) {
   if ($(`layer-${layer}`).checked) setLayer(layer);
 }
 
-// /api/voronoi/<id>: [n u32][n f32 Voronoi density][n u8 code], the code VORONOI_NONE for cells without one.
+// /api/voronoi/<id>: [n u32][n f32 Voronoi density][n u8 code], the code VORONOI_NONE for cells without one. In a
+// tissue folder the codes are the slide's own deciles, whose edges the legend takes from here (numpy's linear
+// quantiles, as the server's, of the float32 densities).
 function parseVoronoi(buffer, n) {
   if (new DataView(buffer).getUint32(0, true) !== n) throw new Error("Voronoi densities for another number of cells");
   const codes = new Uint8Array(buffer, 4 + 4 * n, n);
   const counts = new Array(state.meta.density.voronoi_none + 1).fill(0);
   for (let i = 0; i < n; i++) counts[codes[i]] += 1;
-  return { values: new Float32Array(buffer, 4, n), codes, counts };
+  const values = new Float32Array(buffer, 4, n);
+  const sorted = isTissue() ? sortedOf(values) : [];
+  const deciles = sorted.length ? Array.from({ length: 10 }, (_, j) => quantile(sorted, j / 10)) : null;
+  return { values, codes, counts, deciles };
 }
 
 // The Voronoi layer: the server triangulates the shown slide's cells on first use, which takes a few seconds on
@@ -748,7 +827,7 @@ async function showVoronoi() {
     note.hidden = false;
     note.textContent = `Computing the Voronoi cells of ${fmt(state.info.n_cells)} cells …`;
     try {
-      const buffer = await fetchOk(`/api/voronoi/${encodeURIComponent(id)}`).then((r) => r.arrayBuffer());
+      const buffer = await fetchOk(withTissue(`/api/voronoi/${encodeURIComponent(id)}`)).then((r) => r.arrayBuffer());
       if (state.slide !== id) return;
       state.voronoi = parseVoronoi(buffer, state.types.length);
     } catch (err) {
@@ -874,7 +953,7 @@ async function runClusters() {
       tda: `/api/tda/${encodeURIComponent(id)}?k=${k}`,
       emeans: `/api/emeans/${encodeURIComponent(id)}?set=${encodeURIComponent(set)}&k=${k}`,
     }[method] ?? `/api/cluster/${encodeURIComponent(id)}?k=${k}&radius=${radius}&density=${density ? 1 : 0}`;
-    const result = await fetchOk(url).then((r) => r.json());
+    const result = await fetchOk(withTissue(url)).then((r) => r.json());
     if (state.slide !== id) return;
     let labels = decode(result.labels);
     if (result.tda) {
@@ -910,13 +989,16 @@ function thresholdAt(step) {
 
 // Hide the cells below the threshold in every layer, as the overlay decides it: by bin where the bins differ,
 // by float32 density inside the threshold's bin.
-// The attribute the slider thresholds: the colouring's values, or the 10-NN density under a categorical colouring.
-function thresholdOf() {
-  return VALUE_LAYERS.includes(state.layer) ? state.layer : "density";
+// The attribute the slider thresholds under a colouring: its values, or the 10-NN density under a categorical
+// colouring, which a tissue folder does not have: there, nothing (null).
+function thresholdOf(layer = state.layer) {
+  if (VALUE_LAYERS.includes(layer)) return layer;
+  return isTissue() ? null : "density";
 }
 
 function thresholdSource() {
   const on = thresholdOf();
+  if (on === null) return null;
   return on === "density" ? state.rho : valuesOf(on);
 }
 
@@ -935,7 +1017,7 @@ function thresholdArraysOf(source) {
 // slices), or the colouring's own values, where a cell without one is below every threshold. The class curves
 // follow.
 function syncThreshold() {
-  if (!overlay || !state.density) return;
+  if (!overlay || !state.types) return; // no slide yet
   const on = thresholdOf();
   const source = thresholdSource();
   if (on === "density") {
@@ -965,6 +1047,16 @@ function lowerBound(sorted, t) {
 function applyThreshold() {
   const step = Number($("threshold").value);
   const on = thresholdOf();
+  $("threshold").disabled = on === null;
+  if (on === null) {
+    $("threshold-label").textContent = "Nothing to threshold under this colouring";
+    overlay?.setThreshold(0, LOWEST);
+    curves?.setMarker(null);
+    $("threshold-note").textContent = "A tissue folder has no 10-NN density, which the slider thresholds under the "
+      + "type, class and cluster colourings for liver: choose a value colouring (Voronoi density or a neighbourhood "
+      + "value) to threshold its values.";
+    return;
+  }
   $("threshold-label").textContent = `Show only cells with ${VALUES[on].name} at or above`;
   if (on !== "density") {
     applyValueThreshold(on, step);
@@ -1030,6 +1122,7 @@ let shownCurves = null; // the class curves on show: the values they threshold a
 
 // The caption of the class curves' x axis for the attribute the slider thresholds.
 function curvesCaption(on) {
+  if (on === null) return "no threshold under this colouring in a tissue folder: choose a value colouring";
   if (on === "density") return "threshold: cohort density percentile (every 10 = a density slice)";
   const { name, unit } = VALUES[on];
   const short = unit === "cells per mm²" ? "cells/mm²" : unit;
@@ -1163,7 +1256,8 @@ function applyHne() {
 function slideStatus(info) {
   const where = info.wsi ? ($("hne").checked ? "on its H&E" : "H&E hidden") : "no slide file";
   const scale = `${info.um_per_px} µm/px${info.um_source === "assumed" ? " (assumed)" : ""}`;
-  return `${info.slide_id} · ${info.group}${info.pilot ? " (pilot)" : ""} · ${fmt(info.n_cells)} cells · ${where} · ${scale}`;
+  const group = info.group || state.meta.tissue?.name; // a tissue folder's slides have no group
+  return `${info.slide_id} · ${group}${info.pilot ? " (pilot)" : ""} · ${fmt(info.n_cells)} cells · ${where} · ${scale}`;
 }
 
 async function loadSlide(id) {
@@ -1172,9 +1266,9 @@ async function loadSlide(id) {
   setStatus(`Loading ${id} …`);
   try {
     const [info, buffer, density] = await Promise.all([
-      fetchOk(`/api/slide/${encodeURIComponent(id)}`).then((r) => r.json()),
-      fetchOk(`/api/cells/${encodeURIComponent(id)}`).then((r) => r.arrayBuffer()),
-      fetchOk(`/api/density/${encodeURIComponent(id)}`).then((r) => r.arrayBuffer()),
+      fetchOk(withTissue(`/api/slide/${encodeURIComponent(id)}`)).then((r) => r.json()),
+      fetchOk(withTissue(`/api/cells/${encodeURIComponent(id)}`)).then((r) => r.arrayBuffer()),
+      isTissue() ? null : fetchOk(`/api/density/${encodeURIComponent(id)}`).then((r) => r.arrayBuffer()),
     ]);
     if (state.slide !== id) return; // a later choice won
     const n = new DataView(buffer).getUint32(0, true);
@@ -1182,16 +1276,19 @@ async function loadSlide(id) {
     const types = new Uint8Array(buffer, 4 + 8 * n, n);
     const counts = new Array(state.meta.types.length).fill(0);
     for (let i = 0; i < n; i++) counts[types[i]] += 1;
-    if (new DataView(density).getUint32(0, true) !== n) throw new Error(`density for another number of cells`);
-    const rho = new Float32Array(density, 4, n);
-    const bins = new Uint8Array(density, 4 + 4 * n, n);
-    const binCounts = new Array(DENSITY.light.length).fill(0);
-    for (let i = 0; i < n; i++) binCounts[bins[i]] += 1;
+    let [rho, bins, binCounts] = [null, null, null]; // the 10-NN density, which a tissue folder does not have
+    if (density) {
+      if (new DataView(density).getUint32(0, true) !== n) throw new Error(`density for another number of cells`);
+      rho = new Float32Array(density, 4, n);
+      bins = new Uint8Array(density, 4 + 4 * n, n);
+      binCounts = new Array(DENSITY.light.length).fill(0);
+      for (let i = 0; i < n; i++) binCounts[bins[i]] += 1;
+    }
     const source = info.wsi
       ? {
         width: info.width, height: info.height, tileSize: info.tile_size, tileOverlap: 0,
         minLevel: 0, maxLevel: info.max_level,
-        getTileUrl: (level, x, y) => `/api/tile/${encodeURIComponent(id)}/${level}/${x}_${y}.jpeg`,
+        getTileUrl: (level, x, y) => withTissue(`/api/tile/${encodeURIComponent(id)}/${level}/${x}_${y}.jpeg`),
       }
       : { width: info.width, height: info.height, tileSize: 256, tileOverlap: 0, getTileUrl: () => BLANK };
     viewer.addOnceHandler("open", () => {
@@ -1214,7 +1311,7 @@ async function loadSlide(id) {
       overlay ??= new PointsOverlay(viewer, CELL_UM / info.um_per_px);
       overlay.cellPx = CELL_UM / info.um_per_px;
       shownCodes = codesOf(state.layer);
-      overlay.setPoints(xy, shownCodes, bins, rho);
+      overlay.setPoints(xy, shownCodes, bins ?? new Uint8Array(n), rho ?? new Float32Array(n)); // none hidden
       state.thresholdSource = rho;
       syncThreshold();
       $("hne").disabled = !info.wsi;
@@ -1238,6 +1335,43 @@ async function loadSlide(id) {
 
 // --- start ------------------------------------------------------------------------------------------------
 
+// A tissue folder's page: its name as the title, the tissue menu when the server shows several (choosing one opens
+// its page), its own word for cell types, and the liver cohort's layers off, each saying why.
+function renderTissue() {
+  const { tissue, tissues } = state.meta;
+  if (!tissue) return;
+  const nCells = state.meta.slides.reduce((sum, s) => sum + s.n_cells, 0);
+  document.title = `${tissue.name} cell viewer`;
+  $("title").textContent = document.title;
+  $("subtitle").textContent = `GTEx tissue folder ${tissue.slug}: ${fmt(state.meta.slides.length)} slides, `
+    + `${fmt(nCells)} cells`;
+  if (tissues.length > 1) {
+    $("tissue").replaceChildren(...tissues.map((t) => {
+      const option = new Option(t.error ? `${t.name} (cannot be opened)` : `${t.name} (${fmt(t.n_slides)})`, t.slug);
+      option.disabled = Boolean(t.error);
+      if (t.error) option.title = t.error;
+      return option;
+    }));
+    $("tissue").value = tissue.slug;
+    $("tissue").addEventListener("change", (event) => {
+      window.location.search = new URLSearchParams({ tissue: event.target.value }).toString();
+    });
+    $("tissue-field").hidden = false;
+  }
+  $("types-label").textContent = "Cell type";
+  $("nb-by").querySelector("option[value=types]").textContent = "cell type";
+  $("layer-density").disabled = true;
+  $("layer-density").parentElement.title = "Liver only: the pathology study's 10-NN density, over the liver cohort.";
+  for (const [method, why] of [["tda", "the chromatic pilot's centres"], ["emeans", "fitted to the liver cohort's cells"]]) {
+    const option = $("method").querySelector(`option[value=${method}]`);
+    option.textContent += " (liver only)";
+    option.title = `Liver only: ${why}.`;
+    option.disabled = true; // as updateMethod keeps it once a slide is shown
+  }
+  // A browser may restore a radio checked on this address before: none of the liver's.
+  if ($("layer-density").checked || $("layer-coloc").checked) $("layer-types").checked = true;
+}
+
 async function init() {
   const dark = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
   document.documentElement.dataset.theme = storedTheme() || (dark ? "dark" : "light");
@@ -1251,10 +1385,12 @@ async function init() {
   });
   viewer.addHandler("update-viewport", updateScaleBar);
   viewer.addHandler("resize", updateScaleBar);
-  state.meta = await fetchOk("/api/meta").then((r) => r.json());
+  state.meta = await fetchOk(TISSUE ? `/api/meta?tissue=${encodeURIComponent(TISSUE)}` : "/api/meta")
+    .then((r) => r.json());
   if (state.meta.api !== API) {
     throw new Error("serve.py was started before this page changed (or after): stop it and start it again");
   }
+  renderTissue();
   renderGroups();
   $("group").addEventListener("change", renderSlides);
   $("hne-only").addEventListener("change", renderSlides);
@@ -1265,7 +1401,7 @@ async function init() {
     if (radio.value === "coloc") state.matrixClosed = false;
     $("scale").hidden = !VALUE_LAYERS.includes(radio.value);
     showPercentiles(radio.value, state.scale.mode);
-    const next = VALUE_LAYERS.includes(radio.value) ? radio.value : "density";
+    const next = thresholdOf(radio.value);
     if (next !== thresholdOf()) {
       $("threshold").value = "0"; // a new attribute to threshold starts with none
       applyThreshold();
@@ -1286,7 +1422,9 @@ async function init() {
   matrix = new MatrixPanel({ chart: $("matrix-chart"), tip: $("matrix-tip"), scale: $("matrix-scale") });
   $("layer-coloc").disabled = !state.meta.colocalization;
   if (!state.meta.colocalization) {
-    $("layer-coloc").parentElement.title = "results/colocalization_scale.json is missing: run fit_colocalization.py";
+    $("layer-coloc").parentElement.title = isTissue()
+      ? "Liver only: each pair's scale was fitted over the liver cohort (fit_colocalization.py)."
+      : "results/colocalization_scale.json is missing: run fit_colocalization.py";
   }
   renderColocTargets();
   for (const id of ["coloc-of", "coloc-score"]) {
@@ -1336,6 +1474,7 @@ async function init() {
     chart: $("curves-chart"), legend: $("curves-legend"), tip: $("curves-tip"), select: $("curves-view"),
   });
   updateCurves(); // the caption until a slide is here
+  if (isTissue()) applyThreshold(); // under the type colouring a tissue folder has nothing to threshold
   curves.setColours(classColours(), state.meta.classes);
   $("curves-close").addEventListener("click", () => showCurves(false));
   $("curves-open").addEventListener("click", () => showCurves(true));
@@ -1355,4 +1494,12 @@ async function init() {
   $("slides").focus();
 }
 
-init().catch((err) => setStatus(`Could not start: ${err.message}`));
+init().catch((err) => {
+  setStatus(`Could not start: ${err.message}`);
+  if (TISSUE) { // a tissue this server does not show (or cannot open): its first page shows what it does
+    const link = document.createElement("a");
+    link.href = "/";
+    link.textContent = "Open the server's first page.";
+    $("status").append(" ", link);
+  }
+});

@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 from scipy import sparse
 
+import local_colocalization as lc
 from local_colocalization import (
     CellColocalizationResult,
     LocalColocalizationExtractor,
@@ -216,3 +217,23 @@ def test_the_extractor_refuses_bad_settings_and_an_unfitted_transform():
         LocalColocalizationExtractor(tau2=-1.0)
     with pytest.raises(ValueError, match="fit"):
         LocalColocalizationExtractor().transform([(np.zeros((1, 2)), [0])])
+
+
+@pytest.mark.parametrize("n, k", [(1, 5), (4, 5), (237, 7), (300, 100)])
+def test_neighbour_counts_by_chunks_are_the_graphs_counts(monkeypatch, n, k):
+    """o counted a chunk of cells at a time equals G H of the whole k-nearest-neighbour graph, background cells
+    (code -1) included, across chunk boundaries and for clouds of no more than k cells."""
+    from scipy import sparse
+
+    monkeypatch.setattr(lc, "CHUNK", 50)
+    rng = np.random.default_rng(n)
+    xy = rng.uniform(0, 100, size=(n, 2))
+    codes = rng.integers(-1, 4, size=n)
+    nbrs = lc.neighbour_indices(xy, k)
+    k_eff = nbrs.shape[1]
+    graph = sparse.csr_matrix((np.ones(n * k_eff), nbrs.ravel(), np.arange(n + 1) * k_eff), shape=(n, n))
+    expected = np.asarray((graph @ lc._one_hot(codes, 4)).todense())
+    counts = lc._counts(xy, codes, 4, k)
+    assert counts.observed.dtype == np.float64
+    np.testing.assert_array_equal(counts.observed, expected)
+    assert (counts.degree == k_eff).all()

@@ -18,6 +18,7 @@ Run from this folder with the chromatic-domains study's venv (README.md)::
 
     ../gtex-liver-chromatic-domains/.venv/bin/python serve.py                  # point clouds only
     ../gtex-liver-chromatic-domains/.venv/bin/python serve.py --wsi-dir DIR    # plus the H&E of the slides in DIR
+    ../gtex-liver-chromatic-domains/.venv/bin/python serve.py --tissues ROOT   # GTEx tissue folders instead
 
 then open the printed address. A slide is shown on its H&E when DIR holds a file named ``<slide_id><suffix>``
 with a suffix OpenSlide reads (``.svs`` for GTEx); the cells' coordinates are level-0 pixels of that slide.
@@ -29,6 +30,13 @@ bracket and Hardy scale), the chromatic-domains study's ``results/pilot.csv`` an
 the e-means study's ``results/labels_<set>.npz``, ``clusters.json``, ``gap.json`` and ``kmeans_check.json``
 (the e-means option is off when they are not there), this folder's ``results/colocalization_scale.json``
 (the colocalization option is off without it), and the slide files.
+
+With ``--tissues``, the server shows GTEx tissue folders instead of the liver cohort: one folder ``<slug>/`` of the
+per-tissue layout, or a folder of them, among which the page chooses (``?tissue=<slug>``). It reads each folder's
+``gtex_<slug>_cells.h5ad`` (h5py mode "r") and ``slides.csv`` (each slide's rows, GTEx Portal donor fields and
+pathology categories and notes), and nothing else there. The layers that need the liver cohort's precomputed files
+(the 10-NN density, the pathology groups, the chromatic TDA, the e-means clusters, the colocalization scale) are
+off; a cell type outside the four classes counts as "other".
 Nothing is written.
 """
 
@@ -36,8 +44,10 @@ from __future__ import annotations
 
 import argparse
 import base64
+import ctypes
 import json
 import math
+import os
 import struct
 import sys
 import threading
@@ -49,10 +59,15 @@ from io import BytesIO
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-import numpy as np
-import pandas as pd
+# BLAS's thread pools, set before numpy loads them: one thread per core of the node, each with its own buffers,
+# does not fit a capped address space, and the viewer's linear algebra is small. A value already set is kept.
+for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ.setdefault(_var, "4")
 
-from local_colocalization import LocalColocalizationExtractor
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+
+from local_colocalization import WORKERS, LocalColocalizationExtractor, neighbour_indices  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 # The chromatic-domains study's common module: the cohort's paths, the four classes and the pilot's constants.
@@ -93,13 +108,32 @@ UNIT_BINS = 10  # both values lie in [0, 1], coloured in bins of 0.1
 # type, in 11 bins of 0.2 around chance (0), and the Kullback-Leibler divergence in nats, in steps of KL_STEP.
 EXCESS_EDGES = np.array([-0.9, -0.7, -0.5, -0.3, -0.1, 0.1, 0.3, 0.5, 0.7, 0.9])
 KL_STEP = 0.25
-API = 3  # what /api/meta and the endpoints give; app.js refuses a server with another, as one started before an update
+API = 4  # what /api/meta and the endpoints give; app.js refuses a server with another, as one started before an update
 # Colocalization excess: fit_colocalization.py's cohort sums, which fix each pair's gain or loss scale per k.
 COLOCALIZATION = HERE / "results" / "colocalization_scale.json"
 COLOCALIZATION_NONE = len(EXCESS_EDGES) + 1  # the code of a cell without an estimate, after the 11 excess bins
-COLOCALIZATION_CACHE = 2  # (slide, k, label set) whose cell-by-type excess (up to 80 MB each) stays in memory
+COLOCALIZATION_CACHE = 2  # (slide, k, label set) whose cell-by-type excess (up to 300 MB each) stays in memory
+# One neighbour table at a time, of any slide, layer or tissue: GTEx's largest slide (spleen, 2.7M cells) needs
+# 2.2 GB for its 100 nearest neighbours, and the page asks for a slide's excess and its summary at once. A request
+# that waited finds what the one before it computed in the cache.
+NEIGHBOUR_TABLES = threading.Lock()
 COLOCALIZATION_SCORES = ("shrunk", "raw")
 STATIC_TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css"}
+# GTEx tissue folders (--tissues): slides.csv's GTEx Portal columns, as the viewer names them, and its row columns.
+TISSUE_FIELDS = {
+    "Tissue Sample ID": "slide_id",
+    "Tissue": "tissue",
+    "Subject ID": "subject_id",
+    "Sex": "sex",
+    "Age Bracket": "age_bracket",
+    "Hardy Scale": "hardy_scale",
+    "Pathology Categories": "categories",
+    "Pathology Notes": "notes",
+    "Hidden": "hidden",
+}
+ROW_FIELDS = ("n_cells", "row_start", "row_end")  # row_end exclusive, in the object's row order
+MAX_TYPES = 16  # cell types the page can colour: its colour table has one entry per code (overlay.js's MAX_TYPES)
+WARM_TISSUES = 2  # tissue folders whose slides stay in memory (up to the caches' sizes above), the last ones used
 
 
 def slide_table(pathology: pd.DataFrame, slide_ids: list[str], bounds: np.ndarray, pilot: set[str]) -> pd.DataFrame:
@@ -242,15 +276,10 @@ def voronoi_codes(rho: np.ndarray, deciles: np.ndarray) -> np.ndarray:
 def nearest_others(xy: np.ndarray, k: int) -> np.ndarray:
     """(n, k): each cell's k nearest other cells, nearest first (``cKDTree``); the cell itself is left out, even
     where another cell shares its position. ``ValueError`` unless there are more than k cells."""
-    from scipy.spatial import cKDTree
-
     n = len(xy)
     if n <= k:
         raise ValueError(f"{n} cells, too few for {k} neighbours each")
-    idx = cKDTree(xy).query(xy, k=k + 1, workers=-1)[1]
-    others = idx != np.arange(n)[:, None]
-    others[others.all(axis=1), -1] = False  # k + 1 others at one distance: the cell itself fell out, drop the last
-    return idx[others].reshape(n, k)
+    return neighbour_indices(xy, k)  # by chunks of cells, without the distances: 8 B a neighbour, not 16 and more
 
 
 def homotypic_counts(labels: np.ndarray, nbrs: np.ndarray) -> np.ndarray:
@@ -351,7 +380,11 @@ def load_colocalization(path: Path) -> dict | None:
     if not path.is_file():
         return None
     data = json.loads(path.read_text())
-    out: dict = {"k": [int(k) for k in data["k"]], "n_slides": int(data["n_slides"])}
+    out: dict = {
+        "k": [int(k) for k in data["k"]],
+        "n_slides": int(data["n_slides"]),
+        "n_cells": None if data.get("n_cells") is None else int(data["n_cells"]),  # None in a fit that does not say
+    }
     for by, fit in data["label_sets"].items():
         pair = np.asarray(fit["pair_excess"], dtype=np.float64)
         target = np.asarray(fit["target_excess"], dtype=np.float64)
@@ -360,6 +393,29 @@ def load_colocalization(path: Path) -> dict | None:
             raise ValueError(f"{path.name}: {by}'s sums are {pair.shape} and {target.shape} for {n} labels")
         out[by] = {"labels": list(fit["labels"]), "pair": pair, "target": target}
     return out
+
+
+def tissue_colocalization(
+    path: Path, types: list[str], n_slides: int, n_cells: int
+) -> tuple[dict | None, str | None]:
+    """A tissue's fit (``load_colocalization``) at ``path``, ``fit_colocalization.py --tissue``'s, if it is of this
+    tissue's object: its cell types and the four classes as labels, in order, and its number of slides and of
+    cells. Else None, with why (None too when there is no file: that tissue's excess is then off, as without a fit).
+    A fit of another object would put another tissue's pair scale, or an older build's, on these cells."""
+    try:
+        fit = load_colocalization(path)
+    except (OSError, ValueError, KeyError, TypeError) as err:  # a truncated or foreign JSON among others
+        return None, f"{path.name} cannot be read ({type(err).__name__}: {err})"
+    if fit is None:
+        return None, None
+    labels = {by: fit[by]["labels"] if by in fit else None for by in LABEL_SETS}
+    if labels != {"types": list(types), "classes": list(c.CLASSES)}:
+        return None, f"{path.name} is of other cell types than the object's"
+    if (fit["n_slides"], fit["n_cells"]) != (n_slides, n_cells):
+        cells = "an unstated number of" if fit["n_cells"] is None else f"{fit['n_cells']:,}"
+        return None, (f"{path.name} sums {fit['n_slides']} slides and {cells} cells, the object has "
+                      f"{n_slides} and {n_cells:,}: fit it again")
+    return fit, None
 
 
 def colocalization_request(query: dict[str, list[str]], n_labels: dict[str, int]) -> tuple[int, str, int | None, str]:
@@ -421,30 +477,124 @@ def load_donors(path: Path) -> dict[str, dict[str, str]]:
     return {row.slide_id: {key: getattr(row, key) for key in list(columns.values())[1:]} for row in table.itertuples()}
 
 
-def cell_types() -> list[str]:
-    """The cohort's HistoPLUS cell types; a cell's type code is its index here."""
+def tissue_h5ad(folder: Path) -> Path:
+    """A tissue folder's object: ``<slug>/gtex_<slug>_cells.h5ad``, the slug being the folder's name."""
+    return folder / f"gtex_{folder.name}_cells.h5ad"
+
+
+def find_tissues(path: Path) -> tuple[list[Path], dict[str, str]]:
+    """The GTEx tissue folders at ``path``: ``path`` itself when it is one, else its subfolders that are, by name;
+    and the subfolders that hold one of the two files a tissue folder needs but not the other, with the one they
+    lack (a folder still being copied, say). A tissue folder holds ``gtex_<its name>_cells.h5ad`` and ``slides.csv``;
+    nothing else in it (provenance.json, centroids/) or beside it (tissues.csv) is read."""
+
+    def lacks(folder: Path) -> list[str]:
+        return [name for name in (tissue_h5ad(folder).name, "slides.csv") if not (folder / name).is_file()]
+
+    if not lacks(path):
+        return [path], {}
+    found, skipped = [], {}
+    for folder in sorted(p for p in path.iterdir() if p.is_dir()):
+        missing = lacks(folder)
+        if not missing:
+            found.append(folder)
+        elif len(missing) == 1:
+            skipped[folder.name] = f"no {missing[0]}"
+    return found, skipped
+
+
+def h5ad_slides(path: Path) -> tuple[list[str], int]:
+    """An object's slide IDs (``obs/slide_id``'s categories) and its number of cells (rows)."""
     import h5py
 
-    with h5py.File(c.H5AD, "r") as f:
+    with h5py.File(path, "r") as f:
+        return c._strings(f["obs/slide_id/categories"][:]), int(f["obs/slide_id/codes"].shape[0])
+
+
+def load_tissue_slides(path: Path, names: list[str], n_rows: int) -> pd.DataFrame:
+    """A tissue folder's slides.csv: per slide its rows (``start``, ``end`` exclusive, ``n_cells``) and the GTEx
+    Portal fields, as text (an empty field stays empty, "NA" stays "NA"), named as ``TISSUE_FIELDS`` names them;
+    ``hidden`` is True where the Portal's Hidden is "true". In the file's order.
+
+    ``ValueError`` if a column is missing, the rows are not whole numbers, a slide is listed twice or has no cells,
+    ``n_cells`` is not ``row_end - row_start``, the rows do not run without gaps from 0 to the object's ``n_rows``
+    in the file's order, or the object (whose slide IDs are ``names``) does not name a slide.
+    """
+    table = pd.read_csv(path, dtype=str, keep_default_na=False)
+    missing = [column for column in (*TISSUE_FIELDS, *ROW_FIELDS) if column not in table.columns]
+    if missing:
+        raise ValueError(f"{path} lacks the columns {missing}")
+    if table.empty:
+        raise ValueError(f"{path} lists no slides")
+    try:
+        n, start, end = (table[column].astype(np.int64).to_numpy() for column in ROW_FIELDS)
+    except ValueError:
+        raise ValueError(f"{path}: n_cells, row_start and row_end must be whole numbers") from None
+    table = table.rename(columns=TISSUE_FIELDS)
+    if table["slide_id"].duplicated().any():
+        raise ValueError(f"{path} lists a slide twice: {table.loc[table['slide_id'].duplicated(), 'slide_id'].iloc[0]}")
+    if np.any(end - start != n) or np.any(n < 1):
+        raise ValueError(f"{path}: n_cells is not row_end - row_start, or a slide has no cells")
+    if start[0] != 0 or np.any(start[1:] != end[:-1]) or end[-1] != n_rows:
+        raise ValueError(f"{path}: the slides' rows do not run without gaps from 0 to the object's {n_rows:,} cells")
+    unknown = sorted(set(table["slide_id"]) - set(names))
+    if unknown:
+        raise ValueError(f"{path} lists {len(unknown)} slides that the object does not name, {unknown[0]} first")
+    out = table[[name for name in TISSUE_FIELDS.values() if name != "hidden"]].copy()
+    out["hidden"] = table["hidden"].str.strip().str.lower() == "true"
+    out["start"], out["end"], out["n_cells"] = start, end, n
+    return out
+
+
+def class_codes_or_other(types: list[str]) -> tuple[np.ndarray, list[str]]:
+    """The class code (index into ``CLASSES``) of every cell type, as ``common.class_codes`` gives it, but with the
+    types outside the cell-type study's four classes in "other" rather than refused; and those types, in order.
+    Every liver type has its class, so on liver's types this is ``common.class_codes``."""
+    lookup = {member: code for code, name in enumerate(c.CLASSES) for member in c.GROUP_MEMBERS[name]}
+    other = c.CLASSES.index("other")
+    return np.array([lookup.get(t, other) for t in types], dtype=np.int8), [t for t in types if t not in lookup]
+
+
+def slide_deciles(rho: np.ndarray) -> np.ndarray:
+    """The deciles of a slide's own finite values (numpy's linear quantiles at 0, 0.1, ..., 0.9): the Voronoi
+    density's bins in a tissue folder, where there are no cohort deciles; NaN where no value is finite."""
+    finite = rho[np.isfinite(rho)]
+    if not finite.size:
+        return np.full(DENSITY_BINS, np.nan)
+    return np.quantile(finite, np.arange(DENSITY_BINS) / DENSITY_BINS)
+
+
+def cell_types(path: Path | None = None) -> list[str]:
+    """The HistoPLUS cell types of the cohort (or of the object at ``path``); a cell's type code is its index here."""
+    import h5py
+
+    with h5py.File(c.H5AD if path is None else path, "r") as f:
         return c._strings(f["obs/cell_type/categories"][:])
 
 
-def read_cells(slide_id: str, start: int, end: int, n_types: int) -> tuple[np.ndarray, np.ndarray]:
-    """One slide's cells, read only: level-0 px coordinates (n, 2) as float64 and HistoPLUS type codes as uint8.
+def read_cells(
+    slide_id: str, start: int, end: int, n_types: int, path: Path | None = None
+) -> tuple[np.ndarray, np.ndarray]:
+    """One slide's cells, read only from the cohort (or the object at ``path``): level-0 px coordinates (n, 2) as
+    float64 and HistoPLUS type codes as uint8.
 
-    The cohort file must name the slide at the first and the last of its rows, and every cell must have a
+    The file must name the slide at the first and the last of its rows and not at the rows just before and after
+    them (so that they are all of its cells, as a slide's cells are one block of rows), and every cell must have a
     finite position and a type.
     """
     import h5py
 
-    with h5py.File(c.H5AD, "r") as f:
+    with h5py.File(c.H5AD if path is None else path, "r") as f:
         names = c._strings(f["obs/slide_id/categories"][:])
         owners = f["obs/slide_id/codes"]
         first, last = names[int(owners[start])], names[int(owners[end - 1])]
+        beside = [int(owners[row]) for row in (start - 1, end) if 0 <= row < owners.shape[0]]
         xy = np.asarray(f["obsm/spatial"][start:end], dtype=np.float64)
         codes = np.asarray(f["obs/cell_type/codes"][start:end])
     if first != slide_id or last != slide_id:
         raise RuntimeError(f"cohort rows {start}:{end} run from {first} to {last}, not {slide_id}")
+    if any(code >= 0 and names[code] == slide_id for code in beside):
+        raise RuntimeError(f"cohort rows {start}:{end} are only part of {slide_id}'s cells, which run on beside them")
     if xy.shape != (end - start, 2) or not np.all(np.isfinite(xy)):
         raise RuntimeError(f"{slide_id}: obsm/spatial has shape {xy.shape} or non-finite values")
     if codes.min() < 0 or codes.max() >= n_types:
@@ -473,15 +623,29 @@ def cloud_extent(xy: np.ndarray) -> tuple[int, int]:
     return width, height
 
 
-def find_wsis(folder: Path, slide_ids: set[str]) -> dict[str, Path]:
-    """The cohort slides with a file ``<slide_id><suffix>`` directly in ``folder``; ``ValueError`` on two files."""
+def list_wsis(folder: Path) -> dict[str, list[Path]]:
+    """The files directly in ``folder`` with a suffix OpenSlide reads, by name without it (the slide ID): one
+    listing, which may be of every GTEx slide (25,713 on the cluster), checking whether an entry is a file only
+    when its name has such a suffix."""
+    listing: dict[str, list[Path]] = {}
+    with os.scandir(folder) as entries:
+        for entry in entries:
+            path = Path(entry.path)
+            if path.suffix.lower() in WSI_SUFFIXES and entry.is_file():
+                listing.setdefault(path.stem, []).append(path)
+    return listing
+
+
+def find_wsis(folder: Path, slide_ids: set[str], listing: dict[str, list[Path]] | None = None) -> dict[str, Path]:
+    """The cohort slides with a file ``<slide_id><suffix>`` directly in ``folder``; ``ValueError`` on two files.
+    ``listing`` is the folder's ``list_wsis`` when already made, so that one listing serves every tissue."""
+    listing = list_wsis(folder) if listing is None else listing
     found: dict[str, Path] = {}
-    for path in sorted(folder.iterdir()):
-        if not path.is_file() or path.suffix.lower() not in WSI_SUFFIXES or path.stem not in slide_ids:
-            continue
-        if path.stem in found:
-            raise ValueError(f"two slide files for {path.stem}: {found[path.stem].name} and {path.name}")
-        found[path.stem] = path
+    for slide_id in sorted(slide_ids & listing.keys()):
+        paths = sorted(listing[slide_id])
+        if len(paths) > 1:
+            raise ValueError(f"two slide files for {slide_id}: {paths[0].name} and {paths[1].name}")
+        found[slide_id] = paths[0]
     return found
 
 
@@ -510,7 +674,7 @@ def ball_class_counts(xy: np.ndarray, classes: np.ndarray, radius_px: float) -> 
     for k in range(len(c.CLASSES)):
         members = xy[classes == k]
         if len(members):
-            counts[:, k] = cKDTree(members).query_ball_point(xy, r=radius_px, return_length=True, workers=-1)
+            counts[:, k] = cKDTree(members).query_ball_point(xy, r=radius_px, return_length=True, workers=WORKERS)
     return counts
 
 
@@ -686,28 +850,91 @@ def remember(cache: OrderedDict, key, value, size: int):
 
 
 class Cohort:
-    """The slide table, the cell types and small caches: cells, slide files, ball features and clusterings."""
+    """The slide table, the cell types and small caches: cells, slide files, ball features and clusterings.
 
-    def __init__(self, wsi_dir: Path | None) -> None:
-        self.slides = load_slide_table()
-        self.by_id = {row.slide_id: row for row in self.slides.itertuples(index=False)}
-        self.types = cell_types()
-        self.type_class = np.array([int(k) for k in c.class_codes(self.types)], dtype=np.int64)
-        self.wsis = find_wsis(wsi_dir, set(self.by_id)) if wsi_dir else {}
+    Of the liver cohort, or with ``tissue`` of one GTEx tissue folder (``find_tissues``), which has none of the
+    liver cohort's precomputed layers: no 10-NN density, pathology groups, chromatic TDA or e-means clusters. Its
+    colocalization scale is its own fit, ``<colocalization_dir>/<slug>.json`` (``fit_colocalization.py --tissue``),
+    if there is one of this object (``tissue_colocalization``); else that layer is off, and
+    ``colocalization_note`` says why when a file is there. Its Voronoi densities are binned at the slide's own
+    deciles, and its cell types outside the four classes count as "other".
+    """
+
+    def __init__(
+        self,
+        wsi_dir: Path | None,
+        tissue: Path | None = None,
+        wsi_listing: dict[str, list[Path]] | None = None,
+        colocalization_dir: Path | None = None,
+    ) -> None:
+        self.liver = tissue is None
+        self.h5ad = c.H5AD if tissue is None else tissue_h5ad(tissue)
+        self.slug = None if tissue is None else tissue.name
         self._lock = threading.Lock()
         self._cells: OrderedDict[str, dict] = OrderedDict()  # slide ID -> xy, types, blob, extent
         self._zooms: OrderedDict[str, tuple] = OrderedDict()  # slide ID -> (OpenSlide, DeepZoomGenerator)
         self._features: OrderedDict[tuple, np.ndarray] = OrderedDict()  # (slide ID, µm/px, radius) -> features
         self._clusters: OrderedDict[tuple, dict] = OrderedDict()  # (slide ID, k, density, radius) -> clustering
         self._pilot: dict | None = None  # slide ID -> the pilot's saved centres, loaded on the first TDA request
-        self.emeans_sets = load_emeans(EMEANS)  # None without the e-means study's results
         self._packed: OrderedDict[tuple, np.ndarray] = OrderedDict()  # (set, k) -> packed labels of every cell
         self._density: OrderedDict[str, bytes] = OrderedDict()  # slide ID -> its cells' densities and bins
         self._voronoi: OrderedDict[str, bytes] = OrderedDict()  # slide ID -> its cells' Voronoi densities and codes
         self._neighbourhood: OrderedDict[tuple, bytes] = OrderedDict()  # (slide ID, k, label set) -> both values
         self._colocalization: OrderedDict[tuple, dict] = OrderedDict()  # (slide ID, k, label set) -> excess
-        self.colocalization_fit = load_colocalization(COLOCALIZATION)  # None without fit_colocalization.py's
+        self.colocalization_note: str | None = None  # why a tissue's fit file is not used
+        if tissue is None:
+            self._load_liver(wsi_dir)
+        else:
+            self._load_tissue(tissue, wsi_dir, wsi_listing)
+            if colocalization_dir is not None:
+                self.colocalization_fit, self.colocalization_note = tissue_colocalization(
+                    colocalization_dir / f"{self.slug}.json", self.types, len(self.slides), int(self.slides["end"].max())
+                )
         self.n_labels = {"types": len(self.types), "classes": len(c.CLASSES)}
+
+    def _load_tissue(self, folder: Path, wsi_dir: Path | None, wsi_listing: dict[str, list[Path]] | None) -> None:
+        """The slides, their rows and Portal fields from the folder's slides.csv, checked against its object."""
+        names, n_rows = h5ad_slides(self.h5ad)
+        table = load_tissue_slides(folder / "slides.csv", names, n_rows).sort_values("slide_id", ignore_index=True)
+        tissues = sorted(set(table["tissue"]))
+        if len(tissues) != 1:
+            raise ValueError(f"{folder / 'slides.csv'} names {len(tissues)} tissues, not one: {tissues[:3]}")
+        self.name = tissues[0]
+        self.slides = table.assign(group="", pilot=False)[["slide_id", "group", "start", "end", "n_cells", "pilot"]]
+        self.by_id = {row.slide_id: row for row in self.slides.itertuples(index=False)}
+        self.types = cell_types(self.h5ad)
+        if len(self.types) > MAX_TYPES:
+            raise ValueError(f"{self.h5ad.name} has {len(self.types)} cell types; the page colours {MAX_TYPES} at most")
+        classes, self.unmapped = class_codes_or_other(self.types)
+        self.type_class = classes.astype(np.int64)
+        self.wsis = find_wsis(wsi_dir, set(self.by_id), wsi_listing) if wsi_dir else {}
+        rows = list(table.itertuples(index=False))
+        # As the liver cohort's pathology notes and donors, with the Portal's Hidden flag and the donor's ID; the
+        # quality flag is the pathology study's, so empty.
+        self.notes = {
+            r.slide_id: {"categories": r.categories, "notes": r.notes, "quality_flag": "", "hidden": bool(r.hidden)}
+            for r in rows
+        }
+        self.donors = {
+            r.slide_id: {"sex": r.sex, "age_bracket": r.age_bracket, "hardy_scale": r.hardy_scale, "subject_id": r.subject_id}
+            for r in rows
+        }
+        self.emeans_sets = None  # the liver cohort's
+        self.colocalization_fit = None  # the tissue's own, if any, set after loading (the liver cohort's says nothing of it)
+        self.rho = self.deciles = self.curve = self.k_nn = None  # the pathology study's 10-NN density is the liver's
+        self.density_um_per_px = c.PX_UM  # the Voronoi density's scale: GTEx's assumed µm per px, as for liver
+
+    def _load_liver(self, wsi_dir: Path | None) -> None:
+        """The liver cohort: its slide table, the studies' precomputed layers and its donors."""
+        self.name = "Liver"
+        self.unmapped: list[str] = []  # every liver type has its class (common.class_codes refuses any other)
+        self.slides = load_slide_table()
+        self.by_id = {row.slide_id: row for row in self.slides.itertuples(index=False)}
+        self.types = cell_types()
+        self.type_class = np.array([int(k) for k in c.class_codes(self.types)], dtype=np.int64)
+        self.wsis = find_wsis(wsi_dir, set(self.by_id)) if wsi_dir else {}
+        self.emeans_sets = load_emeans(EMEANS)  # None without the e-means study's results
+        self.colocalization_fit = load_colocalization(COLOCALIZATION)  # None without fit_colocalization.py's
         n_cohort = int(self.slides["end"].max())
         self.rho = npz_memmap(c.SIB / "density.npz", "rho")  # every cohort cell's 10-NN density, cells per mm²
         with np.load(c.SIB / "density.npz", allow_pickle=False) as density:
@@ -730,10 +957,32 @@ class Cohort:
             if s["n_cells"] != n_cohort:
                 raise ValueError(f"the e-means set {name} has {s['n_cells']:,} cells, the cohort {n_cohort:,}")
 
+    def forget(self) -> None:
+        """Let go of the slides held in memory: their cells and every value and clustering computed from them (the
+        slide files stay open). They are read and computed again when asked for."""
+        with self._lock:
+            for cache in (self._cells, self._features, self._clusters, self._packed, self._density, self._voronoi,
+                          self._neighbourhood, self._colocalization):
+                cache.clear()
+
     def meta(self) -> dict:
+        """What the page needs to start. A tissue folder has no pathology groups, its ``density`` holds only what the
+        Voronoi density needs (no 10-NN deciles, curve or k), and its ``tissue`` gives its slug, its Portal name and
+        its cell types outside the four classes (``unmapped``, counted as "other"); the liver cohort's is None."""
         counts = self.slides["group"].value_counts()
+        density = (
+            {
+                "deciles": self.deciles.tolist(),
+                "k_nn": self.k_nn,
+                "um_per_px": self.density_um_per_px,
+                "curve": self.curve.tolist(),
+                "voronoi_none": VORONOI_NONE,
+            }
+            if self.liver
+            else {"um_per_px": self.density_um_per_px, "voronoi_none": VORONOI_NONE}
+        )
         return {
-            "groups": [{"name": g, "n_slides": int(counts.get(g, 0))} for g in GROUPS],
+            "groups": [{"name": g, "n_slides": int(counts.get(g, 0))} for g in GROUPS] if self.liver else [],
             "types": self.types,
             "type_class": self.type_class.tolist(),
             "classes": list(c.CLASSES),
@@ -749,13 +998,7 @@ class Cohort:
                 "tda_labellings": c.R,
                 "tda_centres": c.N_CENTRES,
             },
-            "density": {
-                "deciles": self.deciles.tolist(),
-                "k_nn": self.k_nn,
-                "um_per_px": self.density_um_per_px,
-                "curve": self.curve.tolist(),
-                "voronoi_none": VORONOI_NONE,
-            },
+            "density": density,
             "neighbourhood": {
                 "k": NEIGHBOURS,
                 "k_min": NEIGHBOURS_MIN,
@@ -780,6 +1023,9 @@ class Cohort:
                 {"name": name, "columns": len(s["columns"]), "k_tibshirani": s["k_tibshirani"]}
                 for name, s in self.emeans_sets.items()
             ],
+            "tissue": None
+            if self.liver
+            else {"slug": self.slug, "name": self.name, "unmapped": self.unmapped},
             "slides": [
                 {
                     "slide_id": r.slide_id,
@@ -801,7 +1047,7 @@ class Cohort:
                 self._cells.move_to_end(slide_id)
                 return self._cells[slide_id]
         row = self.by_id[slide_id]
-        xy, types = read_cells(slide_id, int(row.start), int(row.end), len(self.types))
+        xy, types = read_cells(slide_id, int(row.start), int(row.end), len(self.types), self.h5ad)
         entry = {"xy": xy, "types": types, "blob": cells_blob(xy, types), "extent": cloud_extent(xy)}
         with self._lock:
             return remember(self._cells, slide_id, entry, CACHE)
@@ -894,6 +1140,8 @@ class Cohort:
     def tda(self, slide_id: str, k: int) -> dict:
         """k-means of a pilot slide's saved centres on their level-2 scores (domains.level2's features and k-means),
         with each cluster's mean ball composition, as JSON-ready data."""
+        if not self.liver:
+            raise KeyError("no chromatic TDA outside the liver cohort: the pilot's centres are liver slides")
         key = ("tda", slide_id, k)
         with self._lock:
             if key in self._clusters:
@@ -930,6 +1178,8 @@ class Cohort:
 
     def density(self, slide_id: str) -> bytes:
         """Every cell's density and density bin (``density_codes``) on the slide, as ``density_blob``."""
+        if self.rho is None:
+            raise KeyError("no 10-NN density outside the liver cohort: the pathology study computed it for liver")
         with self._lock:
             if slide_id in self._density:
                 self._density.move_to_end(slide_id)
@@ -944,24 +1194,32 @@ class Cohort:
 
     def voronoi(self, slide_id: str) -> bytes:
         """Every cell's Voronoi density (``voronoi_density``, at the 10-NN density's µm per px; NaN without one)
-        and code (``voronoi_codes``) on the slide, as ``density_blob``; computed on first use."""
+        and code (``voronoi_codes``: at the cohort's 10-NN deciles, or in a tissue folder at the slide's own deciles)
+        on the slide, as ``density_blob``; computed on first use."""
         with self._lock:
             if slide_id in self._voronoi:
                 self._voronoi.move_to_end(slide_id)
                 return self._voronoi[slide_id]
         rho = voronoi_density(self.cells(slide_id)["xy"], self.density_um_per_px)
-        blob = density_blob(rho, voronoi_codes(rho, self.deciles))
+        blob = density_blob(rho, voronoi_codes(rho, self.deciles if self.liver else slide_deciles(rho)))
         with self._lock:
             return remember(self._voronoi, slide_id, blob, CACHE)
 
     def colocalization(self, slide_id: str, k: int, by: str) -> dict:
         """The slide's colocalization excess among every cell's k nearest other cells, by HistoPLUS type or by
-        class: ``LocalColocalizationExtractor`` on the cohort's pair scale for this k (fit_colocalization.py),
-        shrunk toward the slide's pooled excess. Keys: ``codes`` (each cell's label), ``shrunk`` and ``raw`` ((N, K)
-        float32), ``summary`` (``summarize_cloud``) and ``gain`` ((K, K) bool, the pair scale)."""
+        class: ``LocalColocalizationExtractor`` on the cohort's pair scale for this k (fit_colocalization.py; a
+        tissue's own fit over its slides), shrunk toward the slide's pooled excess. Keys: ``codes`` (each cell's
+        label), ``shrunk`` and ``raw`` ((N, K) float32), ``summary`` (``summarize_cloud``) and ``gain`` ((K, K) bool,
+        the pair scale)."""
         fit = self.colocalization_fit
-        if fit is None:
+        if fit is None and self.liver:
             raise KeyError("colocalization: results/colocalization_scale.json is missing (fit_colocalization.py)")
+        if fit is None:
+            raise KeyError(
+                f"no colocalization excess for {self.slug}: "
+                + (self.colocalization_note or "no fit of its own (fit_colocalization.py --tissue, served with "
+                   "--colocalization-dir); the liver cohort's pair scale says nothing of another tissue")
+            )
         if k not in fit["k"]:
             raise ValueError(f"the cohort fit has k from {min(fit['k'])} to {max(fit['k'])}")
         key = (slide_id, k, by)
@@ -969,6 +1227,14 @@ class Cohort:
             if key in self._colocalization:
                 self._colocalization.move_to_end(key)
                 return self._colocalization[key]
+        with NEIGHBOUR_TABLES:
+            with self._lock:
+                if key in self._colocalization:  # computed while this request waited
+                    return self._colocalization[key]
+            return self._compute_colocalization(key, fit)
+
+    def _compute_colocalization(self, key: tuple, fit: dict) -> dict:
+        slide_id, k, by = key
         cells = self.cells(slide_id)
         codes = cells["types"].astype(np.int64)
         if by == "classes":
@@ -1025,6 +1291,14 @@ class Cohort:
             if key in self._neighbourhood:
                 self._neighbourhood.move_to_end(key)
                 return self._neighbourhood[key]
+        with NEIGHBOUR_TABLES:
+            with self._lock:
+                if key in self._neighbourhood:  # computed while this request waited
+                    return self._neighbourhood[key]
+            return self._compute_neighbourhood(key)
+
+    def _compute_neighbourhood(self, key: tuple) -> bytes:
+        slide_id, k, by = key
         cells = self.cells(slide_id)
         labels = cells["types"].astype(np.int64)
         n_labels = len(self.types)
@@ -1060,6 +1334,8 @@ class Cohort:
     def emeans(self, slide_id: str, name: str, k: int) -> dict:
         """Every cell of the slide coloured by its saved e-means cluster, with each cluster's cohort profile, as
         JSON-ready data."""
+        if not self.liver:
+            raise KeyError("no e-means clusters outside the liver cohort: they were fitted to the liver cohort's cells")
         if self.emeans_sets is None:
             raise KeyError(f"the e-means study's results are not in {EMEANS}")
         key = ("emeans", slide_id, name, k)
@@ -1101,7 +1377,68 @@ class Cohort:
         return buf.getvalue()
 
 
-def make_handler(cohort: Cohort) -> type[BaseHTTPRequestHandler]:
+class Library:
+    """What the server shows: the liver cohort alone, or with ``tissues`` every GTEx tissue folder ``find_tissues``
+    finds there, by slug, each opened at the start. A folder that cannot be opened is listed with its error, so
+    that the others still open; the first by slug that opens is the default. Only the ``WARM_TISSUES`` tissues
+    used last keep their slides in memory, so that the server needs no more for many tissues than for a few.
+    ``colocalization_dir``: where each tissue's own colocalization fit is, ``<slug>.json`` (``Cohort``)."""
+
+    def __init__(
+        self, wsi_dir: Path | None, tissues: Path | None = None, colocalization_dir: Path | None = None
+    ) -> None:
+        self.cohorts: dict[str | None, Cohort] = {}
+        self.failed: dict[str, str] = {}  # slug -> why its folder cannot be opened
+        self.skipped: dict[str, str] = {}  # folder name -> the file it lacks
+        self._warm: OrderedDict[str | None, None] = OrderedDict()  # the tissues used last, the latest at the end
+        self._lock = threading.Lock()
+        if tissues is None:
+            self.cohorts[None] = Cohort(wsi_dir)
+            self.default = None
+            return
+        found, self.skipped = find_tissues(tissues)
+        listing = list_wsis(wsi_dir) if wsi_dir else None  # once for every tissue: the folder may hold every slide
+        for folder in found:
+            try:
+                self.cohorts[folder.name] = Cohort(wsi_dir, folder, listing, colocalization_dir)
+            except Exception as err:  # an unreadable object or a slides.csv that does not fit it, among others
+                self.failed[folder.name] = f"{type(err).__name__}: {err}"
+        if not self.cohorts:
+            raise ValueError(f"none of the tissue folders in {tissues} can be opened: {self.failed}")
+        self.default = min(self.cohorts)
+
+    def get(self, slug: str | None, warm: bool = True) -> Cohort:
+        """The cohort of a tissue slug, or the default one for None; ``KeyError`` for a slug not served. ``warm``:
+        the request uses the tissue's slides (not only a tile of a slide file), so they stay in memory, and the
+        slides of the tissue used longest ago beyond ``WARM_TISSUES`` are let go (requests for it still running
+        may put theirs back)."""
+        if slug in self.failed:
+            raise RuntimeError(f"tissue {slug} could not be opened: {self.failed[slug]}")
+        if slug is not None and slug not in self.cohorts:
+            if self.default is None:
+                raise KeyError(f"tissue {slug}: this server shows the liver cohort (no --tissues)")
+            raise KeyError(f"tissue {slug}: the tissue folders here are {', '.join(row['slug'] for row in self.listing())}")
+        key = self.default if slug is None else slug
+        if warm:
+            with self._lock:  # one tissue at a time, so that none is let go while it is used again
+                self._warm[key] = None
+                self._warm.move_to_end(key)
+                while len(self._warm) > WARM_TISSUES:
+                    self.cohorts[self._warm.popitem(last=False)[0]].forget()
+        return self.cohorts[key]
+
+    def listing(self) -> list[dict]:
+        """Every tissue folder found, by slug, with its Portal name, its slides and, if it cannot be opened, why."""
+        rows = [
+            {"slug": slug, "name": cohort.name, "n_slides": len(cohort.slides), "error": None}
+            for slug, cohort in self.cohorts.items()
+            if slug is not None
+        ]
+        rows += [{"slug": slug, "name": slug, "n_slides": None, "error": error} for slug, error in self.failed.items()]
+        return sorted(rows, key=lambda row: row["slug"])
+
+
+def make_handler(library: Library) -> type[BaseHTTPRequestHandler]:
     class Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt: str, *args) -> None:  # tiles would flood the log
             if "/api/tile/" not in self.path:
@@ -1134,13 +1471,18 @@ def make_handler(cohort: Cohort) -> type[BaseHTTPRequestHandler]:
         def route(self, parts: list[str], query: dict[str, list[str]]) -> None:
             if parts in ([], ["index.html"]):
                 self.send(HTTPStatus.OK, (STATIC / "index.html").read_bytes(), STATIC_TYPES[".html"])
-            elif len(parts) == 2 and parts[0] == "static":
+                return
+            if len(parts) == 2 and parts[0] == "static":
                 path = (STATIC / parts[1]).resolve()
                 if path.parent != STATIC.resolve() or path.suffix not in STATIC_TYPES or not path.is_file():
                     raise KeyError(parts[1])
                 self.send(HTTPStatus.OK, path.read_bytes(), STATIC_TYPES[path.suffix])
-            elif parts == ["api", "meta"]:
-                self.send(HTTPStatus.OK, json.dumps(cohort.meta()).encode(), "application/json")
+                return
+            # The liver cohort, or a tissue folder by slug; a tile of a slide file uses none of its slides' values.
+            cohort = library.get(query.get("tissue", [None])[0], warm=parts[:2] != ["api", "tile"])
+            if parts == ["api", "meta"]:
+                meta = {**cohort.meta(), "tissues": library.listing()}
+                self.send(HTTPStatus.OK, json.dumps(meta).encode(), "application/json")
             elif len(parts) == 3 and parts[:2] == ["api", "slide"] and parts[2] in cohort.by_id:
                 self.send(HTTPStatus.OK, json.dumps(cohort.info(parts[2])).encode(), "application/json")
             elif len(parts) == 3 and parts[:2] == ["api", "cells"] and parts[2] in cohort.by_id:
@@ -1189,9 +1531,34 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument(
         "--wsi-dir", type=Path, help="folder with slide files named <slide_id>.svs (or another OpenSlide format)"
     )
+    parser.add_argument(
+        "--tissues",
+        type=Path,
+        help="a GTEx tissue folder (<slug>/ holding gtex_<slug>_cells.h5ad and slides.csv), or a folder of them, the\n"
+        "page choosing among them: shown instead of the liver cohort, without its precomputed layers",
+    )
+    parser.add_argument(
+        "--colocalization-dir",
+        type=Path,
+        help="with --tissues: a folder of each tissue's own colocalization fit, <slug>.json (fit_colocalization.py\n"
+        "--tissue); a tissue without one, or with one of another object, has that colouring off",
+    )
     parser.add_argument("--host", default="127.0.0.1", help="address to listen on (default: %(default)s)")
     parser.add_argument("--port", type=int, default=8765, help="port (default: %(default)s)")
     args = parser.parse_args(argv)
+    if args.tissues is not None:
+        args.tissues = Path(os.path.abspath(args.tissues.expanduser()))  # a folder's own name is its slug, so no "."
+        if not args.tissues.is_dir():
+            parser.error(f"--tissues {args.tissues} is not a folder")
+        if not find_tissues(args.tissues)[0]:
+            parser.error(f"--tissues {args.tissues} is not a tissue folder (<slug>/ holding gtex_<slug>_cells.h5ad and "
+                         "slides.csv) and holds none")
+    if args.colocalization_dir is not None:
+        if args.tissues is None:
+            parser.error("--colocalization-dir goes with --tissues (the liver cohort's fit is results/colocalization_scale.json)")
+        args.colocalization_dir = args.colocalization_dir.expanduser()
+        if not args.colocalization_dir.is_dir():
+            parser.error(f"--colocalization-dir {args.colocalization_dir} is not a folder")
     if args.wsi_dir is not None:
         args.wsi_dir = args.wsi_dir.expanduser()
         if not args.wsi_dir.is_dir():
@@ -1203,17 +1570,65 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return args
 
 
+def print_tissues(library: Library, wsi_dir: Path | None, colocalization_dir: Path | None = None) -> None:
+    """One line per tissue folder: its slides and cell types, those outside the four classes, its slide files, with
+    ``colocalization_dir`` whether it has its colocalization fit; or why it cannot be opened. Then the folders that
+    lack one of the two files."""
+    for row in library.listing():
+        if row["error"] is not None:
+            print(f"{row['slug']}: cannot be opened: {row['error']}", flush=True)
+            continue
+        cohort = library.get(row["slug"], warm=False)
+        line = f"{row['slug']}: {cohort.name}, {len(cohort.slides)} slides, {len(cohort.types)} cell types"
+        if cohort.unmapped:
+            line += f" ({', '.join(cohort.unmapped)} outside the four classes: counted as other)"
+        if wsi_dir is not None:
+            line += f", {len(cohort.wsis)} with a slide file"
+        if colocalization_dir is not None:
+            if cohort.colocalization_fit is not None:
+                line += ", colocalization fitted over its slides"
+            else:
+                why = cohort.colocalization_note or f"no {row['slug']}.json"
+                line += f", no colocalization ({why})"
+        print(line, flush=True)
+    for name, reason in library.skipped.items():
+        print(f"{name}: skipped, {reason}", flush=True)
+
+
+def limit_malloc_arenas(n: int = 2) -> bool:
+    """Let glibc's malloc keep at most ``n`` arenas (``mallopt(M_ARENA_MAX)``), as MALLOC_ARENA_MAX does. By default
+    each of the server's threads may get its own, reserving up to 64 MB of address space each, which exhausts a
+    capped address space (ulimit -v; 8 GiB on CeMM's login nodes) long before the memory is used: requests then fail
+    with MemoryError or "can't start new thread". False where there is no glibc."""
+    try:
+        return bool(ctypes.CDLL("libc.so.6").mallopt(-8, int(n)))  # -8: M_ARENA_MAX
+    except (OSError, AttributeError):
+        return False
+
+
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
-    cohort = Cohort(args.wsi_dir)
-    print(f"{len(cohort.slides)} slides, {len(cohort.types)} cell types", flush=True)
-    if cohort.colocalization_fit is None:
-        print(f"no colocalization: {COLOCALIZATION} is missing (fit_colocalization.py writes it)", flush=True)
-    if cohort.emeans_sets is None:
-        print(f"no e-means clusters: the e-means study's results are not in {EMEANS}", flush=True)
-    if args.wsi_dir is not None:
-        print(f"{len(cohort.wsis)} of them with a slide file in {args.wsi_dir}", flush=True)
-    server = ThreadingHTTPServer((args.host, args.port), make_handler(cohort))
+    if "MALLOC_ARENA_MAX" not in os.environ:  # a value set by hand wins
+        limit_malloc_arenas()
+    try:
+        library = Library(args.wsi_dir, args.tissues, args.colocalization_dir)
+    except ValueError as err:
+        if args.tissues is None:
+            raise
+        raise SystemExit(str(err)) from None
+    if args.tissues is None:
+        cohort = library.get(None)
+        print(f"{len(cohort.slides)} slides, {len(cohort.types)} cell types", flush=True)
+        if cohort.colocalization_fit is None:
+            print(f"no colocalization: {COLOCALIZATION} is missing (fit_colocalization.py writes it)", flush=True)
+        if cohort.emeans_sets is None:
+            print(f"no e-means clusters: the e-means study's results are not in {EMEANS}", flush=True)
+        if args.wsi_dir is not None:
+            print(f"{len(cohort.wsis)} of them with a slide file in {args.wsi_dir}", flush=True)
+    else:
+        print_tissues(library, args.wsi_dir, args.colocalization_dir)
+        print(f"opens {library.default} first; /?tissue=<slug> opens another, as the page's tissue menu does", flush=True)
+    server = ThreadingHTTPServer((args.host, args.port), make_handler(library))
     print(f"open http://{args.host}:{args.port}/  (Ctrl-C stops)", flush=True)
     try:
         server.serve_forever()

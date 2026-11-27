@@ -22,7 +22,8 @@ neighbourhood by index, never by distance. Only numpy and scipy, no loop over ce
 from __future__ import annotations
 
 import math
-from collections.abc import Iterable, Sequence
+import os
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import dataclass
 from typing import Any, Literal, Self
 
@@ -39,6 +40,10 @@ WEIGHT_FLOOR = 1e-8  # the smallest s^2 a weight 1 / s^2 is taken at
 MIN_PAIR_CELLS = 5  # tau^2 of a (focal type, neighbour type) group needs this many valid cells
 MIN_ROOM = 1.0  # a cloud's pooled prior needs this much room, else it is 0
 CHUNK = 100_000  # cells per k-d tree query, to bound the memory of the neighbour table
+# Threads per k-d tree query: the CPUs this process may use, at most 8, not one per core of the node: on a 48-core
+# node each thread's malloc arena reserves up to 64 MB, which a capped address space (ulimit -v) runs out of while
+# the viewer serves several queries at once.
+WORKERS = max(1, min(8, len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else os.cpu_count() or 1))
 
 
 @dataclass
@@ -53,21 +58,30 @@ class CellColocalizationResult:
     homotypic_excess_shrunk: np.ndarray  # (N,), Y_shrunk at the cell's own type; NaN for a background cell
 
 
-def neighbour_indices(xy: np.ndarray, k: int) -> np.ndarray:
-    """(N, min(k, N - 1)): each cell's nearest other cells, nearest first, the cell itself left out by index."""
+def neighbour_chunks(xy: np.ndarray, k: int) -> Iterator[tuple[int, int, np.ndarray]]:
+    """``neighbour_indices`` by chunks of ``CHUNK`` cells, (start, stop, (stop - start, min(k, N - 1))), for a
+    caller that needs only one chunk's neighbours at a time; nothing where k or N - 1 is 0."""
     xy = np.asarray(xy, dtype=np.float64)
     n = len(xy)
     k = min(int(k), n - 1)
     if k <= 0:
-        return np.zeros((n, 0), dtype=np.int64)
+        return
     tree = cKDTree(xy)
-    out = np.empty((n, k), dtype=np.int64)
     for start in range(0, n, CHUNK):  # chunks of cells, not single cells: each query is vectorised
         stop = min(start + CHUNK, n)
-        idx = np.asarray(tree.query(xy[start:stop], k=k + 1, workers=-1)[1]).reshape(stop - start, k + 1)
+        idx = np.asarray(tree.query(xy[start:stop], k=k + 1, workers=WORKERS)[1]).reshape(stop - start, k + 1)
         others = idx != np.arange(start, stop)[:, None]
         others[others.all(axis=1), -1] = False  # k + 1 others at one distance: the cell itself fell out
-        out[start:stop] = idx[others].reshape(stop - start, k)
+        yield start, stop, idx[others].reshape(stop - start, k)
+
+
+def neighbour_indices(xy: np.ndarray, k: int) -> np.ndarray:
+    """(N, min(k, N - 1)): each cell's nearest other cells, nearest first, the cell itself left out by index."""
+    xy = np.asarray(xy, dtype=np.float64)
+    n = len(xy)
+    out = np.empty((n, max(min(int(k), n - 1), 0)), dtype=np.int64)
+    for start, stop, idx in neighbour_chunks(xy, k):
+        out[start:stop] = idx
     return out
 
 
@@ -126,16 +140,20 @@ class _Counts:
 
 
 def _counts(xy: np.ndarray, codes: np.ndarray, n_types: int, k: int) -> _Counts:
-    """o, e, v and q of one cloud: G H with G the (N, N) k-nearest-neighbour graph and H the (N, K) one-hot."""
+    """o, e, v and q of one cloud: o = G H with G the (N, N) k-nearest-neighbour graph and H the (N, K) one-hot,
+    counted a chunk of cells at a time, so that no more than a chunk's neighbours are held (all N k of them took
+    16 B each, 4.4 GB for GTEx's largest slide at k = 100)."""
     n = len(codes)
-    nbrs = neighbour_indices(xy, k) if n else np.zeros((0, 0), dtype=np.int64)
-    k_eff = nbrs.shape[1]
+    k_eff = max(min(int(k), n - 1), 0)
     degree = np.full(n, k_eff, dtype=np.int32)
-    graph = sparse.csr_matrix(  # row i holds its k_eff neighbours, so the row pointers step by k_eff
-        (np.ones(n * k_eff), nbrs.ravel(), np.arange(n + 1, dtype=np.int64) * k_eff), shape=(n, n)
-    )
+    observed = np.zeros((n, n_types), dtype=np.float64)
+    for start, stop, nbrs in neighbour_chunks(xy, k):
+        neighbour_codes = codes[nbrs]
+        typed = neighbour_codes >= 0  # a background neighbour counts towards no type
+        cell = np.broadcast_to(np.arange(stop - start)[:, None], nbrs.shape)
+        flat = cell[typed] * n_types + neighbour_codes[typed]
+        observed[start:stop] = np.bincount(flat, minlength=(stop - start) * n_types).reshape(stop - start, n_types)
     one_hot = _one_hot(codes, n_types)
-    observed = np.asarray((graph @ one_hot).todense(), dtype=np.float64)
     totals = np.bincount(codes[codes >= 0], minlength=n_types).astype(np.float64)
     available = totals[None, :] - np.asarray(one_hot.todense())  # n'_{i,A}: the focal cell leaves its own type
     q = available / (n - 1) if n >= 2 else np.zeros((n, n_types))
